@@ -119,6 +119,15 @@ impl GraphDisplayDataSolutionSerializer {
         Ok(())
     }
 
+    /// Removes prefix "<" and suffix ">" from the input to
+    /// comply with https://www.ietf.org/rfc/rfc3987.html (p. 12)
+    fn trim_tag_circumfix(&self, input: &String) -> String {
+        input
+            .trim_start_matches('<')
+            .trim_end_matches('>')
+            .to_string()
+    }
+
     /// Extract label info from the query solution and store until
     /// they can be mapped to their ElementType.
     fn extract_label(

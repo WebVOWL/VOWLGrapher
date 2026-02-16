@@ -12,6 +12,7 @@ use crate::{
 };
 use fluent_uri::Iri;
 use futures::StreamExt;
+use grapher::prelude::GraphDisplayData;
 use grapher::prelude::{
     Characteristic, ElementType, GraphDisplayData, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType,
     RdfsEdge, RdfsNode, RdfsType,

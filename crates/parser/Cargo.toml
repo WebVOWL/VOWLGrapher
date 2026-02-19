@@ -20,6 +20,7 @@
     log.workspace=true
     rdf-fusion.workspace=true
     serde="1.0"
+    strum.workspace=true
     tokio.workspace=true
     tokio-stream="0.1.17"
     vowlr-util={path="../util"}

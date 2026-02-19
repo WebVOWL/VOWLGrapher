@@ -248,8 +248,7 @@ pub async fn handle_internal_sparql(
     if let QueryResults::Solutions(solutions) = query_stream {
         solution_serializer
             .serialize_nodes_stream(&mut data_buffer, solutions)
-            .await
-            .map_err(|e| ServerFnError::ServerError(e.to_string()))?;
+            .await?;
     } else {
         return Err(ServerFnError::ServerError(
             "Query stream is not a solutions stream".to_string(),

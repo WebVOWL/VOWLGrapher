@@ -1,6 +1,13 @@
 use std::{io::Error, panic::Location};
 
 use horned_owl::error::HornedError;
+use leptos::{
+    prelude::{FromServerFnError, ServerFnErrorErr},
+    server_fn::{
+        codec::{JsonEncoding, Rkyv},
+        error::IntoAppError,
+    },
+};
 use rdf_fusion::{
     error::LoaderError,
     execution::sparql::error::QueryEvaluationError,
@@ -24,6 +31,42 @@ pub enum VOWLRStoreErrorKind {
 pub struct VOWLRStoreError {
     inner: VOWLRStoreErrorKind,
     location: &'static Location<'static>,
+}
+
+impl FromServerFnError for VOWLRStoreError {
+    type Encoder = JsonEncoding;
+
+    fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
+        match value {
+            ServerFnErrorErr::Registration(_) => todo!(),
+            ServerFnErrorErr::UnsupportedRequestMethod(_) => todo!(),
+            ServerFnErrorErr::Request(_) => todo!(),
+            ServerFnErrorErr::ServerError(e) => todo!(),
+            ServerFnErrorErr::MiddlewareError(_) => todo!(),
+            ServerFnErrorErr::Deserialization(_) => todo!(),
+            ServerFnErrorErr::Serialization(_) => todo!(),
+            ServerFnErrorErr::Args(_) => todo!(),
+            ServerFnErrorErr::MissingArg(_) => todo!(),
+            ServerFnErrorErr::Response(_) => todo!(),
+        }
+    }
+
+    fn ser(&self) -> leptos::server_fn::Bytes {
+        Self::Encoder::encode(self).unwrap_or_else(|e| {
+            Self::Encoder::encode(&Self::from_server_fn_error(
+                ServerFnErrorErr::Serialization(e.to_string()),
+            ))
+            .expect(
+                "error serializing should success at least with the \
+                 Serialization error",
+            )
+        })
+    }
+
+    fn de(data: leptos::server_fn::Bytes) -> Self {
+        Self::Encoder::decode(data)
+            .unwrap_or_else(|e| ServerFnErrorErr::Deserialization(e.to_string()).into_app_error())
+    }
 }
 
 impl From<VOWLRStoreError> for Error {

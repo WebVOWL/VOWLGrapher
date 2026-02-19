@@ -14,12 +14,13 @@
 
 
 [dependencies]
-    futures={workspace=true}
-    horned-owl={workspace=true}
-    log={workspace=true}
-    rdf-fusion={workspace=true}
+    futures.workspace=true
+    horned-owl.workspace=true
+    leptos.workspace=true
+    log.workspace=true
+    rdf-fusion.workspace=true
     serde="1.0"
-    tokio={workspace=true}
+    tokio.workspace=true
     tokio-stream="0.1.17"
     vowlr-util={path="../util"}
 

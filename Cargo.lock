@@ -7575,6 +7575,7 @@ dependencies = [
  "log",
  "rdf-fusion",
  "serde",
+ "strum 0.27.2",
  "tokio",
  "tokio-stream",
  "vowlr-util",

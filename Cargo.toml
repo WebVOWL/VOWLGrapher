@@ -50,6 +50,7 @@
         rdf-fusion="0.1.0"
         rkyv="0.8.12"
         smallvec={version="1.15.1", features=["union"]}
+        strum={version="0.27", features=["derive"]}
         tokio="1.48.0"
 
 [dependencies]

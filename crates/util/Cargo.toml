@@ -13,5 +13,7 @@
 
 
 [dependencies]
-    rkyv={workspace=true}
+    leptos.workspace=true
+    log.workspace=true
+    rkyv.workspace=true
     serde={version="1.0", features=["derive"]}

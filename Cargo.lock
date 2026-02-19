@@ -7521,9 +7521,11 @@ dependencies = [
  "env_logger",
  "futures",
  "horned-owl",
+ "leptos",
  "log",
  "rdf-fusion",
  "serde",
+ "strum 0.27.2",
  "tokio",
  "tokio-stream",
  "vowlr-util",
@@ -7542,6 +7544,8 @@ dependencies = [
 name = "vowlr-util"
 version = "0.1.0"
 dependencies = [
+ "leptos",
+ "log",
  "rkyv",
  "serde",
 ]

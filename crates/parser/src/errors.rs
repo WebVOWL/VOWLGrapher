@@ -37,7 +37,7 @@ impl FromServerFnError for VOWLRStoreError {
     type Encoder = JsonEncoding;
 
     fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
-        match value {
+        match value.inner {
             ServerFnErrorErr::Registration(_) => todo!(),
             ServerFnErrorErr::UnsupportedRequestMethod(_) => todo!(),
             ServerFnErrorErr::Request(_) => todo!(),

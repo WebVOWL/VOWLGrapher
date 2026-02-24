@@ -12,8 +12,8 @@ use rdf_fusion::{
     model::GraphName,
 };
 use std::io;
+use std::io::BufRead;
 use std::{
-    fs::File,
     io::{BufReader, Cursor, Write},
     path::Path,
     time::{Duration, Instant},
@@ -167,19 +167,34 @@ pub async fn parse_stream_to(
     }
 }
 
-pub fn parser_from_format(path: &Path, lenient: bool) -> Result<PreparedParser, VOWLRStoreError> {
+pub fn parser_from_path(path: &Path, lenient: bool) -> Result<PreparedParser, VOWLRStoreError> {
+    let reader = std::fs::File::open(path)?;
+    let reader = BufReader::new(reader);
+    parser_from_reader(reader, path, lenient)
+}
+
+pub fn parser_from_reader(
+    mut reader: impl BufRead,
+    path: &Path,
+    lenient: bool,
+) -> Result<PreparedParser, VOWLRStoreError> {
     let make_parser = |fmt| {
         // TODO: Handle non default graph
         let parser = RdfParser::from_format(fmt).with_default_graph(GraphName::DefaultGraph);
         //.with_default_graph(NamedNode::new(format!("file:://{}", path_str)).unwrap());
         if lenient { parser.lenient() } else { parser }
     };
-    let t_pat: Option<DataType> = path_type(path);
-    let prepared = match t_pat {
-        Some(DataType::OFN) => {
-            let file = File::open(path)?;
-            let mut reader = BufReader::new(file);
 
+    let Some(format) = path_type(path) else {
+        return Err(VOWLRStoreErrorKind::InvalidInput(format!(
+            "Unsupported format {}",
+            path.display()
+        ))
+        .into());
+    };
+
+    let prepared = match format {
+        DataType::OFN => {
             info!("Parsing OFN input...");
             let start_time = Instant::now();
 
@@ -213,10 +228,7 @@ pub fn parser_from_format(path: &Path, lenient: bool) -> Result<PreparedParser, 
                 input: ParserInput::Buffer(Cursor::new(buf)),
             })
         }
-        Some(DataType::OWX) => {
-            let file = File::open(path)?;
-            let mut reader = BufReader::new(file);
-
+        DataType::OWX => {
             info!("Parsing OWX input...");
             let start_time = Instant::now();
 
@@ -252,7 +264,7 @@ pub fn parser_from_format(path: &Path, lenient: bool) -> Result<PreparedParser, 
                 input: ParserInput::Buffer(Cursor::new(buf)),
             })
         }
-        Some(DataType::OWL) => {
+        DataType::OWL => {
             info!("Parsing OWL input...");
             let start_time = Instant::now();
 
@@ -291,53 +303,26 @@ pub fn parser_from_format(path: &Path, lenient: bool) -> Result<PreparedParser, 
                 input: ParserInput::Buffer(Cursor::new(buf)),
             })
         }
-        Some(DataType::TTL) => {
-            let input = ParserInput::from_path(path)?;
+        f @ DataType::TTL
+        | f @ DataType::NTriples
+        | f @ DataType::NQuads
+        | f @ DataType::TriG
+        | f @ DataType::JsonLd
+        | f @ DataType::N3 => {
+            let mut input = Vec::new();
+            reader.read_to_end(&mut input)?;
+            let input = ParserInput::File(input);
+            let format = format_from_resource_type(&f).ok_or_else(|| {
+                VOWLRStoreErrorKind::InvalidInput(format!("could not convert {f:?} to format"))
+            })?;
             Ok(PreparedParser {
-                parser: make_parser(RdfFormat::Turtle),
-                input,
-            })
-        }
-        Some(DataType::NTriples) => {
-            let input = ParserInput::from_path(path)?;
-            Ok(PreparedParser {
-                parser: make_parser(RdfFormat::NTriples),
-                input,
-            })
-        }
-        Some(DataType::NQuads) => {
-            let input = ParserInput::from_path(path)?;
-            Ok(PreparedParser {
-                parser: make_parser(RdfFormat::NQuads),
-                input,
-            })
-        }
-        Some(DataType::TriG) => {
-            let input = ParserInput::from_path(path)?;
-            Ok(PreparedParser {
-                parser: make_parser(RdfFormat::TriG),
-                input,
-            })
-        }
-        Some(DataType::JsonLd) => {
-            let input = ParserInput::from_path(path)?;
-            Ok(PreparedParser {
-                parser: make_parser(RdfFormat::JsonLd {
-                    profile: JsonLdProfileSet::default(),
-                }),
-                input,
-            })
-        }
-        Some(DataType::N3) => {
-            let input = ParserInput::from_path(path)?;
-            Ok(PreparedParser {
-                parser: make_parser(RdfFormat::N3),
+                parser: make_parser(format),
                 input,
             })
         }
         _ => Err(VOWLRStoreErrorKind::InvalidInput(format!(
             "Unsupported parser: {}",
-            path.display()
+            format.mime_type()
         ))),
     };
     Ok(prepared?)
@@ -406,7 +391,7 @@ mod test {
                 warn!("skipping {:?}", resource.as_ref());
                 continue;
             }
-            let parser = parser_from_format(resource.as_ref(), false).unwrap();
+            let parser = parser_from_path(resource.as_ref(), false).unwrap();
             let _ = session
                 .load_from_reader(parser.parser, parser.input.as_slice())
                 .await;

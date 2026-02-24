@@ -7,7 +7,7 @@ use std::{fs::File, time::Instant};
 
 use vowlr_parser::{
     errors::VOWLRStoreError,
-    parser_util::{parse_stream_to, parser_from_format},
+    parser_util::{parse_stream_to, parser_from_path},
 };
 use vowlr_util::prelude::DataType;
 
@@ -28,7 +28,7 @@ impl VOWLRStore {
 
     // TTL format -> (oxittl) RDF XML quads -> (horned_owl) Normalize OWL/RDF -> Quads -> Insert into Oxigraph
     pub async fn insert_file(&self, fs: &Path, lenient: bool) -> Result<(), VOWLRStoreError> {
-        let parser = parser_from_format(fs, lenient)?;
+        let parser = parser_from_path(fs, lenient)?;
         info!("Loading input into database...");
         let start_time = Instant::now();
         self.session
@@ -94,7 +94,7 @@ impl VOWLRStore {
         if let Some(file) = &mut self.upload_handle {
             std::io::Write::flush(file)?;
             let path = file.path();
-            let parser = parser_from_format(path, false)?;
+            let parser = parser_from_path(path, false)?;
 
             info!("Loading input into database...");
             let start_time = Instant::now();

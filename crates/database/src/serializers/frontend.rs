@@ -970,7 +970,7 @@ impl GraphDisplayDataSolutionSerializer {
                     owl::TRANSITIVE_PROPERTY => self.insert_characteristic(
                         data_buffer,
                         triple,
-                        Characteristic::Transitive.to_string(),
+                        Characteristic::TransitiveProperty.to_string(),
                     ),
                     owl::UNION_OF => {
                         let edge =

@@ -5,7 +5,7 @@ use crate::snippets::SparqlSnippet;
 impl SparqlSnippet for Characteristic {
     fn snippet(self) -> &'static str {
         match self {
-            Characteristic::Transitive => {
+            Characteristic::TransitiveProperty => {
                 r#"{
                 ?id a owl:TransitiveProperty
                 BIND(owl:TransitiveProperty AS ?nodeType)

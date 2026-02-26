@@ -799,8 +799,8 @@ impl GraphDisplayDataSolutionSerializer {
                                 }
 
                                 // SAFETY: If index_s is Some it exists in node_element_buffer.
-                                if !data_buffer.node_element_buffer[&index_s]
-                                    .eq(&ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass)))
+                                if data_buffer.node_element_buffer[&index_s]
+                                    != ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass))
                                 {
                                     self.upgrade_node_type(
                                         data_buffer,

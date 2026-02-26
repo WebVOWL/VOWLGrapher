@@ -72,6 +72,8 @@ pub enum ErrorType {
 ///
 /// It stores the data of a single error event.
 ///
+/// # Examples
+///
 /// # Note
 /// Every error type in use should implement [`From<T> for ErrorRecord`].
 pub struct ErrorRecord {

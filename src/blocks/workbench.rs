@@ -46,14 +46,11 @@ pub fn NewWorkbench() -> impl IntoView {
         total_graph_data,
     });
 
-    let all_errors = RwSignal::new(Vec::<String>::new());
-
-    let error_context = ErrorLogContext { errors: all_errors };
-
-    provide_context(error_context.clone());
+    let error_context = ErrorLogContext::default();
+    provide_context(error_context);
 
     let error_title = Signal::derive(move || {
-        let count = error_context.errors.get().len();
+        let count = error_context.len();
         if count > 0 {
             format!("Error Log ({count})")
         } else {

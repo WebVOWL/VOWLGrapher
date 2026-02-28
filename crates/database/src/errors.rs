@@ -12,9 +12,9 @@ pub enum SerializationErrorKind {
     /// An error raised when the serializer encountered an unrecoverable problem.
     SerializationFailed(Triple, String),
     /// An error raised during Iri or IriRef validation.
-    IriParseError(Triple, IriParseError),
+    IriParseError(String, IriParseError),
     /// An error raised during BlankNode IDs validation
-    BlankNodeParseError(Triple, BlankNodeIdParseError),
+    BlankNodeParseError(String, BlankNodeIdParseError),
 }
 
 #[derive(Debug)]

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::vocab::owl;
+use grapher::prelude::{ElementType, OwlEdge, OwlType, RdfEdge, RdfType};
 use rdf_fusion::model::vocab::{rdf, rdfs};
 
 pub const SYMMETRIC_EDGE_TYPES: [ElementType; 1] =

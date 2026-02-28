@@ -7,11 +7,9 @@ use std::{
 use grapher::prelude::{ElementType, GraphDisplayData, OwlEdge, OwlType};
 use log::error;
 use oxrdf::Term;
+use vowlr_util::prelude::ErrorRecord;
 
-use crate::{
-    errors::SerializationError,
-    serializers::util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES},
-};
+use crate::serializers::util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES};
 
 pub mod frontend;
 pub mod util;
@@ -224,15 +222,8 @@ pub struct SerializationDataBuffer {
     ///   can be either the subject, object or both (in this case, subject is used)
     /// - Value = The unresolved triples.
     unknown_buffer: HashMap<Term, HashSet<Triple>>,
-    /// Stores triples that are impossible to serialize.
-    ///
-    /// This could be caused by various reasons, such as
-    /// visualization of the triple is not supported.
-    ///
-    /// Each element is a tuple of:
-    /// - 0 = The triple (if any).
-    /// - 1 = The reason it failed to serialize (or the message if no triple is available).
-    failed_buffer: Vec<SerializationError>,
+    /// Stores errors encountered during serialization.
+    failed_buffer: Vec<ErrorRecord>,
     /// The base IRI of the document.
     ///
     /// For instance: `http://purl.obolibrary.org/obo/envo.owl`
@@ -412,17 +403,9 @@ impl Display for SerializationDataBuffer {
                     .join("\n")
             )?;
         }
-        writeln!(f, "\tfailed_buffer:")?;
-        for (triple, reason) in self.failed_buffer.iter() {
-            match triple {
-                Some(triple) => {
-                    writeln!(f, "\t\t{} : {}", triple, reason)?;
-                }
-                None => {
-                    writeln!(f, "\t\tNO TRIPLE : {}", reason)?;
-                }
-            }
-        }
+        // Not needed as it's displayed by the serializer
+        // writeln!(f, "\tfailed_buffer:")?;
+        // writeln!(f, "{}", ErrorRecord::format_records(&self.failed_buffer))?;
         writeln!(f, "}}")
     }
 }

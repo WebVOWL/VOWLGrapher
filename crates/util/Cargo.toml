@@ -19,3 +19,7 @@
     rkyv.workspace=true
     serde={version="1.0", features=["derive"]}
     strum.workspace=true
+    tabled={version="0.20", optional=true}
+
+[features]
+    server=["dep:tabled"]

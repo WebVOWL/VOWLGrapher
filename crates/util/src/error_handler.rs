@@ -2,8 +2,9 @@
 use std::fmt::Write;
 
 use leptos::{
-    prelude::{FromServerFnError, IntoView, ServerFnError, ServerFnErrorErr},
+    prelude::{ElementChild, FromServerFnError, IntoView, ServerFnError, ServerFnErrorErr, Signal},
     server_fn::{Decodes, Encodes, codec::RkyvEncoding, error::IntoAppError},
+    view,
 };
 
 // use leptos_struct_table::*;
@@ -14,6 +15,8 @@ use tabled::{
     Table, Tabled,
     settings::{Settings, Style},
 };
+
+use crate::layout::TableHTML;
 
 #[derive(
     Debug,
@@ -165,6 +168,48 @@ impl ErrorRecord {
     pub fn format_records(records: &[ErrorRecord]) -> String {
         let table_config = Settings::default().with(Style::modern_rounded());
         Table::new(records).with(table_config).to_string()
+    }
+}
+
+impl TableHTML for ErrorRecord {
+    fn header(&self) -> impl IntoView {
+        view! {
+            <thead>
+                <tr>
+                    <th>{"Severity"}</th>
+                    <th>{"Error Type"}</th>
+                    <th>{"Message"}</th>
+                    {
+                        #[cfg(debug_assertions)]
+                        view! {<th>{"Code Location"}</th>}
+                    }
+                </tr>
+            </thead>
+        }
+    }
+
+    fn row(&self) -> impl IntoView {
+        view! {
+            <tr>
+                <td>
+                    {self.severity.to_string()}
+                </td>
+                <td>
+                    {self.error_type.to_string()}
+                </td>
+                <td>
+                    {self.message.clone()}
+                </td>
+                {
+                    #[cfg(debug_assertions)]
+                    view! {
+                        <td>
+                            {self.location.to_string()}
+                        </td>
+                    }
+                }
+            </tr>
+        }
     }
 }
 

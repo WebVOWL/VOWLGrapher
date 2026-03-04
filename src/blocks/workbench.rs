@@ -27,7 +27,7 @@ pub struct GraphDataContext {
 #[component]
 fn WorkbenchMenuItems(#[prop(into)] title: String, children: Children) -> impl IntoView {
     view! {
-        <div class="flex flex-col justify-center p-2 w-[250px]">
+        <div class="flex flex-col justify-center p-2 min-w-250 md:min-w-[30vw]">
             <div class="workbench-menu-header">
                 <h3>{title}</h3>
             </div>

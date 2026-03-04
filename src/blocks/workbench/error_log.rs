@@ -3,6 +3,7 @@
 use super::WorkbenchMenuItems;
 use leptos::prelude::*;
 // use leptos_struct_table::{ColumnSort, TableContent, TableDataProvider};
+use crate::components::table::Table;
 use vowlr_util::prelude::{ErrorRecord, VOWLRServerError};
 
 #[derive(Debug, Copy, Clone)]
@@ -95,40 +96,44 @@ impl From<VOWLRServerError> for ErrorLogContext {
 pub fn ErrorLog() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
 
+    view! {
+        <Table items=error_context.records />
+    }
     // view! {
     //     <table>
     //         <TableContent rows=error_context scroll_container="html" />
     //     </table>
     // }
-    view! {
-        {move || {
-            let records = error_context.records.read();
-            view! {
-                <div class="overflow-y-auto p-2 mt-2 bg-red-50 rounded border border-red-200 max-h-130">
-                    {if records.is_empty() {
-                        view! { <p class="text-xs text-gray-600">"No errors"</p> }
-                            .into_any()
-                    } else {
-                        view! {
-                            <ul class="space-y-1 text-xs text-red-700">
-                                {records
-                                    .iter()
-                                    .map(|record| {
-                                        view! {
-                                            <li class="font-mono whitespace-pre-wrap">"• " {record.to_string()}</li>
-                                        }
-                                    })
-                                    .collect_view()}
 
-                            </ul>
-                        }
-                            .into_any()
-                    }}
-                </div>
-            }
-                .into_any()
-        }}
-    }
+    // view! {
+    //     {move || {
+    //         let records = error_context.records.read();
+    //         view! {
+    //             <div class="overflow-y-auto p-2 mt-2 bg-red-50 rounded border border-red-200 max-h-130">
+    //                 {if records.is_empty() {
+    //                     view! { <p class="text-xs text-gray-600">"No errors"</p> }
+    //                         .into_any()
+    //                 } else {
+    //                     view! {
+    //                         <ul class="space-y-1 text-xs text-red-700">
+    //                             {records
+    //                                 .iter()
+    //                                 .map(|record| {
+    //                                     view! {
+    //                                         <li class="font-mono whitespace-pre-wrap">"• " {record.to_string()}</li>
+    //                                     }
+    //                                 })
+    //                                 .collect_view()}
+
+    //                         </ul>
+    //                     }
+    //                         .into_any()
+    //                 }}
+    //             </div>
+    //         }
+    //             .into_any()
+    //     }}
+    // }
 }
 
 #[component]

@@ -9,25 +9,21 @@ pub fn Table<T>(#[prop(into)] items: Signal<Vec<T>>) -> impl IntoView
 where
     T: TableHTML + Send + Sync + 'static,
 {
-    // view! {
-    //     <table class="table-auto">
-    //     {move || {
-    //         let a = items.read();
-
-    //         view!{
-    //             a.iter().map(|item| item.row()).collect_view()
-    //         }.into_any()
-    //     }}
-    //     </table>
-    // }
-
     view! {
         {move || {
-            let stuff =  items.read();
+            let stuff = items.read();
             view! {
-                <table class="border-1 border-solid border-collapse table-auto md:table-fixed md:w-[80vw]">
-                   {stuff.iter().map(|item| item.header()).next().collect_view()}
-                   {stuff.iter().map(|item| item.row()).collect_view()}
+                <table class="text-left text-sm font-light text-surface dark:text-white rounded border-solid border-collapse border-1 table-auto ">
+                    <thead class="border-b border-neutral-200 font-medium dark:border-white/10">
+                        {stuff
+                            .iter()
+                            .map(T::header)
+                            .next()
+                            .collect_view()}
+                    </thead>
+                    <tbody>
+                        {stuff.iter().map(T::row).collect_view()}
+                    </tbody>
                 </table>
             }
                 .into_any()

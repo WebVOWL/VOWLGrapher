@@ -9,7 +9,7 @@ use crate::components::lists::{ListDetails, ListElement};
 use crate::components::menu::vertical_menu::VerticalMenu;
 use about_menu::AboutMenu;
 use error_log::ErrorLogContext;
-use error_log::ErrorMenu;
+use error_log::{ErrorLog, ErrorMenu};
 use export_menu::ExportMenu;
 use filter_menu::FilterMenu;
 use grapher::prelude::GraphDisplayData;
@@ -31,7 +31,7 @@ fn WorkbenchMenuItems(#[prop(into)] title: String, children: Children) -> impl I
             <div class="workbench-menu-header">
                 <h3>{title}</h3>
             </div>
-            <div>{children()}</div>
+            {children()}
         </div>
     }
 }
@@ -88,6 +88,7 @@ pub fn NewWorkbench() -> impl IntoView {
             <ListElement title=error_title icon=icondata::BiErrorAltRegular>
                 <ErrorMenu />
             </ListElement>
+
 
         </VerticalMenu>
     }

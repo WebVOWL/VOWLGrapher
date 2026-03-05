@@ -1,9 +1,9 @@
 // use std::ops::Range;
 
 use super::WorkbenchMenuItems;
+use crate::components::table::Table;
 use leptos::prelude::*;
 // use leptos_struct_table::{ColumnSort, TableContent, TableDataProvider};
-use crate::components::table::Table;
 use vowlr_util::prelude::{ErrorRecord, VOWLRServerError};
 
 #[derive(Debug, Copy, Clone)]
@@ -95,9 +95,10 @@ impl From<VOWLRServerError> for ErrorLogContext {
 
 pub fn ErrorLog() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
-
     view! {
-        <Table items=error_context.records />
+        <div class="min-w-250 md:min-w-[80vw]">
+            <Table items=error_context.records />
+        </div>
     }
     // view! {
     //     <table>

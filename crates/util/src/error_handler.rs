@@ -2,7 +2,7 @@
 use std::fmt::Write;
 
 use leptos::{
-    prelude::{ElementChild, FromServerFnError, IntoView, ServerFnError, ServerFnErrorErr, Signal},
+    prelude::*,
     server_fn::{Decodes, Encodes, codec::RkyvEncoding, error::IntoAppError},
     view,
 };
@@ -32,9 +32,7 @@ use crate::layout::TableHTML;
 #[strum(serialize_all = "title_case")]
 pub enum ErrorSeverity {
     Critical,
-    Severe,
-    Medium,
-    Low,
+    Error,
     Warning,
     Unset,
 }
@@ -46,15 +44,10 @@ impl ErrorSeverity {
             Self::Critical => format!(
                 "an unrecoverable error which makes VOWL-R unusable (do not use the output of VOWL-R!)"
             ),
-            Self::Severe => format!(
+            Self::Error => format!(
                 "an error which highly disrupts the user experience (the output of VOWL-R is likely incorrect)"
             ),
-            // TODO
-            Self::Medium => format!("error desc goes here"),
-            // TODO
-            Self::Low => format!(
-                "error desc goes here (part of the output of VOWL-R could be incorrect, but should be \"insignificant\")"
-            ),
+
             Self::Warning => format!(
                 "something happened which may reduce the user experience (but can otherwise be ignored)"
             ),
@@ -120,8 +113,11 @@ pub enum ErrorType {
     // TableRow,
 )]
 #[cfg_attr(feature = "server", derive(Tabled))]
-// #[table(sortable, classes_provider = "TailwindClassesPreset")]
-// TODO: implement a leptos struct table looking like: https://datatables.net/
+// #[table(
+//     // sortable,
+//     impl_vec_data_provider,
+//     classes_provider = "TailwindClassesPreset"
+// )]
 /// The fundamental building block of the error handling system.
 ///
 /// It stores the data of a single error event.
@@ -172,41 +168,40 @@ impl ErrorRecord {
 }
 
 impl TableHTML for ErrorRecord {
+    // TODO: implement a leptos struct table looking like: https://datatables.net/
+    // Tailwind Table: https://www.material-tailwind.com/docs/html/table#table-with-hover
     fn header(&self) -> impl IntoView {
         view! {
-            <thead>
+
                 <tr>
                     <th>{"Severity"}</th>
                     <th>{"Error Type"}</th>
                     <th>{"Message"}</th>
                     {
                         #[cfg(debug_assertions)]
-                        view! {<th>{"Code Location"}</th>}
+                        view! { <th>{"Code Location"}</th> }
                     }
                 </tr>
-            </thead>
+
         }
     }
 
     fn row(&self) -> impl IntoView {
+        let tr_color = match self.severity {
+            ErrorSeverity::Critical => "border-b border-red-800 bg-red-800 text-neutral-800",
+            ErrorSeverity::Error => "border-b border-rose-600 bg-rose-600 text-neutral-800",
+            ErrorSeverity::Warning => "border-b border-amber-600 bg-amber-600 text-neutral-800",
+            ErrorSeverity::Unset => "border-b border-slate-500 dark:border-white/10",
+        };
+
         view! {
-            <tr>
-                <td>
-                    {self.severity.to_string()}
-                </td>
-                <td>
-                    {self.error_type.to_string()}
-                </td>
-                <td>
-                    {self.message.clone()}
-                </td>
+            <tr class=format!("hover:bg-slate-50 {tr_color}")>
+                <td>{self.severity.to_string()}</td>
+                <td>{self.error_type.to_string()}</td>
+                <td>{self.message.clone()}</td>
                 {
                     #[cfg(debug_assertions)]
-                    view! {
-                        <td>
-                            {self.location.to_string()}
-                        </td>
-                    }
+                    view! { <td>{self.location.to_string()}</td> }
                 }
             </tr>
         }

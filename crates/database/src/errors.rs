@@ -46,11 +46,11 @@ impl From<SerializationError> for ErrorRecord {
             }
             SerializationErrorKind::IriParseError(iri, iri_parse_error) => (
                 format!("{iri_parse_error} (IRI: {iri})"),
-                ErrorSeverity::Severe,
+                ErrorSeverity::Error,
             ),
             SerializationErrorKind::BlankNodeParseError(id, blank_node_id_parse_error) => (
                 format!("{blank_node_id_parse_error} (ID: {id})"),
-                ErrorSeverity::Severe,
+                ErrorSeverity::Error,
             ),
         };
         ErrorRecord::new(

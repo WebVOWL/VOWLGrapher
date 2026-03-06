@@ -5,21 +5,32 @@ use serde::{Deserialize, Serialize};
 
 /// Supported content types.
 #[repr(C)]
-#[derive(Archive, RDeserialize, RSerialize, Deserialize, Serialize, Debug, Clone)]
+#[derive(
+    Archive, RDeserialize, RSerialize, Deserialize, Serialize, Debug, Copy, Clone, strum::Display,
+)]
+#[strum(serialize_all = "UPPERCASE")]
 pub enum DataType {
     OWL,
     OFN,
     OWX,
     TTL,
     RDF,
+    #[strum(serialize = "N-Triples")]
     NTriples,
+    #[strum(serialize = "N-Quads")]
     NQuads,
+    #[strum(serialize = "TriG")]
     TriG,
+    #[strum(serialize = "JSON-LD")]
     JsonLd,
     N3,
+    #[strum(serialize = "SPARQL JSON")]
     SPARQLJSON,
+    #[strum(serialize = "SPARQL XML")]
     SPARQLXML,
+    #[strum(serialize = "SPARQL CSV")]
     SPARQLCSV,
+    #[strum(serialize = "SPARQL TSV")]
     SPARQLTSV,
     /// Fallback when type can't be determined.
     UNKNOWN,
@@ -45,6 +56,27 @@ impl DataType {
             Self::SPARQLCSV => "text/csv",
             Self::SPARQLTSV => "text/tab-separated-values",
             Self::UNKNOWN => "application/octet-stream",
+        }
+    }
+
+    /// Returns the extension of the data.
+    pub fn extension(&self) -> &'static str {
+        match self {
+            DataType::OWL => "owl",
+            DataType::OFN => "ofn",
+            DataType::OWX => "owx",
+            DataType::TTL => "ttl",
+            DataType::RDF => "rdf",
+            DataType::NTriples => "nt",
+            DataType::NQuads => "nq",
+            DataType::TriG => "trig",
+            DataType::JsonLd => "jsonld",
+            DataType::N3 => "n3",
+            DataType::SPARQLJSON => "srj",
+            DataType::SPARQLXML => "srx",
+            DataType::SPARQLCSV => "src",
+            DataType::SPARQLTSV => "tsv",
+            DataType::UNKNOWN => "txt",
         }
     }
 }

@@ -17,7 +17,7 @@ use std::rc::Rc;
 use vowlr_database::prelude::{GraphDisplayDataSolutionSerializer, QueryResults, VOWLRStore};
 #[cfg(feature = "server")]
 use vowlr_parser::errors::VOWLRStoreError;
-use vowlr_util::prelude::{DataType, VOWLRServerError};
+use vowlr_util::prelude::{DataType, VOWLRError};
 use web_sys::{FileList, FormData};
 
 #[cfg(feature = "ssr")]
@@ -223,7 +223,7 @@ pub async fn handle_sparql(
 }
 
 #[server (input = Rkyv, output = Rkyv)]
-pub async fn handle_internal_sparql(query: String) -> Result<GraphDisplayData, VOWLRServerError> {
+pub async fn handle_internal_sparql(query: String) -> Result<GraphDisplayData, VOWLRError> {
     let vowlr = VOWLRStore::default();
 
     let mut data_buffer = GraphDisplayData::new();
@@ -232,7 +232,7 @@ pub async fn handle_internal_sparql(query: String) -> Result<GraphDisplayData, V
         .session
         .query(query.as_str())
         .await
-        .map_err(|e| <VOWLRStoreError as Into<VOWLRServerError>>::into(e.into()))?;
+        .map_err(|e| <VOWLRStoreError as Into<VOWLRError>>::into(e.into()))?;
     if let QueryResults::Solutions(solutions) = query_stream {
         solution_serializer
             .serialize_nodes_stream(&mut data_buffer, solutions)

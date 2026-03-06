@@ -1,8 +1,7 @@
 use super::WorkbenchMenuItems;
 use crate::components::table::Table;
 use leptos::prelude::*;
-// use leptos_struct_table::{ColumnSort, TableContent, TableDataProvider};
-use vowlr_util::prelude::{ErrorRecord, VOWLRServerError};
+use vowlr_util::prelude::{ErrorRecord, VOWLRError};
 
 #[derive(Debug, Copy, Clone)]
 pub struct ErrorLogContext {

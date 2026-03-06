@@ -8,7 +8,7 @@ use rdf_fusion::{
     model::{IriParseError, StorageError},
 };
 use tokio::task::JoinError;
-use vowlr_util::prelude::{ErrorRecord, ErrorSeverity, ErrorType, VOWLRServerError};
+use vowlr_util::prelude::{ErrorRecord, ErrorSeverity, ErrorType, VOWLRError};
 
 #[derive(Debug)]
 pub enum VOWLRStoreErrorKind {
@@ -189,7 +189,7 @@ impl From<VOWLRStoreError> for ErrorRecord {
     }
 }
 
-impl From<VOWLRStoreError> for VOWLRServerError {
+impl From<VOWLRStoreError> for VOWLRError {
     fn from(value: VOWLRStoreError) -> Self {
         let record: ErrorRecord = value.into();
         record.into()

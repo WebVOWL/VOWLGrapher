@@ -117,7 +117,7 @@ impl ErrorRecord {
         severity: ErrorSeverity,
         error_type: ErrorType,
         message: String,
-        #[cfg(debug_assertions)] location: String,
+        #[cfg(debug_assertions)] location: Option<String>,
     ) -> Self {
         Self {
             severity,
@@ -140,37 +140,43 @@ impl TableHTML for ErrorRecord {
     // TODO: implement a leptos struct table looking like: https://datatables.net/
     // Tailwind Table: https://www.material-tailwind.com/docs/html/table#table-with-hover
     fn header(&self) -> impl IntoView {
+        let th_css =
+            "p-1 font-sans text-sm antialiased font-normal leading-normal text-blue-gray-900";
         view! {
-
-                <tr>
-                    <th>{"Severity"}</th>
-                    <th>{"Error Type"}</th>
-                    <th>{"Message"}</th>
-                    {
-                        #[cfg(debug_assertions)]
-                        view! { <th>{"Code Location"}</th> }
-                    }
-                </tr>
-
+            <tr class="border-b">
+                <th class=th_css>{"Severity"}</th>
+                <th class=th_css>{"Error Type"}</th>
+                <th class=th_css>{"Message"}</th>
+                {
+                    #[cfg(debug_assertions)]
+                    view! { <th class=th_css>{"Code Location"}</th> }
+                }
+            </tr>
         }
     }
 
     fn row(&self) -> impl IntoView {
         let tr_color = match self.severity {
-            ErrorSeverity::Critical => "border-b border-red-800 bg-red-800 text-neutral-800",
-            ErrorSeverity::Error => "border-b border-rose-600 bg-rose-600 text-neutral-800",
-            ErrorSeverity::Warning => "border-b border-amber-600 bg-amber-600 text-neutral-800",
-            ErrorSeverity::Unset => "border-b border-slate-500 dark:border-white/10",
+            ErrorSeverity::Critical => "border-red-300 bg-red-100 text-red-700",
+            ErrorSeverity::Error => "border-red-200 bg-red-50 text-red-700",
+            ErrorSeverity::Warning => "border-yellow-200 bg-yellow-50 text-yellow-700",
+            ErrorSeverity::Unset => "border-slate-200 bg-slate-50 text-slate-700",
         };
 
+        #[cfg(debug_assertions)]
+        let td_css = "p-2 whitespace-pre-wrap font-sans text-sm antialiased font-normal leading-normal text-blue-gray-900";
+
+        #[cfg(not(debug_assertions))]
+        let td_css = "p-2 mr-2 whitespace-pre-wrap font-sans text-sm antialiased font-normal leading-normal text-blue-gray-900";
+
         view! {
-            <tr class=format!("hover:bg-slate-50 {tr_color}")>
-                <td>{self.severity.to_string()}</td>
-                <td>{self.error_type.to_string()}</td>
-                <td>{self.message.clone()}</td>
+            <tr class=format!("border-b hover:bg-slate-200 {tr_color}")>
+                <td class=td_css>{self.severity.to_string()}</td>
+                <td class=td_css>{self.error_type.to_string()}</td>
+                <td class=td_css>{self.message.clone()}</td>
                 {
                     #[cfg(debug_assertions)]
-                    view! { <td>{self.location.to_string()}</td> }
+                    view! { <td class=td_css>{self.location.to_string()}</td> }
                 }
             </tr>
         }

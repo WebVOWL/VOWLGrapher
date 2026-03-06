@@ -25,7 +25,7 @@ use rdf_fusion::{
     },
 };
 use vowlr_parser::errors::VOWLRStoreError;
-use vowlr_util::prelude::VOWLRServerError;
+use vowlr_util::prelude::VOWLRError;
 
 pub struct GraphDisplayDataSolutionSerializer {
     pub resolvable_iris: HashSet<String>,
@@ -42,7 +42,7 @@ impl GraphDisplayDataSolutionSerializer {
         &self,
         data: &mut GraphDisplayData,
         mut solution_stream: QuerySolutionStream,
-    ) -> Result<(), VOWLRServerError> {
+    ) -> Result<(), VOWLRError> {
         let mut count: u32 = 0;
         info!("Serializing query solution stream...");
         let start_time = Instant::now();
@@ -74,13 +74,13 @@ impl GraphDisplayDataSolutionSerializer {
             self.write_node_triple(&mut data_buffer, triple)
                 .or_else(|e| {
                     data_buffer.failed_buffer.push(e.into());
-                    Ok::<(), VOWLRServerError>(())
+                    Ok::<(), VOWLRError>(())
                 })?;
             count += 1;
         }
         self.check_all_unknowns(&mut data_buffer).or_else(|e| {
             data_buffer.failed_buffer.push(e.into());
-            Ok::<(), VOWLRServerError>(())
+            Ok::<(), VOWLRError>(())
         })?;
 
         let finish_time = Instant::now()
@@ -106,7 +106,7 @@ impl GraphDisplayDataSolutionSerializer {
         debug!("{}", data_buffer);
         if !data_buffer.failed_buffer.is_empty() {
             let total = data_buffer.failed_buffer.len();
-            let err: VOWLRServerError = take(&mut data_buffer.failed_buffer).into();
+            let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
             error!("Failed to serialize {} triples:\n{}", total, err);
             return Err(err);
         }

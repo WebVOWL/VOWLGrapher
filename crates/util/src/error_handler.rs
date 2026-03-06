@@ -248,15 +248,15 @@ impl std::fmt::Display for ErrorRecord {
 #[derive(
     Debug, Clone, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize,
 )]
-/// The struct sent by the server when things go south.
+/// The struct used by VOWL-R when things go south.
 ///
 /// # Note
 /// Every error type in use should implement [`From<T> for VOWLRServerError`].
-pub struct VOWLRServerError {
+pub struct VOWLRError {
     pub records: Vec<ErrorRecord>,
 }
 
-impl FromServerFnError for VOWLRServerError {
+impl FromServerFnError for VOWLRError {
     type Encoder = RkyvEncoding;
 
     fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
@@ -278,43 +278,43 @@ impl FromServerFnError for VOWLRServerError {
     }
 }
 
-impl From<ServerFnError> for VOWLRServerError {
+impl From<ServerFnError> for VOWLRError {
     fn from(value: ServerFnError) -> Self {
         let record: ErrorRecord = value.into();
         record.into()
     }
 }
 
-impl From<ServerFnErrorErr> for VOWLRServerError {
+impl From<ServerFnErrorErr> for VOWLRError {
     fn from(value: ServerFnErrorErr) -> Self {
         let record: ErrorRecord = value.into();
         record.into()
     }
 }
 
-impl From<ErrorRecord> for VOWLRServerError {
+impl From<ErrorRecord> for VOWLRError {
     fn from(value: ErrorRecord) -> Self {
-        VOWLRServerError {
+        VOWLRError {
             records: vec![value],
         }
     }
 }
 
-impl From<Vec<ErrorRecord>> for VOWLRServerError {
+impl From<Vec<ErrorRecord>> for VOWLRError {
     fn from(value: Vec<ErrorRecord>) -> Self {
-        VOWLRServerError { records: value }
+        VOWLRError { records: value }
     }
 }
 
 #[cfg(feature = "server")]
-impl std::fmt::Display for VOWLRServerError {
+impl std::fmt::Display for VOWLRError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", ErrorRecord::format_records(&self.records))
     }
 }
 
 #[cfg(not(feature = "server"))]
-impl std::fmt::Display for VOWLRServerError {
+impl std::fmt::Display for VOWLRError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         #[cfg(debug_assertions)]
         {

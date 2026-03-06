@@ -1,5 +1,6 @@
 use super::WorkbenchMenuItems;
 use crate::components::table::Table;
+use leptos::either::Either;
 use leptos::prelude::*;
 use vowlr_util::prelude::{ErrorRecord, VOWLRError};
 
@@ -49,6 +50,14 @@ impl ErrorLogContext {
     pub fn len(&self) -> usize {
         self.records.read().len()
     }
+
+    /// Returns `true` if the vector contains no elements.
+    ///
+    /// # Panics
+    /// Panics if you try to access the signal of `self` when it has been disposed.
+    pub fn is_empty(&self) -> bool {
+        self.records.read().is_empty()
+    }
 }
 
 impl Default for ErrorLogContext {
@@ -67,46 +76,29 @@ impl From<VOWLRError> for ErrorLogContext {
 
 pub fn ErrorLog() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
+
     view! {
-        <div class="min-w-250 md:min-w-[80vw]">
-            <Table items=error_context.records />
-        </div>
+        {move || {
+            if error_context.is_empty() {
+                Either::Left(
+                    view! {
+                        <p class="font-sans text-xl antialiased font-normal leading-normal text-blue-gray-900">
+                            "No errors"
+                        </p>
+                    },
+                )
+            } else {
+                Either::Right(
+
+                    view! {
+                        <div class="min-w-250 md:min-w-[80vw]">
+                            <Table items=error_context.records />
+                        </div>
+                    },
+                )
+            }
+        }}
     }
-    // view! {
-    //     <table>
-    //         <TableContent rows=error_context scroll_container="html" />
-    //     </table>
-    // }
-
-    // view! {
-    //     {move || {
-    //         let records = error_context.records.read();
-    //         view! {
-    //             <div class="overflow-y-auto p-2 mt-2 bg-red-50 rounded border border-red-200 max-h-130">
-    //                 {if records.is_empty() {
-    //                     view! { <p class="text-xs text-gray-600">"No errors"</p> }
-    //                         .into_any()
-    //                 } else {
-    //                     view! {
-    //                         <ul class="space-y-1 text-xs text-red-700">
-    //                             {records
-    //                                 .iter()
-    //                                 .map(|record| {
-    //                                     view! {
-    //                                         <li class="font-mono whitespace-pre-wrap">"• " {record.to_string()}</li>
-    //                                     }
-    //                                 })
-    //                                 .collect_view()}
-
-    //                         </ul>
-    //                     }
-    //                         .into_any()
-    //                 }}
-    //             </div>
-    //         }
-    //             .into_any()
-    //     }}
-    // }
 }
 
 #[component]

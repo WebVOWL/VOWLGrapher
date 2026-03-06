@@ -32,7 +32,7 @@ pub fn Icon(
             .attr("stroke", icon.stroke)
             .attr("fill", icon.fill.unwrap_or("currentColor"))
             .attr("role", "graphics-symbol")
-            .inner_html(icon.data) // Using nner_html due to https://github.com/carloskiki/leptos-icons/issues/64
+            .inner_html(icon.data) // Using inner_html due to https://github.com/carloskiki/leptos-icons/issues/64
         // .child(svg::InertElement::new(icon.data))
     }
 }

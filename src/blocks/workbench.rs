@@ -4,12 +4,13 @@ mod export_menu;
 mod filter_menu;
 mod ontology_menu;
 mod options_menu;
+
 // mod search_menu;1
 use crate::components::lists::{ListDetails, ListElement};
 use crate::components::menu::vertical_menu::VerticalMenu;
 use about_menu::AboutMenu;
 use error_log::ErrorLogContext;
-use error_log::{ErrorLog, ErrorMenu};
+use error_log::ErrorMenu;
 use export_menu::ExportMenu;
 use filter_menu::FilterMenu;
 use grapher::prelude::GraphDisplayData;
@@ -88,7 +89,6 @@ pub fn NewWorkbench() -> impl IntoView {
             <ListElement title=error_title icon=icondata::BiErrorAltRegular>
                 <ErrorMenu />
             </ListElement>
-
 
         </VerticalMenu>
     }

@@ -167,8 +167,8 @@ impl TableHTML for ErrorRecord {
 impl From<ServerFnError> for ErrorRecord {
     fn from(value: ServerFnError) -> Self {
         let (error_type, message) = match value {
+            #[allow(deprecated, reason = "TODO: Remove in Leptos v0.9")]
             ServerFnError::WrappedServerError(_) => (
-                // TODO: Remove in Leptos v0.9
                 ErrorType::InternalServerError,
                 "deprecated WrappedServerError".to_string(),
             ),

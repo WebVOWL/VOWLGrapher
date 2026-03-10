@@ -15,13 +15,8 @@ RUN apk update && apk upgrade --no-cache && apk add --no-cache \
     lld \
     mold 
 
-
-# WORKAROUND until cargo-leptos has a prebuilt binary version greater than 0.3.2 (due to bug when compiling for musl)
-RUN git clone "https://github.com/leptos-rs/cargo-leptos"
-RUN cargo install --debug --path /cargo-leptos/
-
 # Install a prebuilt binary of cargo-leptos matching version in README.md
-# RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.2/cargo-leptos-installer.sh | sh
+RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.5/cargo-leptos-installer.sh | sh
 
 
 WORKDIR /build

@@ -71,12 +71,12 @@ pub fn print_graph_display_data(data_buffer: &GraphDisplayData) {
         .zip(data_buffer.labels.iter())
         .enumerate()
     {
-        info!("{index}: {element:?} -> {label}");
+        info!("{index}: {element:?} -> {label:?}");
     }
     info!("--- Edges ---");
     for edge in data_buffer.edges.iter() {
         info!(
-            "{} -> {:?} -> {}",
+            "{:?} -> {:?} -> {:?}",
             data_buffer.labels[edge[0]], data_buffer.elements[edge[1]], data_buffer.labels[edge[2]]
         );
     }

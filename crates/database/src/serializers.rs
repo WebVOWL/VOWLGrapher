@@ -287,19 +287,12 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
         let mut iricache: HashMap<Term, usize> = HashMap::new();
         for (iri, element) in val.node_element_buffer.into_iter() {
             let label = val.label_buffer.remove(&iri);
-            match label {
-                Some(label) => {
-                    display_data.labels.push(label);
-                    display_data.elements.push(element);
-                    iricache.insert(iri, display_data.elements.len() - 1);
-                }
-                None => {
-                    error!("Label not found for iri: {}, using default", iri);
-                    display_data.labels.push(element.to_string());
-                    display_data.elements.push(element);
-                    iricache.insert(iri, display_data.elements.len() - 1);
-                }
+            if label.is_none() {
+                error!("Label not found for iri: {}, using None", iri);
             }
+            display_data.labels.push(label);
+            display_data.elements.push(element);
+            iricache.insert(iri, display_data.elements.len() - 1);
         }
 
         for edge in val.edge_buffer.iter() {
@@ -311,7 +304,7 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
             match (subject_idx, object_idx, maybe_label) {
                 (Some(subject_idx), Some(object_idx), Some(label)) => {
                     display_data.elements.push(edge.element_type);
-                    display_data.labels.push(label);
+                    display_data.labels.push(Some(label));
                     display_data.edges.push([
                         *subject_idx,
                         display_data.elements.len() - 1,

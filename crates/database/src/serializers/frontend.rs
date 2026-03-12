@@ -25,7 +25,7 @@ use rdf_fusion::{
     },
 };
 use vowlr_parser::errors::VOWLRStoreError;
-use vowlr_util::prelude::VOWLRError;
+use vowlr_util::prelude::{ErrorRecord, ErrorSeverity, ErrorType, VOWLRError};
 
 pub struct GraphDisplayDataSolutionSerializer {
     pub resolvable_iris: HashSet<String>,
@@ -79,7 +79,7 @@ impl GraphDisplayDataSolutionSerializer {
             self.write_node_triple(&mut data_buffer, triple)
                 .or_else(|e| {
                     data_buffer.failed_buffer.push(e.into());
-                    Ok::<(), VOWLRError>(())
+                    Ok::<SerializationStatus, VOWLRError>(SerializationStatus::Serialized)
                 })?;
             count += 1;
         }
@@ -91,9 +91,12 @@ impl GraphDisplayDataSolutionSerializer {
         // Catch permanently unresolved triples
         for (term, triples) in data_buffer.unknown_buffer.drain() {
             for triple in triples {
-                data_buffer.failed_buffer.push((
-                    Some(triple),
+                data_buffer.failed_buffer.push(ErrorRecord::new(
+                    ErrorSeverity::Error,
+                    ErrorType::Serializer,
                     format!("Unresolved reference: could not map '{}'", term),
+                    #[cfg(debug_assertions)]
+                    Some(format!("Triple: {:?}", triple)),
                 ));
             }
         }
@@ -482,7 +485,11 @@ impl GraphDisplayDataSolutionSerializer {
         let old_elem_opt = data_buffer.node_element_buffer.get(iri).cloned();
         match old_elem_opt {
             Some(old_elem) => {
-                if old_elem == ElementType::Owl(OwlType::Node(OwlNode::Class)) {
+                if matches!(
+                    old_elem,
+                    ElementType::Owl(OwlType::Node(OwlNode::Class))
+                        | ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass))
+                ) {
                     data_buffer
                         .node_element_buffer
                         .insert(iri.clone(), new_element);
@@ -592,19 +599,27 @@ impl GraphDisplayDataSolutionSerializer {
                 match self.write_node_triple(data_buffer, triple.clone()) {
                     Ok(SerializationStatus::Serialized) => (),
                     Ok(SerializationStatus::Deferred) => {
-                        data_buffer.failed_buffer.push((
-                            Some(triple),
+                        data_buffer.failed_buffer.push(ErrorRecord::new(
+                            ErrorSeverity::Error,
+                            ErrorType::Serializer,
                             "Failed to resolve references during second pass".to_string(),
+                            #[cfg(debug_assertions)]
+                            Some(format!("Triple: {:?}", triple)),
                         ));
                     }
                     Err(e) => {
-                        data_buffer
-                            .failed_buffer
-                            .push((e.inner.triple().cloned(), e.to_string()));
+                        data_buffer.failed_buffer.push(ErrorRecord::new(
+                            ErrorSeverity::Error,
+                            ErrorType::Serializer,
+                            e.to_string(),
+                            #[cfg(debug_assertions)]
+                            Some(format!("Triple: {:?}", triple)),
+                        ));
                     }
                 }
             }
         }
+        Ok(())
     }
 
     /// Serialize a triple to `data_buffer`.
@@ -1109,8 +1124,9 @@ impl GraphDisplayDataSolutionSerializer {
                                 ElementType::Owl(OwlType::Node(OwlNode::UnionOf)),
                             );
                             return Ok(SerializationStatus::Serialized);
+                        } else {
+                            return Ok(SerializationStatus::Deferred);
                         }
-                        return Ok(SerializationStatus::Serialized);
                     }
                     // owl::VERSION_INFO => {}
                     // owl::VERSION_IRI => {}
@@ -1310,13 +1326,6 @@ impl GraphDisplayDataSolutionSerializer {
                                                 }),
                                             )
                                         } else {
-                                            return Err(
-                                                SerializationErrorKind::SerializationFailed(
-                                                    triple,
-                                                    "Illegal property triple".to_string(),
-                                                )
-                                                .into(),
-                                            );
                                             debug!(
                                                 "Property triple ignored: Subject or Object not in display buffer."
                                             );
@@ -1369,11 +1378,7 @@ impl GraphDisplayDataSolutionSerializer {
                                         }
                                     }
                                     None => {
-                                        return Err(SerializationErrorKind::SerializationFailed(
-                                            triple.clone(),
-                                            "Error creating node".to_string(),
-                                        )
-                                        .into());
+                                        // When subject/property/object are already resolved, no synthetic node is needed
                                     }
                                 }
 

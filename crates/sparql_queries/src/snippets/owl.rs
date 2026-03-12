@@ -63,6 +63,8 @@ impl SparqlSnippet for OwlNode {
             OwlNode::UnionOf => {
                 r#"{
                 ?id owl:unionOf ?list .
+                ?list rdf:rest*/rdf:first ?target .
+                FILTER(?target != rdf:nil)
                 BIND(owl:unionOf AS ?nodeType)
                 }"#
             }

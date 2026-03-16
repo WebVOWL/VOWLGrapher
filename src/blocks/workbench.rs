@@ -6,7 +6,7 @@ mod ontology_menu;
 mod options_menu;
 
 // mod search_menu;1
-use crate::components::lists::{ListDetails, ListElement, ListElementGroup};
+use crate::components::lists::{ListDetails, ListElement};
 use crate::components::menu::vertical_menu::VerticalMenu;
 use about_menu::AboutMenu;
 use error_log::ErrorLogContext;
@@ -61,36 +61,34 @@ pub fn NewWorkbench() -> impl IntoView {
 
     view! {
         <VerticalMenu>
-            <ListElementGroup>
-                <ListElement title="Load Ontology" icon=icondata::BiMenuRegular>
-                    <OntologyMenu />
-                </ListElement>
+            <ListElement title="Load Ontology" icon=icondata::BiMenuRegular>
+                <OntologyMenu />
+            </ListElement>
 
-                // <ListElement title="Search" icon=icondata::BiMenuRegular>
-                // <SearchMenu />
-                // </ListElement>
+            // <ListElement title="Search" icon=icondata::BiMenuRegular>
+            // <SearchMenu />
+            // </ListElement>
 
-                <ListElement title="Filter" icon=icondata::BiMenuRegular>
-                    <FilterMenu />
-                </ListElement>
+            <ListElement title="Filter" icon=icondata::BiMenuRegular>
+                <FilterMenu />
+            </ListElement>
 
-                <ListElement title="Export" icon=icondata::BiMenuRegular>
-                    <ExportMenu />
-                </ListElement>
+            <ListElement title="Export" icon=icondata::BiMenuRegular>
+                <ExportMenu />
+            </ListElement>
 
-                <ListDetails title="Settings" icon=icondata::IoSettingsOutline>
-                    <ListElement title="Simulator">
-                        <OptionsMenu />
-                    </ListElement>
-                </ListDetails>
+            <ListDetails title="Settings" icon=icondata::IoSettingsOutline>
+                <ListElement title="Simulator">
+                    <OptionsMenu />
+                </ListElement>
+            </ListDetails>
 
-                <ListElement title="About" icon=icondata::BiMenuRegular>
-                    <AboutMenu />
-                </ListElement>
-                <ListElement title=error_title icon=icondata::BiErrorAltRegular>
-                    <ErrorMenu />
-                </ListElement>
-            </ListElementGroup>
+            <ListElement title="About" icon=icondata::BiMenuRegular>
+                <AboutMenu />
+            </ListElement>
+            <ListElement title=error_title icon=icondata::BiErrorAltRegular>
+                <ErrorMenu />
+            </ListElement>
         </VerticalMenu>
     }
 }

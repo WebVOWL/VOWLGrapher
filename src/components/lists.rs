@@ -1,19 +1,6 @@
 use crate::components::icon::MaybeShowIcon;
 use leptos::{html::Div, prelude::*};
 
-#[derive(Clone, Copy)]
-struct ActiveListElement {
-    active: RwSignal<Option<RwSignal<bool>>>,
-}
-
-#[component]
-pub fn ListElementGroup(children: Children) -> impl IntoView {
-    provide_context(ActiveListElement {
-        active: RwSignal::new(None),
-    });
-    children()
-}
-
 /// A generic list element.
 ///
 /// The `children` use an "absolute" position. Use the "relative" position on
@@ -24,46 +11,26 @@ pub fn ListElement(
     #[prop(optional, into)] icon: MaybeProp<icondata::Icon>,
     children: Children,
 ) -> impl IntoView {
-    let show_element = RwSignal::new(false);
-    let target = NodeRef::<Div>::new();
-    let active_child = use_context::<ActiveListElement>();
-
-    let open = move |_| {
-        if let Some(child) = active_child {
-            if let Some(prev) = child.active.get_untracked() {
-                prev.set(false);
-            }
-            child.active.set(Some(show_element));
-        }
-        show_element.set(true);
-    };
+    let details_ref = NodeRef::<leptos::html::Details>::new();
 
     let close = move |ev: web_sys::MouseEvent| {
         ev.stop_propagation();
-        show_element.set(false);
-        if let Some(child) = active_child {
-            child.active.set(None);
+        if let Some(details) = details_ref.get() {
+            details.set_open(false);
         }
     };
 
     view! {
-        <li on:click=open>
-            <a
-                href="#"
-                class="flex gap-2 items-center py-2 px-4 text-gray-500 rounded-lg hover:text-gray-700 hover:bg-gray-100"
+        <details name="workbench-menus" class="group [&::-webkit-details-marker]:hidden" node_ref=details_ref>
+            <summary
+                class="flex gap-2 items-center py-2 px-4 text-gray-500 rounded-lg cursor-pointer hover:text-gray-700 hover:bg-gray-100 list-none [&::-webkit-details-marker]:hidden"
             >
                 <MaybeShowIcon icon=icon></MaybeShowIcon>
                 <span class="text-sm font-medium">{move || title.get()}</span>
-            </a>
-            <div
-                node_ref=target
-                class="overflow-y-scroll absolute top-0 left-full m-4 bg-white border-gray-100 w-fit max-h-[80vh] min-h-[80vh]"
-                style=move || {
-                    if show_element.get() { "" } else { "display: none" }
-                }
-            >
+            </summary>
+            <div class="overflow-y-scroll absolute top-0 left-full m-4 bg-white border border-gray-100 w-fit max-h-[80vh] min-h-[80vh] hidden group-open:block">
                 <button
-                    class="inline-flex absolute top-0 right-0 justify-center items-center p-0.5 text-gray-400 bg-white rounded-md hover:text-gray-500 hover:bg-gray-100 focus:outline-none cursor-pointer mt-2 mr-2"
+                    class="inline-flex absolute right-0 top-0 justify-center items-center p-0.5 text-gray-400 bg-white rounded-md hover:text-gray-500 hover:bg-gray-100 focus:outline-none cursor-pointer mt-2 mr-2"
                     on:click=close
                 >
                     <svg
@@ -84,7 +51,7 @@ pub fn ListElement(
                 </button>
                 {children()}
             </div>
-        </li>
+        </details>
     }
 }
 

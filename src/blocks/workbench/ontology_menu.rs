@@ -195,8 +195,8 @@ pub fn UploadInput() -> impl IntoView {
                         if let Some(files) = input.files() {
                             if let Some(file) = files.item(0) && file.size() > MAX_FILE_SIZE_BYTES {
                                 let err_msg = format!(
-                                    "File {} exceeds the maximum allowed size of 50MB.",
-                                    file.name()
+                                    "File {} exceeds the maximum allowed size of {}MB.",
+                                    file.name(), MAX_FILE_SIZE_BYTES / 1024.0 / 1024.0
                                 );
                                 error_context
                                     .push(crate::error::ClientErrorKind::FileUploadError(err_msg).into());

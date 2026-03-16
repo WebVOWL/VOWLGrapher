@@ -119,7 +119,8 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), Serv
 
             if count > MAX_FILE_SIZE_BYTES {
                 return Err(ServerFnError::ServerError(format!(
-                    "File {name} exceeds the maximum allowed size of 50MB.",
+                    "File {name} exceeds the maximum allowed size of {}MB.",
+                    MAX_FILE_SIZE_BYTES / 1024 / 1024
                 )));
             }
 
@@ -153,9 +154,10 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), ServerFnErr
     if let Some(content_length) = resp.content_length() {
         let size = usize::try_from(content_length).unwrap_or(usize::MAX);
         if size > MAX_FILE_SIZE_BYTES {
-            return Err(ServerFnError::ServerError(
-                "Remote file exceeds the maximum allowed size of 50MB.".to_string(),
-            ));
+            return Err(ServerFnError::ServerError(format!(
+                "Remote file exceeds the maximum allowed size of {}MB.",
+                MAX_FILE_SIZE_BYTES / 1024 / 1024
+            )));
         }
     }
 

@@ -575,50 +575,72 @@ impl GraphDisplayDataSolutionSerializer {
     ) -> Result<(), SerializationError> {
         info!("Second pass: Resolving all possible unknowns");
 
-        let unknown_nodes = take(&mut data_buffer.unknown_buffer);
-        for (term, triples) in unknown_nodes {
-            if !data_buffer.label_buffer.contains_key(&term) {
-                self.extract_label(data_buffer, None, &term);
-            }
+        let mut pending = take(&mut data_buffer.unknown_buffer);
+        let mut pass: usize = 0;
+        let max_passes: usize = 4;
 
-            if self.is_external(data_buffer, &term) {
-                // dummy triple, only subject matters.
-                let external_triple = Triple::new(
-                    term,
-                    Term::BlankNode(self.create_blank_node("_:external_class".to_string())?),
-                    None,
-                );
+        while !pending.is_empty() && pass < max_passes {
+            pass += 1;
 
-                self.insert_node(
-                    data_buffer,
-                    &external_triple,
-                    ElementType::Owl(OwlType::Node(OwlNode::ExternalClass)),
-                )?;
-            }
-            for triple in triples {
-                match self.write_node_triple(data_buffer, triple.clone()) {
-                    Ok(SerializationStatus::Serialized) => (),
-                    Ok(SerializationStatus::Deferred) => {
-                        data_buffer.failed_buffer.push(ErrorRecord::new(
-                            ErrorSeverity::Error,
-                            ErrorType::Serializer,
-                            "Failed to resolve references during second pass".to_string(),
-                            #[cfg(debug_assertions)]
-                            Some(format!("Triple: {:?}", triple)),
-                        ));
-                    }
-                    Err(e) => {
-                        data_buffer.failed_buffer.push(ErrorRecord::new(
-                            ErrorSeverity::Error,
-                            ErrorType::Serializer,
-                            e.to_string(),
-                            #[cfg(debug_assertions)]
-                            Some(format!("Triple: {:?}", triple)),
-                        ));
+            let pending_before: usize = pending.values().map(|set| set.len()).sum();
+            trace!(
+                "Unknown resolution pass {} ({} triples pending)",
+                pass, pending_before
+            );
+
+            let current = pending;
+
+            for (term, triples) in current {
+                if !data_buffer.label_buffer.contains_key(&term) {
+                    self.extract_label(data_buffer, None, &term);
+                }
+
+                if self.is_external(data_buffer, &term) {
+                    // Dummy triple, only subject matters.
+                    let external_triple = Triple::new(
+                        term,
+                        Term::BlankNode(self.create_blank_node("_:external_class".to_string())?),
+                        None,
+                    );
+
+                    self.insert_node(
+                        data_buffer,
+                        &external_triple,
+                        ElementType::Owl(OwlType::Node(OwlNode::ExternalClass)),
+                    )?;
+                }
+
+                for triple in triples {
+                    match self.write_node_triple(data_buffer, triple.clone()) {
+                        Ok(SerializationStatus::Serialized) => {}
+                        Ok(SerializationStatus::Deferred) => {}
+                        Err(e) => {
+                            data_buffer.failed_buffer.push(ErrorRecord::new(
+                                ErrorSeverity::Error,
+                                ErrorType::Serializer,
+                                e.to_string(),
+                                #[cfg(debug_assertions)]
+                                Some(format!("Triple: {:?}", triple)),
+                            ));
+                        }
                     }
                 }
             }
+
+            // Collect newly deferred triples produced during this pass.
+            pending = take(&mut data_buffer.unknown_buffer);
+            let pending_after: usize = pending.values().map(|set| set.len()).sum();
+
+            if pending_after >= pending_before {
+                trace!(
+                    "Unknown resolution reached fixpoint after pass {} ({} triples still pending)",
+                    pass, pending_after
+                );
+                break;
+            }
         }
+
+        data_buffer.unknown_buffer = pending;
         Ok(())
     }
 
@@ -1338,25 +1360,26 @@ impl GraphDisplayDataSolutionSerializer {
                                             Some(ElementType::Owl(OwlType::Edge(
                                                 OwlEdge::DatatypeProperty,
                                             ))) => {
-                                                let local_literal = self.create_named_node(
-                                                    property.to_string() + "_locallitral",
-                                                )?;
+                                                let local_literal_iri =
+                                                    Self::synthetic_iri(&property, "_localliteral");
                                                 let literal_triple = self.create_triple(
-                                                    local_literal.to_string(),
+                                                    local_literal_iri.clone(),
                                                     rdfs::LITERAL.into(),
                                                     None,
                                                 )?;
-                                                info!("Creating literal node: {}", local_literal);
+                                                info!(
+                                                    "Creating literal node: {}",
+                                                    local_literal_iri
+                                                );
 
-                                                let local_thing = self.create_named_node(
-                                                    property.to_string() + "_localthing",
-                                                )?;
+                                                let local_thing_iri =
+                                                    Self::synthetic_iri(&property, "_localthing");
                                                 let thing_triple = self.create_triple(
-                                                    local_thing.to_string(),
+                                                    local_thing_iri.clone(),
                                                     owl::THING.into(),
                                                     None,
                                                 )?;
-                                                info!("Creating thing node: {}", local_thing);
+                                                info!("Creating thing node: {}", local_thing_iri);
 
                                                 (
                                                     Some(vec![
@@ -1646,59 +1669,55 @@ impl GraphDisplayDataSolutionSerializer {
         Ok(thing_id)
     }
 
+    fn synthetic_iri(base: &Term, suffix: &str) -> String {
+        let clean = trim_tag_circumfix(&base.to_string());
+        format!("{clean}{suffix}")
+    }
+
     fn insert_characteristic(
         &self,
         data_buffer: &mut SerializationDataBuffer,
         triple: Triple,
         arg: String,
     ) -> SerializationStatus {
-        let resolved = self.resolve(data_buffer, triple.id.clone());
-        match resolved {
-            Some(s) => match data_buffer.node_characteristics.get_mut(&s) {
-                Some(char) => {
-                    for (k, v) in data_buffer.property_edge_map.iter() {
-                        trace!("{} -> {}", k, v);
-                    }
-                    debug!("Inserting characteristic: {} -> {}", s, arg);
-                    char.push(arg);
-                    SerializationStatus::Serialized
-                }
-                None => {
-                    for (k, v) in data_buffer.property_edge_map.iter() {
-                        trace!("{} -> {}", k, v);
-                    }
-                    debug!("Inserting characteristic: {} -> {}", s, arg);
-                    let e = data_buffer.property_edge_map.get(&s);
-                    match e {
-                        Some(e) => {
-                            data_buffer
-                                .edge_characteristics
-                                .insert(e.clone(), vec![arg]);
-                            SerializationStatus::Serialized
-                        }
-                        None => {
-                            // Property exists as an edge type, but no concrete edge instance has been materialized yet
-                            if data_buffer.edge_element_buffer.contains_key(&s) {
-                                debug!(
-                                    "Characteristic '{}' for '{}' has no materialized property edge yet; deferring",
-                                    arg, s
-                                );
-                            } else {
-                                debug!("Adding characteristic to unknown buffer: {}", triple);
-                            }
+        let property_iri = triple.id.clone();
 
-                            self.add_to_unknown_buffer(data_buffer, s, triple);
-                            SerializationStatus::Deferred
-                        }
-                    }
-                }
-            },
-            None => {
-                debug!("Adding characteristic to unknown buffer: {}", triple);
-                self.add_to_unknown_buffer(data_buffer, triple.id.clone(), triple);
-                SerializationStatus::Deferred
+        let Some(resolved_iri) = self.resolve(data_buffer, property_iri.clone()) else {
+            debug!(
+                "Deferring characteristic '{}' for '{}': property unresolved",
+                arg, property_iri
+            );
+            self.add_to_unknown_buffer(data_buffer, property_iri, triple);
+            return SerializationStatus::Deferred;
+        };
+
+        // Characteristic can attach only after a concrete edge exists
+        if let Some(edge) = data_buffer.property_edge_map.get(&resolved_iri).cloned() {
+            debug!("Inserting edge characteristic: {} -> {}", resolved_iri, arg);
+            let entry = data_buffer.edge_characteristics.entry(edge).or_default();
+            if !entry.iter().any(|existing| existing == &arg) {
+                entry.push(arg);
             }
+            return SerializationStatus::Serialized;
         }
+
+        // Property is known, but edge not materialized yet
+        if data_buffer.edge_element_buffer.contains_key(&resolved_iri) {
+            debug!(
+                "Deferring characteristic '{}' for '{}': property known, edge not materialized yet",
+                arg, resolved_iri
+            );
+            self.add_to_unknown_buffer(data_buffer, resolved_iri, triple);
+            return SerializationStatus::Deferred;
+        }
+
+        // No attach point yet
+        debug!(
+            "Deferring characteristic '{}' for '{}': no attach point available yet",
+            arg, resolved_iri
+        );
+        self.add_to_unknown_buffer(data_buffer, resolved_iri, triple);
+        SerializationStatus::Deferred
     }
 }
 

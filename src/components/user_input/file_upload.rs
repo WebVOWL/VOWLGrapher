@@ -116,7 +116,7 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), Serv
         while let Ok(Some(chunk)) = field.chunk().await {
             let len = chunk.len();
             count += len;
-            
+
             if count > MAX_FILE_SIZE_BYTES {
                 return Err(ServerFnError::ServerError(format!(
                     "File {name} exceeds the maximum allowed size of 50MB.",
@@ -391,7 +391,9 @@ impl UploadProgress {
         }
 
         let fname = self.filename.get_untracked();
-        self.track_progress(&fname, Some(self.file_size.get()), false, move || dispatch(form));
+        self.track_progress(&fname, Some(self.file_size.get()), false, move || {
+            dispatch(form);
+        });
     }
 
     pub fn upload_url<F>(&self, url: &str, dispatch: F)

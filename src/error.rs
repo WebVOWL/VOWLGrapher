@@ -17,7 +17,9 @@ impl From<ClientErrorKind> for ErrorRecord {
     fn from(value: ClientErrorKind) -> Self {
         let (message, error_type, severity) = match value {
             ClientErrorKind::JavaScriptError(e) => (e, ErrorType::Gui, ErrorSeverity::Error),
-            ClientErrorKind::FileUploadError(e) => (e, ErrorType::ClientError, ErrorSeverity::Error),
+            ClientErrorKind::FileUploadError(e) => {
+                (e, ErrorType::ClientError, ErrorSeverity::Error)
+            }
             ClientErrorKind::RenderError(e) => (e, ErrorType::Renderer, ErrorSeverity::Critical),
         };
         Self::new(

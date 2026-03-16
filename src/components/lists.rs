@@ -1,5 +1,5 @@
 use crate::components::icon::MaybeShowIcon;
-use leptos::{html::Div, prelude::*};
+use leptos::prelude::*;
 
 /// A generic list element.
 ///
@@ -23,7 +23,7 @@ pub fn ListElement(
     view! {
         <details name="workbench-menus" class="group [&::-webkit-details-marker]:hidden" node_ref=details_ref>
             <summary
-                class="flex gap-2 items-center py-2 px-4 text-gray-500 rounded-lg cursor-pointer hover:text-gray-700 hover:bg-gray-100 list-none [&::-webkit-details-marker]:hidden"
+                class="flex gap-2 items-center py-2 px-4 text-gray-500 rounded-lg cursor-pointer hover:text-gray-700 hover:bg-gray-100 list-none select-none [&::-webkit-details-marker]:hidden"
             >
                 <MaybeShowIcon icon=icon></MaybeShowIcon>
                 <span class="text-sm font-medium">{move || title.get()}</span>

@@ -8,6 +8,8 @@ pub enum ClientErrorKind {
     JavaScriptError(String),
     /// Errors related to the graph renderer (i.e. ``WasmGrapher``)
     RenderError(String),
+    /// Errors related to file upload
+    FileUploadError(String),
 }
 
 impl From<ClientErrorKind> for ErrorRecord {
@@ -15,6 +17,7 @@ impl From<ClientErrorKind> for ErrorRecord {
     fn from(value: ClientErrorKind) -> Self {
         let (message, error_type, severity) = match value {
             ClientErrorKind::JavaScriptError(e) => (e, ErrorType::Gui, ErrorSeverity::Error),
+            ClientErrorKind::FileUploadError(e) => (e, ErrorType::ClientError, ErrorSeverity::Error),
             ClientErrorKind::RenderError(e) => (e, ErrorType::Renderer, ErrorSeverity::Critical),
         };
         Self::new(

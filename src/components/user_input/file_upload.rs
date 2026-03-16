@@ -20,6 +20,8 @@ use vowlr_parser::errors::VOWLRStoreError;
 use vowlr_util::prelude::{DataType, VOWLRError};
 use web_sys::{FileList, FormData};
 
+const MAX_FILE_SIZE_BYTES: usize = 50 * 1024 * 1024;
+
 #[cfg(feature = "ssr")]
 mod progress {
     use async_broadcast::{Receiver, Sender, broadcast};
@@ -114,6 +116,13 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), Serv
         while let Ok(Some(chunk)) = field.chunk().await {
             let len = chunk.len();
             count += len;
+            
+            if count > MAX_FILE_SIZE_BYTES {
+                return Err(ServerFnError::ServerError(format!(
+                    "File {name} exceeds the maximum allowed size of 50MB.",
+                )));
+            }
+
             session.upload_chunk(&chunk).await?;
             progress::add_chunk(&name, len).await;
         }
@@ -140,6 +149,15 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), ServerFnErr
             )));
         }
     };
+
+    if let Some(content_length) = resp.content_length() {
+        let size = usize::try_from(content_length).unwrap_or(usize::MAX);
+        if size > MAX_FILE_SIZE_BYTES {
+            return Err(ServerFnError::ServerError(
+                "Remote file exceeds the maximum allowed size of 50MB.".to_string(),
+            ));
+        }
+    }
 
     let mut session = VOWLRStore::default();
     let progress_key = url.clone();
@@ -248,6 +266,7 @@ pub async fn handle_internal_sparql(query: String) -> Result<GraphDisplayData, V
 
 pub struct UploadProgress {
     pub filename: RwSignal<String>,
+    pub url_name: RwSignal<String>,
     pub file_size: RwSignal<usize>,
     pub upload_progress: RwSignal<i32>,
     pub parsing_status: RwSignal<String>,
@@ -259,6 +278,7 @@ impl UploadProgress {
     pub fn new() -> Self {
         Self {
             filename: RwSignal::new(String::new()),
+            url_name: RwSignal::new(String::new()),
             file_size: RwSignal::new(0),
             upload_progress: RwSignal::new(0),
             parsing_status: RwSignal::new(String::new()),
@@ -268,11 +288,15 @@ impl UploadProgress {
     }
 
     #[expect(unused, reason = "not yet implemented")]
-    fn track_progress<F>(&self, key: &str, total_size: Option<usize>, dispatch: F)
+    fn track_progress<F>(&self, key: &str, total_size: Option<usize>, is_url: bool, dispatch: F)
     where
         F: FnOnce() + 'static,
     {
-        self.filename.set(key.to_string());
+        if is_url {
+            self.url_name.set(key.to_string());
+        } else {
+            self.filename.set(key.to_string());
+        }
         self.upload_progress.set(0);
         self.parsing_status.set(String::new());
         self.parsing_done.set(false);
@@ -367,7 +391,7 @@ impl UploadProgress {
         }
 
         let fname = self.filename.get_untracked();
-        self.track_progress(&fname, Some(self.file_size.get()), move || dispatch(form));
+        self.track_progress(&fname, Some(self.file_size.get()), false, move || dispatch(form));
     }
 
     pub fn upload_url<F>(&self, url: &str, dispatch: F)
@@ -375,7 +399,8 @@ impl UploadProgress {
         F: FnOnce(String) + 'static,
     {
         let url_string = url.to_string();
-        self.track_progress(url, None, move || dispatch(url_string));
+        self.url_name.set(url.to_string());
+        self.track_progress(url, None, true, move || dispatch(url_string));
     }
 
     pub fn upload_sparql<F>(&self, endpoint: &str, query: &str, dispatch: F)
@@ -386,7 +411,7 @@ impl UploadProgress {
         let ep = endpoint.to_string();
         let q = query.to_string();
         let fmt = Some("json".to_string());
-        self.track_progress(&key, None, move || dispatch((ep, q, fmt)));
+        self.track_progress(&key, None, true, move || dispatch((ep, q, fmt)));
     }
 }
 

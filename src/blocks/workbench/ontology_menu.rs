@@ -13,6 +13,8 @@ use log::info;
 use vowlr_sparql_queries::prelude::DEFAULT_QUERY;
 use web_sys::HtmlInputElement;
 
+const MAX_FILE_SIZE_BYTES: f64 = 50.0 * 1024.0 * 1024.0;
+
 #[component]
 pub fn SelectStaticInput() -> impl IntoView {
     let GraphDataContext {
@@ -191,6 +193,17 @@ pub fn UploadInput() -> impl IntoView {
                     on:input=move |ev| {
                         let input: HtmlInputElement = event_target(&ev);
                         if let Some(files) = input.files() {
+                            if let Some(file) = files.item(0) && file.size() > MAX_FILE_SIZE_BYTES {
+                                let err_msg = format!(
+                                    "File {} exceeds the maximum allowed size of 50MB.",
+                                    file.name()
+                                );
+                                error_context
+                                    .push(crate::error::ClientErrorKind::FileUploadError(err_msg).into());
+                                input.set_value("");
+                                return;
+                            }
+
                             tracker_file
                                 .upload_files(
                                     &files,

@@ -38,12 +38,8 @@ pub const ONTOLOGY: &str = r#"{
 /// We need to figure out what type the deprecated element is.
 /// It could be a class or a property!
 pub const OWL_DEPRECATED: &str = r#"{
-            # WIP: Identify OWL deprecated properties
-            # ?id owl:deprecated "true"^^<http://www.w3.org/2001/XMLSchema#boolean>
-            # BIND("DeprecatedProperty" AS ?nodeType)
-        
-            # DEPRECATED
             ?id owl:deprecated ?target .
+            FILTER(?target = "true"^^xsd:boolean || lcase(str(?target)) = "true")
             BIND(owl:deprecated AS ?nodeType)
             }"#;
 

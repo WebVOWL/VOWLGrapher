@@ -504,6 +504,125 @@ impl GraphDisplayDataSolutionSerializer {
         }
     }
 
+    fn upgrade_deprecated_node_type(&self, data_buffer: &mut SerializationDataBuffer, iri: &Term) {
+        let old_elem_opt = data_buffer.node_element_buffer.get(iri).copied();
+        match old_elem_opt {
+            Some(old_elem)
+                if matches!(
+                    old_elem,
+                    ElementType::Owl(OwlType::Node(OwlNode::Class | OwlNode::AnonymousClass))
+                        | ElementType::Rdfs(RdfsType::Node(RdfsNode::Class))
+                        | ElementType::Owl(OwlType::Node(OwlNode::DeprecatedClass))
+                ) =>
+            {
+                let new_element = ElementType::Owl(OwlType::Node(OwlNode::DeprecatedClass));
+                data_buffer
+                    .node_element_buffer
+                    .insert(iri.clone(), new_element);
+                debug!(
+                    "Upgraded deprecated class '{}' from {} to {}",
+                    iri, old_elem, new_element
+                );
+            }
+            Some(old_elem) => {
+                warn!(
+                    "Skipping owl:Deprecated node upgrade for '{}': {} is not a class",
+                    iri, old_elem
+                );
+            }
+            None => {
+                warn!(
+                    "Cannot upgrade unresolved subject '{}' to DeprecatedClass",
+                    iri
+                );
+            }
+        }
+    }
+
+    fn upgrade_property_type(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        property_iri: &Term,
+        new_element: ElementType,
+    ) {
+        let old_elem_opt = data_buffer.edge_element_buffer.get(property_iri).copied();
+        let Some(old_elem) = old_elem_opt else {
+            warn!(
+                "Cannot upgrade unresolved property '{}' to {}",
+                property_iri, new_element
+            );
+            return;
+        };
+
+        if !matches!(
+            old_elem,
+            ElementType::Owl(OwlType::Edge(
+                OwlEdge::ObjectProperty
+                    | OwlEdge::DatatypeProperty
+                    | OwlEdge::DeprecatedProperty
+                    | OwlEdge::ExternalProperty
+            )) | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))
+        ) {
+            warn!(
+                "Skipping owl:Deprecated property upgrade for '{}': {} is not a property",
+                property_iri, old_elem
+            );
+            return;
+        }
+
+        data_buffer
+            .edge_element_buffer
+            .insert(property_iri.clone(), new_element);
+
+        let Some(old_edge) = data_buffer.property_edge_map.get(property_iri).cloned() else {
+            debug!(
+                "Upgraded property '{}' from {} to {} before edge materialization",
+                property_iri, old_elem, new_element
+            );
+            return;
+        };
+
+        let mut new_edge = old_edge.clone();
+        new_edge.element_type = new_element;
+
+        data_buffer.edge_buffer.remove(&old_edge);
+        data_buffer.edge_buffer.insert(new_edge.clone());
+
+        let label = data_buffer
+            .label_buffer
+            .get(property_iri)
+            .cloned()
+            .or_else(|| data_buffer.edge_label_buffer.remove(&old_edge))
+            .unwrap_or_else(|| new_element.to_string());
+        data_buffer
+            .edge_label_buffer
+            .insert(new_edge.clone(), label);
+
+        if let Some(characteristics) = data_buffer.edge_characteristics.remove(&old_edge) {
+            data_buffer
+                .edge_characteristics
+                .insert(new_edge.clone(), characteristics);
+        }
+
+        if let Some(edges) = data_buffer.edges_include_map.get_mut(&old_edge.subject) {
+            edges.remove(&old_edge);
+            edges.insert(new_edge.clone());
+        }
+        if let Some(edges) = data_buffer.edges_include_map.get_mut(&old_edge.object) {
+            edges.remove(&old_edge);
+            edges.insert(new_edge.clone());
+        }
+
+        data_buffer
+            .property_edge_map
+            .insert(property_iri.clone(), new_edge);
+
+        debug!(
+            "Upgraded deprecated property '{}' from {} to {}",
+            property_iri, old_elem, new_element
+        );
+    }
+
     /// Appends a string to an element's label.
     fn extend_element_label(
         &self,
@@ -867,8 +986,39 @@ impl GraphDisplayDataSolutionSerializer {
 
                     //TODO: OWL1 (deprecated in OWL2, replaced by rdfs:datatype)
                     // owl::DATA_RANGE => {}
+                    owl::DEPRECATED => {
+                        let Some(resolved_iri) = self.resolve(data_buffer, triple.id.clone())
+                        else {
+                            debug!(
+                                "Deferring owl:Deprecated for '{}': subject type unresolved",
+                                triple.id
+                            );
+                            self.add_to_unknown_buffer(data_buffer, triple.id.clone(), triple);
+                            return Ok(SerializationStatus::Deferred);
+                        };
 
-                    // owl::DEPRECATED => {}
+                        if data_buffer.node_element_buffer.contains_key(&resolved_iri) {
+                            self.upgrade_deprecated_node_type(data_buffer, &resolved_iri);
+                            return Ok(SerializationStatus::Serialized);
+                        }
+
+                        if data_buffer.edge_element_buffer.contains_key(&resolved_iri) {
+                            self.upgrade_property_type(
+                                data_buffer,
+                                &resolved_iri,
+                                ElementType::Owl(OwlType::Edge(OwlEdge::DeprecatedProperty)),
+                            );
+                            self.check_unknown_buffer(data_buffer, &resolved_iri)?;
+                            return Ok(SerializationStatus::Serialized);
+                        }
+
+                        warn!(
+                            "Skipping owl:Deprecated for '{}': resolved subject has no node/edge entry",
+                            resolved_iri
+                        );
+                        return Ok(SerializationStatus::Deferred);
+                    }
+
                     owl::DEPRECATED_CLASS => {
                         self.insert_node(
                             data_buffer,

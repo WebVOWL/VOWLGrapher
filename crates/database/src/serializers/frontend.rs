@@ -91,13 +91,12 @@ impl GraphDisplayDataSolutionSerializer {
         // Catch permanently unresolved triples
         for (term, triples) in data_buffer.unknown_buffer.drain() {
             for triple in triples {
-                data_buffer.failed_buffer.push(ErrorRecord::new(
-                    ErrorSeverity::Error,
-                    ErrorType::Serializer,
+                let e: SerializationError = SerializationErrorKind::SerializationFailed(
+                    triple,
                     format!("Unresolved reference: could not map '{}'", term),
-                    #[cfg(debug_assertions)]
-                    Some(format!("Triple: {:?}", triple)),
-                ));
+                )
+                .into();
+                data_buffer.failed_buffer.push(e.into());
             }
         }
 
@@ -615,13 +614,7 @@ impl GraphDisplayDataSolutionSerializer {
                         Ok(SerializationStatus::Serialized) => {}
                         Ok(SerializationStatus::Deferred) => {}
                         Err(e) => {
-                            data_buffer.failed_buffer.push(ErrorRecord::new(
-                                ErrorSeverity::Error,
-                                ErrorType::Serializer,
-                                e.to_string(),
-                                #[cfg(debug_assertions)]
-                                Some(format!("Triple: {:?}", triple)),
-                            ));
+                            data_buffer.failed_buffer.push(e.into());
                         }
                     }
                 }
@@ -694,17 +687,20 @@ impl GraphDisplayDataSolutionSerializer {
                     // rdf::OBJECT => {}
                     // rdf::PREDICATE => {}
                     rdf::PROPERTY => {
-                        let edge = self.insert_edge(
+                        match self.insert_edge(
                             data_buffer,
                             &triple,
                             ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty)),
                             None,
-                        );
-                        if edge.is_some() {
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        ) {
+                            Some(_) => {
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
+
                     }
                     // rdf::REST => {}
                     // rdf::SEQ => {}
@@ -776,16 +772,18 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // rdfs::SEE_ALSO => {}
                     rdfs::SUB_CLASS_OF => {
-                        let edge = self.insert_edge(
+                        match self.insert_edge(
                             data_buffer,
                             &triple,
                             ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf)),
                             None,
-                        );
-                        if edge.is_some() {
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        ) {
+                            Some(_) => {
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
                     //TODO: OWL1
@@ -881,16 +879,18 @@ impl GraphDisplayDataSolutionSerializer {
                         return Ok(SerializationStatus::Serialized);
                     }
                     owl::DEPRECATED_PROPERTY => {
-                        let edge = self.insert_edge(
+                        match self.insert_edge(
                             data_buffer,
                             &triple,
                             ElementType::Owl(OwlType::Edge(OwlEdge::DeprecatedProperty)),
                             None,
-                        );
-                        if edge.is_some() {
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        ) {
+                            Some(_) => {
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
 
@@ -915,16 +915,18 @@ impl GraphDisplayDataSolutionSerializer {
                         }
                     }
                     owl::DISJOINT_WITH => {
-                        let edge = self.insert_edge(
+                        match self.insert_edge(
                             data_buffer,
                             &triple,
                             ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith)),
                             None,
-                        );
-                        if edge.is_some() {
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        ) {
+                            Some(_) => {
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
 
@@ -1026,16 +1028,18 @@ impl GraphDisplayDataSolutionSerializer {
                     }
 
                     owl::INVERSE_OF => {
-                        let edge = self.insert_edge(
+                        match self.insert_edge(
                             data_buffer,
                             &triple,
                             ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)),
                             None,
-                        );
-                        if edge.is_some() {
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        ) {
+                            Some(_) => {
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
                     owl::IRREFLEXIVE_PROPERTY => {
@@ -1145,15 +1149,18 @@ impl GraphDisplayDataSolutionSerializer {
                     owl::UNION_OF => {
                         let edge =
                             self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None);
-                        if let Some(edge) = edge {
-                            self.upgrade_node_type(
-                                data_buffer,
-                                &edge.subject,
-                                ElementType::Owl(OwlType::Node(OwlNode::UnionOf)),
-                            );
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        match self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None) {
+                            Some(edge) => {
+                                self.upgrade_node_type(
+                                    data_buffer,
+                                    &edge.subject,
+                                    ElementType::Owl(OwlType::Node(OwlNode::UnionOf)),
+                                );
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
                     // owl::VERSION_INFO => {}

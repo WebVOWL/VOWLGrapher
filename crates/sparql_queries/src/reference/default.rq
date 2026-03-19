@@ -84,15 +84,81 @@
             # LITERAL
             ?id a rdfs:Literal .
             BIND(rdfs:Literal AS ?nodeType)
-            
+
+        }
+        UNION
+        {
+            # OWL2 datatypes
+            VALUES ?datatype {
+                ### RDF ###
+                rdf:HTML
+                rdf:PlainLiteral
+                rdf:XMLLiteral
+                ### OWL2 ###
+                owl:real
+                owl:rational
+                ### XMLSchema ###
+                # Numbers
+                xsd:int
+                xsd:integer
+                xsd:negativeInteger
+                xsd:nonNegativeInteger
+                xsd:nonPositiveInteger
+                xsd:positiveInteger
+                xsd:unsignedInt
+                xsd:unsignedLong
+                xsd:unsignedShort
+                xsd:decimal
+                xsd:float
+                xsd:double
+                xsd:short
+                xsd:long
+
+                # Time
+                xsd:date
+                xsd:dateTime
+                xsd:dateTimeStamp
+                xsd:duration
+                xsd:gDay
+                xsd:gMonth
+                xsd:gMonthDay
+                xsd:gYear
+                xsd:gYearMonth
+                xsd:time
+
+                # Strings
+                xsd:anyURI
+                xsd:ID
+                xsd:IDREF
+                xsd:language
+                xsd:NMTOKEN
+                xsd:Name
+                xsd:NCName
+                xsd:QName
+                xsd:string
+                xsd:token
+                xsd:normalizedString
+                xsd:NOTATION
+
+                # Misc
+                xsd:anySimpleType
+                xsd:base64Binary
+                xsd:boolean
+                xsd:ENTITY
+                xsd:unsignedByte
+                xsd:byte
+                xsd:hexBinary
+            }
+            ?id a ?datatype .
+            BIND(?datatype AS ?nodeType)
         }
         UNION {
             ?target ?nodeType ?intermediate .
             ?intermediate rdf:first ?firstItem .
             ?intermediate rdf:rest*/rdf:first ?id .
             FILTER(?nodeType IN (
-                owl:intersectionOf, 
-                owl:unionOf, 
+                owl:intersectionOf,
+                owl:unionOf,
                 owl:oneOf,
                 owl:disjointUnionOf
             ))
@@ -101,7 +167,7 @@
             # FILTER(?label != rdf:nil)
         } UNION {
             VALUES ?property {
-                owl:DeprecatedProperty  
+                owl:DeprecatedProperty
                 owl:DatatypeProperty
                 owl:ObjectProperty
                 rdf:Property
@@ -175,7 +241,7 @@
         UNION
         {
             # Identify OWL datatype properties
-            ?id a owl:DatatypeProperty 
+            ?id a owl:DatatypeProperty
             BIND(owl:DatatypeProperty AS ?nodeType)
         }
         UNION
@@ -241,7 +307,7 @@
             # WIP: Identify OWL deprecated properties
             # ?id owl:deprecated "true"^^<http://www.w3.org/2001/XMLSchema#boolean>
             # BIND("DeprecatedProperty" AS ?nodeType)
-        
+
             # DEPRECATED
             ?id owl:deprecated ?target .
             BIND(owl:deprecated AS ?nodeType)

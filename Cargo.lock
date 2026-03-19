@@ -3057,8 +3057,8 @@ dependencies = [
 
 [[package]]
 name = "horned-owl"
-version = "1.2.0"
-source = "git+https://github.com/phillord/horned-owl?rev=c4f7835ecae70b5e7281dc23b9b7fc6daa497f1d#c4f7835ecae70b5e7281dc23b9b7fc6daa497f1d"
+version = "1.4.0"
+source = "git+https://github.com/phillord/horned-owl?tag=v1.4.0#33c60d69526165b3dd687770e389d6e353223bfa"
 dependencies = [
  "curie",
  "enum_meta",
@@ -3066,12 +3066,12 @@ dependencies = [
  "lazy_static",
  "log",
  "oxiri",
+ "oxrdf",
+ "oxrdfio",
  "pest",
  "pest_derive",
  "pretty_rdf",
  "quick-xml 0.37.5",
- "rio_api",
- "rio_xml",
  "thiserror 1.0.69",
  "ureq",
 ]
@@ -5222,13 +5222,14 @@ checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
 
 [[package]]
 name = "pretty_rdf"
-version = "0.8.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b52331f084f2fad9eafdd9c89c7ed923ace20d04658e19fa4a5f80e3249f3e2"
+checksum = "2ef451f785c5b7a8f2bc55ebdc88864156bb39afcd67a9c6af35d71c87043505"
 dependencies = [
  "indexmap 1.9.3",
+ "oxrdf",
+ "oxrdfio",
  "quick-xml 0.31.0",
- "rio_api",
 ]
 
 [[package]]
@@ -5355,15 +5356,6 @@ name = "quick-xml"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1004a344b30a54e2ee58d66a71b32d2db2feb0a31f9a2d302bf0536f15de2a33"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
 dependencies = [
  "memchr",
 ]
@@ -5931,24 +5923,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rio_api"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61d0c76ddf8b00cbb4d2c5932d067d49245c2f1f651809bde3cf265033ddb1af"
-
-[[package]]
-name = "rio_xml"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abd3384ae785ed3b0159607adc08adef580a28e277fbfa375c42d162e9da93b1"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "quick-xml 0.36.2",
- "rio_api",
 ]
 
 [[package]]

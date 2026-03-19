@@ -44,7 +44,7 @@
         grapher={features=[
             "webgl",
         ], git="https://github.com/WebVOWL/WasmGrapher"}
-        horned-owl={git="https://github.com/phillord/horned-owl", rev="c4f7835ecae70b5e7281dc23b9b7fc6daa497f1d"}
+        horned-owl={git="https://github.com/phillord/horned-owl", tag="v1.4.0"}
         leptos={version="0.8.16", features=["nightly", "multipart", "rkyv"]}
         log="0.4"
         rdf-fusion="0.1.0"

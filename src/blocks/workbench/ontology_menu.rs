@@ -53,17 +53,20 @@ pub fn SelectStaticInput() -> impl IntoView {
     };
 
     let ontologies = move || {
-        once(
-        selected_ontology.read().map_or_else(
-                    || view! { <option value="Select an ontology".to_string()>{"Select an ontology".to_string()}</option> }.into_any(),
-                    |_|
-                        ().into_any()
-                    )).chain(
-        StoredOntology::iter()
-            .map(|ontology| {
-                view! { <option value=ontology.to_string()>{ontology.to_string()}</option> }.into_any()
-            }))
-            .collect_view()
+        once(selected_ontology.read().map_or_else(
+            || {
+                view! {
+                    <option value="Select an ontology"
+                        .to_string()>{"Select an ontology".to_string()}</option>
+                }
+                .into_any()
+            },
+            |_| ().into_any(),
+        ))
+        .chain(StoredOntology::iter().map(|ontology| {
+            view! { <option value=ontology.to_string()>{ontology.to_string()}</option> }.into_any()
+        }))
+        .collect_view()
     };
 
     view! {
@@ -71,10 +74,12 @@ pub fn SelectStaticInput() -> impl IntoView {
             <label class="block mb-1">"Premade Ontology:"</label>
             <select
                 class="p-1 w-full text-sm bg-gray-200 rounded border-b-0"
-                prop:value=selected_ontology.read().map_or_else(
-                    || "Select an ontology".to_string(),
-                    |ontology| ontology.to_string(),
-                )
+                prop:value=selected_ontology
+                    .read()
+                    .map_or_else(
+                        || "Select an ontology".to_string(),
+                        |ontology| ontology.to_string(),
+                    )
                 on:change=update_selected_ontology
             >
                 {ontologies()}
@@ -105,6 +110,7 @@ pub fn UploadInput() -> impl IntoView {
 
     Effect::new(move || {
         if let Some(value) = local_loading_done.get() {
+            let current_file = file_name.get_untracked();
             match value {
                 Ok(_) => {
                     spawn_local_scoped_with_cancellation(async move {
@@ -120,6 +126,7 @@ pub fn UploadInput() -> impl IntoView {
 
     Effect::new(move || {
         if let Some(value) = remote_loading_done.get() {
+            let current_file = file_name.get_untracked();
             match value {
                 Ok(_) => {
                     spawn_local_scoped_with_cancellation(async move {

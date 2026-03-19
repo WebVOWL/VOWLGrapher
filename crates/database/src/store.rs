@@ -22,6 +22,7 @@ static GLOBAL_STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
 pub struct VOWLRStore {
     /// The store is the quad database and SPARQL engine.
     pub session: Store,
+    pub user_id: Option<String>,
     upload_handle: Option<tempfile::NamedTempFile>,
 }
 
@@ -30,7 +31,31 @@ impl VOWLRStore {
     pub fn new(session: Store) -> Self {
         Self {
             session,
+            user_id: None,
             upload_handle: None,
+        }
+    }
+
+    pub fn new_for_user(session: Store, user_id: String) -> Self {
+        Self {
+            session,
+            user_id: Some(user_id),
+            upload_handle: None,
+        }
+    }
+
+    pub fn get_graph_iri(&self, filename: &str) -> String {
+        let filename = filename
+            .replace(" ", "_")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("[", "")
+            .replace("]", "");
+
+        if let Some(ref uid) = self.user_id {
+            format!("urn:vowlr:user:{}:graph:{}", uid, filename)
+        } else {
+            format!("urn:vowlr:graph:{}", filename)
         }
     }
 
@@ -77,9 +102,13 @@ impl VOWLRStore {
     ///
     /// Files are automatically parsed.
     pub async fn insert_file(&self, fs: &Path, lenient: bool) -> Result<(), VOWLRStoreError> {
-        let parser = parser_from_path(fs, lenient)?;
-        info!("Loading input into database...");
+        let filename = fs.file_name().unwrap_or_default().to_string_lossy();
+        let graph_iri = self.get_graph_iri(&filename);
+
+        let parser = parser_from_path(fs, lenient, &graph_iri)?;
+        info!("Loading input into database for graph {}...", graph_iri);
         let start_time = Instant::now();
+
         self.session
             .load_from_reader(parser.parser, parser.input.as_slice())
             .await?;
@@ -146,17 +175,17 @@ impl VOWLRStore {
         }
     }
 
-    /// Finish uploading data to the file currently in use and load the file into the database.
-    ///
-    /// TODO: Ensure this can handle multiple users.
-    pub async fn complete_upload(&mut self) -> Result<(), VOWLRStoreError> {
+    pub async fn complete_upload(&mut self, filename: &str) -> Result<(), VOWLRStoreError> {
+        let graph_iri = self.get_graph_iri(filename);
         if let Some(file) = &mut self.upload_handle {
             std::io::Write::flush(file)?;
             let path = file.path();
-            let parser = parser_from_path(path, false)?;
 
-            info!("Loading input into database...");
+            let parser = parser_from_path(path, false, &graph_iri)?;
+
+            info!("Loading input into database for graph {}...", graph_iri);
             let start_time = Instant::now();
+
             self.session
                 .load_from_reader(parser.parser, parser.input.as_slice())
                 .await?;

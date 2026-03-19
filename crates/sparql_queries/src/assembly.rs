@@ -29,13 +29,15 @@ impl QueryAssembler {
             {}
             SELECT DISTINCT ?id ?nodeType ?target ?label
             WHERE {{
-                {}
-                BIND(
-                    IF(?nodeType = owl:Ontology, 0,
-                        IF(?nodeType = owl:Class, 1, 2)
+                GRAPH <{{GRAPH_IRI}}> {{
+                    {}
+                    BIND(
+                        IF(?nodeType = owl:Ontology, 0,
+                            IF(?nodeType = owl:Class, 1, 2)
+                        )
+                        AS ?weight
                     )
-                    AS ?weight
-                )
+                }}
             }}
             ORDER BY ?weight
         "#,

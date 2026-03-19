@@ -7,192 +7,194 @@
 
     SELECT ?id ?nodeType ?target ?label
     WHERE {
-        {
+        GRAPH <graph_uri> {
+            {
             # 1. Identify Named Classes
             ?id a owl:Class .
             FILTER(isIRI(?id))
             BIND(owl:Class AS ?nodeType)
-        }
-        UNION
-        {
-            ?id a owl:Class
-            FILTER(!isIRI(?id))
-            BIND("blanknode" AS ?nodeType)
-        }
-        UNION
-        {
-            # CLASS
-            ?id a rdfs:Class .
-            FILTER(?id != owl:Class)
-            BIND(rdfs:Class AS ?nodeType)
-        }
-        # UNION
-        # {
-        #     # LITERAL
-        #     ?id rdfs:label ?label.
-        #     FILTER(isLiteral(?label))
-        #     BIND(rdfs:Literal AS ?nodeType)
-        #     # OPTIONAL {?id rdfs:comment ?label}
-
-        # }
-        UNION {
-            # BRIDGE: Start at the Named Class, jump to the intermediate node
-            ?id ?connector ?intermediateNode .
-            FILTER(isIRI(?id))
-
-            # Match the logic property (unionOf, etc) on the intermediate node
-            ?intermediateNode ?nodeType ?blanknode .
-
-            # Flatten the list from the blanknode
-            ?blanknode rdf:rest*/rdf:first ?target .
-
-            # Filter for Logic Types
-            FILTER(?nodeType IN (owl:intersectionOf, owl:unionOf, owl:oneOf, owl:disjointUnionOf, owl:disjointWith))
-            FILTER(?target != rdf:nil)
-        }
-        # TODO
-        # UNION
-        # {
-        #     # 3. Identify datatypes
-        #     #SELECT ?dt ?nodeType (STR(?dt) AS ?label)
-        #     #WHERE{
-        #     VALUES ?dt{
-        #         rdf:HTML rdf:PlainLiteral rdf:XMLLiteral xsd:anySimpleType
-        #         xsd:anyURI xsd:base64Binary xsd:boolean xsd:byte xsd:date
-        #         xsd:dateTime xsd:decimal xsd:double xsd:duration xsd:ENTITY
-        #         xsd:float xsd:gDay xsd:gMonth xsd:gMonthDay xsd:gYear
-        #         xsd:gYearMonth xsd:hexBinary xsd:ID xsd:IDREF xsd:int xsd:integer
-        #         xsd:language xsd:long xsd:Name xsd:NCName xsd:negativeInteger
-        #         xsd:NMTOKEN xsd:nonNegativeInteger xsd:nonPositiveInteger
-        #         xsd:normalizedString xsd:NOTATION xsd:positiveInteger xsd:QName
-        #         xsd:short xsd:string xsd:time xsd:token xsd:unsignedByte
-        #         xsd:unsignedInt xsd:unsignedLong xsd:unsignedShort
-        #     }
-        #     BIND(rdfs:Datatype AS ?nodeType)
-        #     BIND(?dt AS ?labelIRI)
-        #     BIND(?dt AS ?label)
-
-        #     #}
-        # }
-        UNION
-        {
-            # RESOURCE
-            ?id a rdfs:Resource .
-            FILTER(isIRI(?id) || isBlank(?id))
-            BIND(rdfs:Resource AS ?nodeType)
-        }
-        #########
-        # EDGES #
-        #########
-        UNION
-        {
-            # 1. Identify RDF properties
-            ?id a rdf:Property .
-            FILTER NOT EXISTS {?id a owl:ObjectProperty}
-            FILTER NOT EXISTS {?id a owl:DatatypeProperty}
-            OPTIONAL {?id rdfs:range ?target}
-            BIND(rdf:Property AS ?nodeType)
-        }
-        UNION
-        {
-            # VALUES FROM
-            {
-                ?id owl:someValuesFrom ?target .
             }
             UNION
             {
-                ?id owl:allValuesFrom ?target .
+                ?id a owl:Class
+                FILTER(!isIRI(?id))
+                BIND("blanknode" AS ?nodeType)
             }
-            BIND("ValuesFrom" AS ?nodeType)
-        }
-        ###########
-        # General #
-        ###########
-        UNION
-        {
-            # EXTERNALS
-            # 1. Elements whose base URI differs from that of the visualized ontology.
-            #    p. 6 of https://www.semantic-web-journal.net/system/files/swj1114.pdf
-            # 2. A base URI is EITHER `xml:base` OR that of the document.
-            #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
-            ?id xml:base ?base .
-            BIND(xml:base AS ?nodeType)
-        }
-        UNION
-        {
-            # subject predicate object
-            VALUES ?p {
-                owl:deprecated
-                owl:inverseOf
-                owl:disjointWith
-                rdfs:subClassOf
-                owl:intersectionOf
-                owl:disjointUnionOf
-                owl:equivalentClass
-                owl:complementOf
-                owl:unionOf
-                owl:intersectionOf # Any node (usually blank) that is the subject of an intersectionOf list
+            UNION
+            {
+                # CLASS
+                ?id a rdfs:Class .
+                FILTER(?id != owl:Class)
+                BIND(rdfs:Class AS ?nodeType)
             }
-            ?id ?p  ?target .
-            BIND(?p AS ?nodeType)
-        }
-        UNION
-        {
-            # subject 'a' object OPTIONAL range
-            VALUES ?char {
-                # Characteristics
-                owl:TransitiveProperty
-                owl:FunctionalProperty
-                owl:InverseFunctionalProperty
-                owl:ReflexiveProperty
-                owl:IrreflexiveProperty
-                owl:SymmetricProperty
-                owl:AsymmetricProperty
-                owl:hasKey
-                # Other
-                owl:DeprecatedProperty
-                owl:DatatypeProperty
-                owl:ObjectProperty
-                # No range
-                owl:DeprecatedClass
-                owl:Thing
-                owl:Restriction
-            }
-            ?id a ?char .
-            OPTIONAL {?id rdfs:range ?target}
-            BIND(?char as ?nodeType)
-        }
-        .
-        {
-                # Find labels for elements in the following order:
-                # SPARQL
-                # 1. Use rdfs:label, if exists.
-                #    https://www.w3.org/TR/rdf-schema/#ch_label
-                # 2. Use rdf:resource, if exists.
-                #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-empty-property-elements
-                # 3. Use rdf:ID, if exists.
-                #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
-                # SERIALIZER
-                # 4. Use fragment identifier of element IRI, if exists.
-                #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-node-property-elements
-                # 5. If fragment not found but IRI exists, use string after final slash ('/').
-                #    TODO: Insert link to docs about using prefix notation.
-                # 6. Create a fallback label from the ElementType.
+            # UNION
+            # {
+            #     # LITERAL
+            #     ?id rdfs:label ?label.
+            #     FILTER(isLiteral(?label))
+            #     BIND(rdfs:Literal AS ?nodeType)
+            #     # OPTIONAL {?id rdfs:comment ?label}
 
-                # TODO: Do not fetch label from owl:Ontology
-                # ?id rdfs:label ?label .
-                # ?id rdf:resource ?label .
-                # ?id rdf:ID ?label .
-                # FILTER NOT EXISTS { ?id owl:Ontology ?val }
-                VALUES ?l {
-                    rdfs:label
-                    rdf:resource
-                    rdf:ID
-                }
-                OPTIONAL {?id ?l ?label}
+            # }
+            UNION {
+                # BRIDGE: Start at the Named Class, jump to the intermediate node
+                ?id ?connector ?intermediateNode .
+                FILTER(isIRI(?id))
+
+                # Match the logic property (unionOf, etc) on the intermediate node
+                ?intermediateNode ?nodeType ?blanknode .
+
+                # Flatten the list from the blanknode
+                ?blanknode rdf:rest*/rdf:first ?target .
+
+                # Filter for Logic Types
+                FILTER(?nodeType IN (owl:intersectionOf, owl:unionOf, owl:oneOf, owl:disjointUnionOf, owl:disjointWith))
+                FILTER(?target != rdf:nil)
             }
-        BIND(
-            IF(?nodeType = owl:Class, 1, 2)
-            AS ?weight)
+            # TODO
+            # UNION
+            # {
+            #     # 3. Identify datatypes
+            #     #SELECT ?dt ?nodeType (STR(?dt) AS ?label)
+            #     #WHERE{
+            #     VALUES ?dt{
+            #         rdf:HTML rdf:PlainLiteral rdf:XMLLiteral xsd:anySimpleType
+            #         xsd:anyURI xsd:base64Binary xsd:boolean xsd:byte xsd:date
+            #         xsd:dateTime xsd:decimal xsd:double xsd:duration xsd:ENTITY
+            #         xsd:float xsd:gDay xsd:gMonth xsd:gMonthDay xsd:gYear
+            #         xsd:gYearMonth xsd:hexBinary xsd:ID xsd:IDREF xsd:int xsd:integer
+            #         xsd:language xsd:long xsd:Name xsd:NCName xsd:negativeInteger
+            #         xsd:NMTOKEN xsd:nonNegativeInteger xsd:nonPositiveInteger
+            #         xsd:normalizedString xsd:NOTATION xsd:positiveInteger xsd:QName
+            #         xsd:short xsd:string xsd:time xsd:token xsd:unsignedByte
+            #         xsd:unsignedInt xsd:unsignedLong xsd:unsignedShort
+            #     }
+            #     BIND(rdfs:Datatype AS ?nodeType)
+            #     BIND(?dt AS ?labelIRI)
+            #     BIND(?dt AS ?label)
+
+            #     #}
+            # }
+            UNION
+            {
+                # RESOURCE
+                ?id a rdfs:Resource .
+                FILTER(isIRI(?id) || isBlank(?id))
+                BIND(rdfs:Resource AS ?nodeType)
+            }
+            #########
+            # EDGES #
+            #########
+            UNION
+            {
+                # 1. Identify RDF properties
+                ?id a rdf:Property .
+                FILTER NOT EXISTS {?id a owl:ObjectProperty}
+                FILTER NOT EXISTS {?id a owl:DatatypeProperty}
+                OPTIONAL {?id rdfs:range ?target}
+                BIND(rdf:Property AS ?nodeType)
+            }
+            UNION
+            {
+                # VALUES FROM
+                {
+                    ?id owl:someValuesFrom ?target .
+                }
+                UNION
+                {
+                    ?id owl:allValuesFrom ?target .
+                }
+                BIND("ValuesFrom" AS ?nodeType)
+            }
+            ###########
+            # General #
+            ###########
+            UNION
+            {
+                # EXTERNALS
+                # 1. Elements whose base URI differs from that of the visualized ontology.
+                #    p. 6 of https://www.semantic-web-journal.net/system/files/swj1114.pdf
+                # 2. A base URI is EITHER `xml:base` OR that of the document.
+                #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
+                ?id xml:base ?base .
+                BIND(xml:base AS ?nodeType)
+            }
+            UNION
+            {
+                # subject predicate object
+                VALUES ?p {
+                    owl:deprecated
+                    owl:inverseOf
+                    owl:disjointWith
+                    rdfs:subClassOf
+                    owl:intersectionOf
+                    owl:disjointUnionOf
+                    owl:equivalentClass
+                    owl:complementOf
+                    owl:unionOf
+                    owl:intersectionOf # Any node (usually blank) that is the subject of an intersectionOf list
+                }
+                ?id ?p  ?target .
+                BIND(?p AS ?nodeType)
+            }
+            UNION
+            {
+                # subject 'a' object OPTIONAL range
+                VALUES ?char {
+                    # Characteristics
+                    owl:TransitiveProperty
+                    owl:FunctionalProperty
+                    owl:InverseFunctionalProperty
+                    owl:ReflexiveProperty
+                    owl:IrreflexiveProperty
+                    owl:SymmetricProperty
+                    owl:AsymmetricProperty
+                    owl:hasKey
+                    # Other
+                    owl:DeprecatedProperty
+                    owl:DatatypeProperty
+                    owl:ObjectProperty
+                    # No range
+                    owl:DeprecatedClass
+                    owl:Thing
+                    owl:Restriction
+                }
+                ?id a ?char .
+                OPTIONAL {?id rdfs:range ?target}
+                BIND(?char as ?nodeType)
+            }
+            .
+            {
+                    # Find labels for elements in the following order:
+                    # SPARQL
+                    # 1. Use rdfs:label, if exists.
+                    #    https://www.w3.org/TR/rdf-schema/#ch_label
+                    # 2. Use rdf:resource, if exists.
+                    #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-empty-property-elements
+                    # 3. Use rdf:ID, if exists.
+                    #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
+                    # SERIALIZER
+                    # 4. Use fragment identifier of element IRI, if exists.
+                    #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-node-property-elements
+                    # 5. If fragment not found but IRI exists, use string after final slash ('/').
+                    #    TODO: Insert link to docs about using prefix notation.
+                    # 6. Create a fallback label from the ElementType.
+
+                    # TODO: Do not fetch label from owl:Ontology
+                    # ?id rdfs:label ?label .
+                    # ?id rdf:resource ?label .
+                    # ?id rdf:ID ?label .
+                    # FILTER NOT EXISTS { ?id owl:Ontology ?val }
+                    VALUES ?l {
+                        rdfs:label
+                        rdf:resource
+                        rdf:ID
+                    }
+                    OPTIONAL {?id ?l ?label}
+                }
+            BIND(
+                IF(?nodeType = owl:Class, 1, 2)
+                AS ?weight)
+        }
     }
     ORDER BY ?weight

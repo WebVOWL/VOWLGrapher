@@ -22,6 +22,28 @@ use crate::errors::ClientErrorKind;
 const MAX_FILE_SIZE_BYTES: usize = 50 * 1024 * 1024;
 
 #[cfg(feature = "ssr")]
+pub async fn manage_user_id() -> Result<String, ServerFnError> {
+    use actix_session::Session;
+    use leptos_actix::extract;
+    use uuid::Uuid;
+    let user_session = extract::<Session>()
+        .await
+        .map_err(|e| ServerFnError::new(format!("Failed to extract session: {}", e)))?;
+
+    if let Ok(Some(user_id)) = user_session.get::<String>("user_id") {
+        return Ok(user_id);
+    }
+
+    let new_user_id = Uuid::new_v4().to_string();
+
+    user_session
+        .insert("user_id", &new_user_id)
+        .map_err(|e| ServerFnError::new(format!("Failed to save session: {}", e)))?;
+
+    Ok(new_user_id)
+}
+
+#[cfg(feature = "ssr")]
 mod progress {
     use async_broadcast::{Receiver, Sender, broadcast};
     use dashmap::DashMap;
@@ -89,7 +111,11 @@ pub async fn ontology_progress(filename: String) -> Result<TextStream, ServerFnE
     input = MultipartFormData,
 )]
 pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWLRError> {
+    let user_id = manage_user_id().await?;
+    info!("User {} is uploading a local file", user_id);
+
     let mut session = VOWLRStore::default();
+    session.user_id = Some(user_id);
 
     let mut data = data
         .into_inner()
@@ -130,15 +156,18 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWL
         if !name.is_empty() {
             progress::remove(&name);
         }
+        session.complete_upload(&name).await?;
     }
 
-    session.complete_upload().await?;
     Ok((dtype, count))
 }
 
 /// Remote reads url and calls for the datatype label and returns (label, data content)
 #[server]
 pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError> {
+    let user_id = manage_user_id().await?;
+    info!("User {} is uploading a remote file", user_id);
+
     debug!("Sending request to remote: '{url}'");
     let client = Client::new();
     let resp = match client.get(&url).send().await {
@@ -160,6 +189,8 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError>
     }
 
     let mut session = VOWLRStore::default();
+    session.user_id = Some(user_id);
+
     let progress_key = url.clone();
     progress::reset(&progress_key);
     session.start_upload(&url).await?;
@@ -178,7 +209,7 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError>
     }
 
     progress::remove(&progress_key);
-    session.complete_upload().await?;
+    session.complete_upload(&url).await?;
     Ok((dtype, total))
 }
 
@@ -189,8 +220,13 @@ pub async fn handle_sparql(
     query: String,
     format: Option<String>,
 ) -> Result<(DataType, usize), VOWLRError> {
+    let user_id = manage_user_id().await?;
+    info!("User {} is quering SPARQL", user_id);
+
     let client = Client::new();
+
     let mut session = VOWLRStore::default();
+    session.user_id = Some(user_id);
 
     let accept_type = match format.as_deref() {
         Some("xml") => DataType::SPARQLXML.mime_type(),
@@ -224,7 +260,7 @@ pub async fn handle_sparql(
     }
 
     progress::remove(&progress_key);
-    session.complete_upload().await?;
+    session.complete_upload(&progress_key).await?;
 
     let dtype = if accept_type.contains("xml") {
         DataType::SPARQLXML

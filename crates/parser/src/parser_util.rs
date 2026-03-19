@@ -11,7 +11,7 @@ use log::info;
 use rdf_fusion::{
     execution::results::QuadStream,
     io::{JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer},
-    model::GraphName,
+    model::{GraphName, NamedNodeRef},
 };
 use std::io;
 use std::io::BufRead;
@@ -193,10 +193,14 @@ pub async fn parse_stream_to(
     clippy::result_large_err,
     reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
 )]
-pub fn parser_from_path(path: &Path, lenient: bool) -> Result<PreparedParser, VOWLRStoreError> {
+pub fn parser_from_path(
+    path: &Path,
+    lenient: bool,
+    graph_iri: &str,
+) -> Result<PreparedParser, VOWLRStoreError> {
     let reader = std::fs::File::open(path)?;
     let reader = BufReader::new(reader);
-    parser_from_reader(reader, path, lenient)
+    parser_from_reader(reader, path, lenient, graph_iri)
 }
 
 /// Returns the parser compatible with the reader, reading from the path.
@@ -208,10 +212,12 @@ pub fn parser_from_reader(
     mut reader: impl BufRead,
     path: &Path,
     lenient: bool,
+    graph_iri: &str,
 ) -> Result<PreparedParser, VOWLRStoreError> {
     let make_parser = |fmt| {
         // TODO: Handle non default graph
-        let parser = RdfParser::from_format(fmt).with_default_graph(GraphName::DefaultGraph);
+        let graph_node = NamedNodeRef::new(graph_iri).expect("Failed to parse graph IRI in parser");
+        let parser = RdfParser::from_format(fmt).with_default_graph(graph_node);
         //.with_default_graph(NamedNode::new(format!("file:://{}", path_str)).unwrap());
         if lenient { parser.lenient() } else { parser }
     };
@@ -422,7 +428,8 @@ mod test {
                 warn!("skipping {:?}", resource.as_ref());
                 continue;
             }
-            let parser = parser_from_path(resource.as_ref(), false).unwrap();
+            let parser =
+                parser_from_path(resource.as_ref(), false, "urn:vowlr:test_graph").unwrap();
             let _ = session
                 .load_from_reader(parser.parser, parser.input.as_slice())
                 .await;

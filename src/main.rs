@@ -1,6 +1,8 @@
 #![allow(non_snake_case)]
 
 use actix_files::Files;
+use actix_session::{SessionMiddleware, storage::CookieSessionStore};
+use actix_web::cookie::Key;
 use actix_web::{App, HttpServer, middleware, web};
 use env_logger::Env;
 use leptos::prelude::*;
@@ -23,6 +25,8 @@ async fn main() -> std::io::Result<()> {
     #[expect(clippy::expect_used)]
     let conf = get_configuration(None).expect("could not load config");
     let addr = conf.leptos_options.site_addr;
+
+    let secret_key = Key::generate();
 
     HttpServer::new(move || {
         // Generate the list of routes in your Leptos App
@@ -66,6 +70,10 @@ async fn main() -> std::io::Result<()> {
             })
             .service(Files::new("/", site_root.as_ref()))
             .wrap(middleware::Compress::default())
+            .wrap(SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+                .cookie_secure(false)
+                .build()
+            )
             .wrap(
                 middleware::DefaultHeaders::new()
                     .add(("Cross-Origin-Opener-Policy", "same-origin"))

@@ -899,6 +899,8 @@ impl GraphDisplayDataSolutionSerializer {
             },
         ];
 
+        let canonical_edge = inverse_edges[0].clone();
+
         for edge in inverse_edges {
             data_buffer.edge_buffer.insert(edge.clone());
             self.insert_edge_include(data_buffer, &edge.subject, edge.clone());
@@ -913,6 +915,11 @@ impl GraphDisplayDataSolutionSerializer {
                     .insert(edge, merged_characteristics.clone());
             }
         }
+
+        data_buffer
+            .property_edge_map
+            .insert(left_property.clone(), canonical_edge);
+        data_buffer.property_edge_map.remove(&right_property);
 
         SerializationStatus::Serialized
     }

@@ -642,20 +642,6 @@ impl GraphDisplayDataSolutionSerializer {
         }
     }
 
-    fn property_display_label(
-        &self,
-        data_buffer: &SerializationDataBuffer,
-        property_iri: &Term,
-        edge: &Edge,
-    ) -> String {
-        data_buffer
-            .label_buffer
-            .get(property_iri)
-            .cloned()
-            .or_else(|| data_buffer.edge_label_buffer.get(edge).cloned())
-            .unwrap_or_else(|| edge.element_type.to_string())
-    }
-
     #[expect(
         clippy::result_large_err,
         reason = "fixed when serializer is refactored to use pointers instead of values"

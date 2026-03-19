@@ -209,12 +209,12 @@ pub struct SerializationDataBuffer {
     ///
     /// - Key = The IRI the label belongs to.
     /// - Value = The label.
-    label_buffer: HashMap<Term, String>,
+    label_buffer: HashMap<Term, Option<String>>,
     /// Stores labels of edges.
     ///
     /// - Key = The edge.
     /// - Value = The label.
-    edge_label_buffer: HashMap<Edge, String>,
+    edge_label_buffer: HashMap<Edge, Option<String>>,
     /// Edges in graph, to avoid duplicates
     edge_buffer: HashSet<Edge>,
     /// Maps from edge to its characteristic.
@@ -287,10 +287,12 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
         let mut iricache: HashMap<Term, usize> = HashMap::new();
         for (iri, element) in val.node_element_buffer.into_iter() {
             let label = val.label_buffer.remove(&iri);
+
+            // Do not print error if the label is explicity set to None in the buffer
             if label.is_none() {
                 error!("Label not found for iri: {}, using None", iri);
             }
-            display_data.labels.push(label);
+            display_data.labels.push(label.flatten());
             display_data.elements.push(element);
             iricache.insert(iri, display_data.elements.len() - 1);
         }
@@ -304,7 +306,7 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
             match (subject_idx, object_idx, maybe_label) {
                 (Some(subject_idx), Some(object_idx), Some(label)) => {
                     display_data.elements.push(edge.element_type);
-                    display_data.labels.push(Some(label));
+                    display_data.labels.push(label);
                     display_data.edges.push([
                         *subject_idx,
                         display_data.elements.len() - 1,
@@ -381,7 +383,7 @@ impl Display for SerializationDataBuffer {
         }
         writeln!(f, "\tlabel_buffer:")?;
         for (iri, label) in self.label_buffer.iter() {
-            writeln!(f, "\t\t{} : {}", iri, label)?;
+            writeln!(f, "\t\t{} : {:?}", iri, label)?;
         }
         writeln!(f, "\tedge_buffer:")?;
         for edge in self.edge_buffer.iter() {

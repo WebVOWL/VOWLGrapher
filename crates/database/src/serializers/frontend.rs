@@ -151,7 +151,7 @@ impl GraphDisplayDataSolutionSerializer {
                 if label.to_string() != "" {
                     data_buffer
                         .label_buffer
-                        .insert(id_term.clone(), label.to_string());
+                        .insert(id_term.clone(), Some(label.to_string()));
                 } else {
                     debug!("Empty label detected for iri '{}'", id_term);
                 }
@@ -165,7 +165,7 @@ impl GraphDisplayDataSolutionSerializer {
                         Some(frag) => {
                             data_buffer
                                 .label_buffer
-                                .insert(id_term.clone(), frag.to_string());
+                                .insert(id_term.clone(), Some(frag.to_string()));
                         }
                         // Case 2.2: Look for path in iri
                         None => {
@@ -174,7 +174,7 @@ impl GraphDisplayDataSolutionSerializer {
                                 Some(path) => {
                                     data_buffer
                                         .label_buffer
-                                        .insert(id_term.clone(), path.1.to_string());
+                                        .insert(id_term.clone(), Some(path.1.to_string()));
                                 }
                                 None => {
                                     debug!("No path found in iri '{iri}'");
@@ -393,9 +393,7 @@ impl GraphDisplayDataSolutionSerializer {
                 self.insert_edge_include(data_buffer, &sub_iri, edge.clone());
                 self.insert_edge_include(data_buffer, &obj_iri, edge.clone());
 
-                data_buffer
-                    .edge_label_buffer
-                    .insert(edge.clone(), label.unwrap_or(new_type.to_string()));
+                data_buffer.edge_label_buffer.insert(edge.clone(), label);
                 return Some(edge);
             }
             (None, Some(_)) => {
@@ -593,7 +591,7 @@ impl GraphDisplayDataSolutionSerializer {
             .get(property_iri)
             .cloned()
             .or_else(|| data_buffer.edge_label_buffer.remove(&old_edge))
-            .unwrap_or_else(|| new_element.to_string());
+            .unwrap_or(None);
         data_buffer
             .edge_label_buffer
             .insert(new_edge.clone(), label);
@@ -634,12 +632,12 @@ impl GraphDisplayDataSolutionSerializer {
             "Extending element '{}' with label '{}'",
             element, label_to_append
         );
-        if let Some(label) = data_buffer.label_buffer.get_mut(element) {
+        if let Some(Some(label)) = data_buffer.label_buffer.get_mut(element) {
             label.push_str(format!("\n{}", label_to_append).as_str());
         } else {
             data_buffer
                 .label_buffer
-                .insert(element.clone(), label_to_append.clone());
+                .insert(element.clone(), Some(label_to_append.clone()));
         }
     }
 
@@ -1104,7 +1102,9 @@ impl GraphDisplayDataSolutionSerializer {
                                         ElementType::Owl(OwlType::Node(OwlNode::EquivalentClass)),
                                     );
                                     // AnonymousClass does not have label!
-                                    if let Some(label) = data_buffer.label_buffer.get(&index_o) {
+                                    if let Some(Some(label)) =
+                                        data_buffer.label_buffer.get(&index_o)
+                                    {
                                         self.extend_element_label(
                                             data_buffer,
                                             &index_s,
@@ -1594,7 +1594,8 @@ impl GraphDisplayDataSolutionSerializer {
                                             data_buffer
                                                 .label_buffer
                                                 .get(&edge_triple.element_type)
-                                                .cloned(),
+                                                .cloned()
+                                                .flatten(),
                                         );
                                         if let Some(edge) = edge {
                                             // Clone the property IRI before it gets consumed below

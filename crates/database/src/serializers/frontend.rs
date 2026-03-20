@@ -1370,21 +1370,18 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // owl::DIFFERENT_FROM => {}
                     owl::DISJOINT_UNION_OF => {
-                        let edge =
-                            self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None);
-                        if triple.target.is_some()
-                            && let Some(index) = self.resolve(data_buffer, triple.id.clone())
-                        {
-                            self.upgrade_node_type(
-                                data_buffer,
-                                &index,
-                                ElementType::Owl(OwlType::Node(OwlNode::DisjointUnion)),
-                            );
-                        }
-                        if edge.is_some() {
-                            return Ok(SerializationStatus::Serialized);
-                        } else {
-                            return Ok(SerializationStatus::Deferred);
+                        match self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None) {
+                            Some(edge) => {
+                                self.upgrade_node_type(
+                                    data_buffer,
+                                    &edge.subject,
+                                    ElementType::Owl(OwlType::Node(OwlNode::DisjointUnion)),
+                                );
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
                     owl::DISJOINT_WITH => {
@@ -1481,15 +1478,18 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::IMPORTS => {}
                     // owl::INCOMPATIBLE_WITH => {}
                     owl::INTERSECTION_OF => {
-                        let edge =
-                            self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None);
-                        if let Some(edge) = edge {
-                            self.upgrade_node_type(
-                                data_buffer,
-                                &edge.subject,
-                                ElementType::Owl(OwlType::Node(OwlNode::IntersectionOf)),
-                            );
-                            return Ok(SerializationStatus::Serialized);
+                        match self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None) {
+                            Some(edge) => {
+                                self.upgrade_node_type(
+                                    data_buffer,
+                                    &edge.subject,
+                                    ElementType::Owl(OwlType::Node(OwlNode::IntersectionOf)),
+                                );
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                            None => {
+                                return Ok(SerializationStatus::Deferred);
+                            }
                         }
                     }
                     owl::INVERSE_FUNCTIONAL_PROPERTY => {

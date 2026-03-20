@@ -7,8 +7,30 @@ impl SparqlSnippet for OwlNode {
         match self {
             Self::AnonymousClass => {
                 r#"{
-                ?id a owl:Class
-                FILTER(!isIRI(?id))
+                {
+                    ?id a owl:Class .
+                    FILTER(!isIRI(?id))
+                }
+                UNION
+                {
+                    ?id a owl:Restriction .
+                    FILTER(!isIRI(?id))
+                }
+
+                FILTER NOT EXISTS {
+                    ?named rdfs:subClassOf ?id .
+                    FILTER(isIRI(?named))
+                    {
+                        { ?id owl:unionOf ?u }
+                        UNION
+                        { ?id owl:intersectionOf ?i }
+                        UNION
+                        { ?id owl:complementOf ?c }
+                        UNION
+                        { ?id owl:disjointUnionOf ?d }
+                    }
+                }
+
                 BIND("blanknode" AS ?nodeType)
                 }"#
             }
@@ -21,7 +43,22 @@ impl SparqlSnippet for OwlNode {
             }
             Self::Complement => {
                 r#"{
-                ?id owl:complementOf ?target .
+                {
+                    ?id owl:complementOf ?target .
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:complementOf ?target .
+                    BIND(?named AS ?id)
+                }
                 BIND(owl:complementOf AS ?nodeType)
                 }"#
             }
@@ -44,13 +81,47 @@ impl SparqlSnippet for OwlNode {
             }
             Self::DisjointUnion => {
                 r#"{
-                ?id owl:disjointUnionOf/rdf:rest*/rdf:first ?target .
+                {
+                    ?id owl:disjointUnionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:disjointUnionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    BIND(?named AS ?id)
+                }
                 BIND(owl:disjointUnionOf AS ?nodeType)
                 }"#
             }
             Self::IntersectionOf => {
                 r#"{
-                ?id owl:intersectionOf/rdf:rest*/rdf:first ?target .
+                {
+                    ?id owl:intersectionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:intersectionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    BIND(?named AS ?id)
+                }
                 BIND(owl:intersectionOf AS ?nodeType)
                 }"#
             }
@@ -62,8 +133,24 @@ impl SparqlSnippet for OwlNode {
             }
             Self::UnionOf => {
                 r#"{
-                ?id owl:unionOf/rdf:rest*/rdf:first ?target .
-                FILTER(?target != rdf:nil)
+                {
+                    ?id owl:unionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:unionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    BIND(?named AS ?id)
+                }
                 BIND(owl:unionOf AS ?nodeType)
                 }"#
             }

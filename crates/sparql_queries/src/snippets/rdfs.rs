@@ -41,7 +41,11 @@ impl SparqlSnippet for RdfsEdge {
         match self {
             Self::SubclassOf => {
                 r#"{
-                ?id rdfs:subClassOf ?target
+                ?id rdfs:subClassOf ?target .
+                FILTER NOT EXISTS { ?target owl:unionOf ?u }
+                FILTER NOT EXISTS { ?target owl:intersectionOf ?i }
+                FILTER NOT EXISTS { ?target owl:complementOf ?c }
+                FILTER NOT EXISTS { ?target owl:disjointUnionOf ?d }
                 BIND(rdfs:subClassOf AS ?nodeType)
                 }"#
             }

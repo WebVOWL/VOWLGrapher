@@ -21,6 +21,7 @@ use rdf_fusion::{
     execution::results::QuerySolutionStream,
     model::{BlankNode, NamedNode, Term},
 };
+use unescape_zero_copy::unescape_default;
 use vowlr_parser::errors::VOWLRStoreError;
 use vowlr_util::prelude::VOWLRError;
 
@@ -56,11 +57,12 @@ impl GraphDisplayDataSolutionSerializer {
             let Some(id_term) = solution.get("id") else {
                 continue;
             };
+
+            self.extract_label(&mut data_buffer, solution.get("label"), id_term);
+
             let Some(node_type_term) = solution.get("nodeType") else {
                 continue;
             };
-
-            self.extract_label(&mut data_buffer, solution.get("label"), id_term);
 
             let triple: Triple = Triple {
                 id: id_term.to_owned(),
@@ -117,7 +119,7 @@ impl GraphDisplayDataSolutionSerializer {
             let total = data_buffer.failed_buffer.len();
             let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
             error!("Failed to serialize {} triples:\n{}", total, err);
-            return Err(err);
+            // return Err(err);
         }
         *data = data_buffer.into();
         debug!("{}", data);
@@ -139,11 +141,31 @@ impl GraphDisplayDataSolutionSerializer {
 
         match label {
             // Case 1: Label is a rdfs:label OR rdfs:Resource OR rdf:ID
-            Some(label) => {
-                if label.to_string() != "" {
+            Some(label_term) => {
+                let str_label = label_term.to_string();
+
+                // Handle cases where label is: "Some Label"@en or contains "
+                let split_label = str_label.split_inclusive("\"").collect::<Vec<_>>();
+                let clean_label = if split_label.len() > 2 {
+                    let joined_label = split_label[0..split_label.len() - 1].join("");
+                    let stripped_label = joined_label
+                        .strip_prefix("\"")
+                        .and_then(|sub_str| sub_str.strip_suffix("\""))
+                        .unwrap_or_else(|| &joined_label);
+
+                    // Unescape string sequences like "\"" into """
+                    unescape_default(stripped_label)
+                        .unwrap_or_default()
+                        .to_string()
+                } else {
+                    str_label
+                };
+
+                if !clean_label.is_empty() {
+                    trace!("Inserting label '{clean_label}' for iri '{}'", id_term);
                     data_buffer
                         .label_buffer
-                        .insert(id_term.clone(), label.to_string());
+                        .insert(id_term.clone(), clean_label);
                 } else {
                     debug!("Empty label detected for iri '{}'", id_term);
                 }
@@ -155,6 +177,7 @@ impl GraphDisplayDataSolutionSerializer {
                     // Case 2.1: Look for fragments in the iri
                     Ok(id_iri) => match id_iri.fragment() {
                         Some(frag) => {
+                            trace!("Inserting fragment '{frag}' as label for iri '{}'", id_term);
                             data_buffer
                                 .label_buffer
                                 .insert(id_term.clone(), frag.to_string());
@@ -164,6 +187,10 @@ impl GraphDisplayDataSolutionSerializer {
                             debug!("No fragment found in iri '{iri}'");
                             match id_iri.path().rsplit_once('/') {
                                 Some(path) => {
+                                    trace!(
+                                        "Inserting path '{}' as label for iri '{}'",
+                                        path.1, id_term
+                                    );
                                     data_buffer
                                         .label_buffer
                                         .insert(id_term.clone(), path.1.to_string());

@@ -27,6 +27,7 @@
     tempfile="3.10"
     test-generator="^0.3"
     tokio={workspace=true}
+    unescape_zero_copy="2.3.1"
     vowlr-parser={path="../parser"}
     vowlr-sparql-queries={path="../sparql_queries"}
     vowlr-util={path="../util"}

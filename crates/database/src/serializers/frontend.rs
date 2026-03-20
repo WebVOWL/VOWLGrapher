@@ -357,7 +357,13 @@ impl GraphDisplayDataSolutionSerializer {
             return Ok(());
         }
 
-        self.add_to_element_buffer(&mut data_buffer.node_element_buffer, triple, node_type);
+        let new_type = if self.is_external(data_buffer, &triple.id) {
+            ElementType::Owl(OwlType::Node(OwlNode::ExternalClass))
+        } else {
+            node_type
+        };
+
+        self.add_to_element_buffer(&mut data_buffer.node_element_buffer, triple, new_type);
         self.check_unknown_buffer(data_buffer, &triple.id)?;
         Ok(())
     }

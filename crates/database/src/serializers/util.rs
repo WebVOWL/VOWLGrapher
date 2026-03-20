@@ -94,7 +94,7 @@ pub fn is_reserved(term: &Term) -> bool {
 /// Returns Some(ElementType) if the `term` is a resolvable, reserved IRI.
 ///
 /// ## Implementation details
-/// This function must contain exactly same NamedNodeRefs as [`is_reserved`].
+/// This function must contain exactly the same NamedNodeRefs as [`is_reserved`].
 pub fn try_resolve_reserved(term: &Term) -> Option<ElementType> {
     match term.as_ref() {
         TermRef::NamedNode(named_node_ref) => match named_node_ref {

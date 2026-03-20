@@ -1,6 +1,6 @@
 use grapher::prelude::{
     ElementType, GenericEdge, GenericNode, GenericType, OwlEdge, OwlNode, OwlType, RdfEdge,
-    RdfType, RdfsEdge, RdfsNode, RdfsType,
+    RdfNode, RdfType, RdfsEdge, RdfsNode, RdfsType, XSDNode, XSDType,
 };
 
 pub trait ElementLegend {
@@ -12,6 +12,7 @@ impl ElementLegend for ElementType {
     fn legend(self) -> Option<String> {
         match self {
             Self::NoDraw => None,
+            Self::Rdf(RdfType::Node(node)) => node.legend(),
             Self::Rdf(RdfType::Edge(edge)) => edge.legend(),
             Self::Rdfs(RdfsType::Node(node)) => node.legend(),
             Self::Rdfs(RdfsType::Edge(edge)) => edge.legend(),
@@ -19,6 +20,7 @@ impl ElementLegend for ElementType {
             Self::Owl(OwlType::Edge(edge)) => edge.legend(),
             Self::Generic(GenericType::Node(node)) => node.legend(),
             Self::Generic(GenericType::Edge(edge)) => edge.legend(),
+            Self::Xsd(XSDType::Node(node)) => node.legend(),
         }
     }
 }
@@ -58,6 +60,14 @@ impl ElementLegend for RdfsEdge {
     }
 }
 
+impl ElementLegend for RdfNode {
+    fn legend(self) -> Option<String> {
+        match self {
+            Self::HTML | Self::PlainLiteral | Self::XMLLiteral => None,
+        }
+    }
+}
+
 impl ElementLegend for RdfEdge {
     fn legend(self) -> Option<String> {
         match self {
@@ -79,6 +89,7 @@ impl ElementLegend for OwlNode {
             Self::IntersectionOf => Some("/node_legends/Intersection.png".to_string()),
             Self::Thing => Some("/node_legends/Thing.png".to_string()),
             Self::UnionOf => Some("/node_legends/Union.png".to_string()),
+            Self::Real | Self::Rational => None,
         }
     }
 }
@@ -91,6 +102,14 @@ impl ElementLegend for OwlEdge {
             Self::DeprecatedProperty => Some("/node_legends/DeprecatedProperty.png".to_string()),
             Self::ExternalProperty => Some("/node_legends/ExternalProperty.png".to_string()),
             Self::InverseOf | Self::ObjectProperty | Self::ValuesFrom => None,
+        }
+    }
+}
+
+impl ElementLegend for XSDNode {
+    fn legend(self) -> Option<String> {
+        match self {
+            _ => None,
         }
     }
 }

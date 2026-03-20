@@ -7,7 +7,7 @@ use std::{
 use super::{Edge, SerializationDataBuffer, Triple};
 use crate::{
     errors::{SerializationError, SerializationErrorKind},
-    serializers::util::{get_reserved_iris, trim_tag_circumfix},
+    serializers::util::{is_reserved, trim_tag_circumfix, try_resolve_reserved},
     vocab::{owl, rdf, rdfs, xsd},
 };
 use fluent_uri::Iri;
@@ -24,10 +24,7 @@ use rdf_fusion::{
 use vowlr_parser::errors::VOWLRStoreError;
 use vowlr_util::prelude::VOWLRError;
 
-pub struct GraphDisplayDataSolutionSerializer {
-    pub resolvable_iris: HashSet<String>,
-}
-
+pub struct GraphDisplayDataSolutionSerializer;
 pub enum SerializationStatus {
     Serialized,
     Deferred,
@@ -35,9 +32,7 @@ pub enum SerializationStatus {
 
 impl GraphDisplayDataSolutionSerializer {
     pub fn new() -> Self {
-        Self {
-            resolvable_iris: get_reserved_iris(),
-        }
+        Self {}
     }
 
     pub async fn serialize_nodes_stream(
@@ -420,7 +415,7 @@ impl GraphDisplayDataSolutionSerializer {
         }
         let clean_iri = trim_tag_circumfix(&iri.to_string());
         match &data_buffer.document_base {
-            Some(base) => !clean_iri.contains(base) && !self.resolvable_iris.contains(&clean_iri),
+            Some(base) => !clean_iri.contains(base) && !is_reserved(iri),
             None => {
                 warn!("Cannot determine externals: Missing document base!");
                 false
@@ -997,6 +992,15 @@ impl GraphDisplayDataSolutionSerializer {
                         &external_triple,
                         ElementType::Owl(OwlType::Node(OwlNode::ExternalClass)),
                     )?;
+                } else if let Some(element_type) = try_resolve_reserved(&term) {
+                    // Dummy triple, only subject matters.
+                    let reserved_triple = Triple::new(
+                        term,
+                        Term::BlankNode(self.create_blank_node("_:reserved_class".to_string())?),
+                        None,
+                    );
+
+                    self.insert_node(data_buffer, &reserved_triple, element_type)?;
                 }
 
                 for triple in triples {

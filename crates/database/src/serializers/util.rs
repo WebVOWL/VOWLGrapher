@@ -1,8 +1,6 @@
-use std::collections::HashSet;
-
-use crate::vocab::owl;
-use grapher::prelude::{ElementType, OwlEdge, OwlType, RdfEdge, RdfType};
-use rdf_fusion::model::vocab::{rdf, rdfs};
+use crate::vocab::{owl, rdf, rdfs, xsd};
+use grapher::prelude::{ElementType, OwlEdge, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType};
+use oxrdf::{Term, TermRef};
 
 pub const SYMMETRIC_EDGE_TYPES: [ElementType; 1] =
     [ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith))];
@@ -17,43 +15,161 @@ pub const PROPERTY_EDGE_TYPES: [ElementType; 6] = [
 ];
 
 /// Reserved IRIs should not be overridden by e.g. "external class" ElementType.
-pub fn get_reserved_iris() -> HashSet<String> {
-    let rdf = vec![rdf::XML_LITERAL];
-    let rdfs = vec![
-        rdfs::DOMAIN,
-        rdfs::LITERAL,
-        rdfs::RANGE,
-        rdfs::RESOURCE,
-        rdfs::SUB_CLASS_OF,
-        rdfs::SUB_PROPERTY_OF,
-    ];
-    let owl = vec![
-        owl::ALL_DISJOINT_CLASSES,
-        owl::ALL_DISJOINT_PROPERTIES,
-        owl::COMPLEMENT_OF,
-        owl::DATATYPE_COMPLEMENT_OF,
-        owl::DEPRECATED,
-        owl::DEPRECATED_CLASS,
-        owl::DEPRECATED_PROPERTY,
-        owl::DIFFERENT_FROM,
-        owl::DISJOINT_UNION_OF,
-        owl::DISJOINT_WITH,
-        owl::EQUIVALENT_CLASS,
-        owl::EQUIVALENT_PROPERTY,
-        owl::INTERSECTION_OF,
-        owl::THING,
-        owl::UNION_OF,
-        owl::REAL,
-        owl::RATIONAL,
-    ];
+pub fn is_reserved(term: &Term) -> bool {
+    match term.as_ref() {
+        TermRef::NamedNode(named_node_ref) => {
+            matches!(
+                named_node_ref,
+                rdf::XML_LITERAL
+                    | rdf::HTML
+                    | rdf::PLAIN_LITERAL
+                    | rdfs::DOMAIN
+                    | rdfs::LITERAL
+                    | rdfs::RANGE
+                    | rdfs::RESOURCE
+                    | rdfs::SUB_CLASS_OF
+                    | rdfs::SUB_PROPERTY_OF
+                    | owl::ALL_DISJOINT_CLASSES
+                    | owl::ALL_DISJOINT_PROPERTIES
+                    | owl::COMPLEMENT_OF
+                    | owl::DATATYPE_COMPLEMENT_OF
+                    | owl::DEPRECATED
+                    | owl::DEPRECATED_CLASS
+                    | owl::DEPRECATED_PROPERTY
+                    | owl::DIFFERENT_FROM
+                    | owl::DISJOINT_UNION_OF
+                    | owl::DISJOINT_WITH
+                    | owl::EQUIVALENT_CLASS
+                    | owl::EQUIVALENT_PROPERTY
+                    | owl::INTERSECTION_OF
+                    | owl::THING
+                    | owl::UNION_OF
+                    | owl::REAL
+                    | owl::RATIONAL
+                    | xsd::ANY_URI
+                    | xsd::BASE_64_BINARY
+                    | xsd::BOOLEAN
+                    | xsd::BYTE
+                    | xsd::DATE
+                    | xsd::DATE_TIME
+                    | xsd::DATE_TIME_STAMP
+                    | xsd::DAY_TIME_DURATION
+                    | xsd::DECIMAL
+                    | xsd::DOUBLE
+                    | xsd::DURATION
+                    | xsd::FLOAT
+                    | xsd::G_DAY
+                    | xsd::G_MONTH
+                    | xsd::G_MONTH_DAY
+                    | xsd::G_YEAR
+                    | xsd::G_YEAR_MONTH
+                    | xsd::HEX_BINARY
+                    | xsd::INT
+                    | xsd::INTEGER
+                    | xsd::LANGUAGE
+                    | xsd::LONG
+                    | xsd::NAME
+                    | xsd::NC_NAME
+                    | xsd::NEGATIVE_INTEGER
+                    | xsd::NMTOKEN
+                    | xsd::NON_NEGATIVE_INTEGER
+                    | xsd::NON_POSITIVE_INTEGER
+                    | xsd::NORMALIZED_STRING
+                    | xsd::POSITIVE_INTEGER
+                    | xsd::SHORT
+                    | xsd::STRING
+                    | xsd::TIME
+                    | xsd::TOKEN
+                    | xsd::UNSIGNED_BYTE
+                    | xsd::UNSIGNED_INT
+                    | xsd::UNSIGNED_LONG
+                    | xsd::UNSIGNED_SHORT
+                    | xsd::YEAR_MONTH_DURATION
+            )
+        }
+        _ => false,
+    }
+}
 
-    let iris = [rdf, rdfs, owl]
-        .iter()
-        .flatten()
-        .map(|elem| trim_tag_circumfix(&elem.to_string()))
-        .collect::<Vec<String>>();
-
-    HashSet::from_iter(iris)
+/// Returns Some(ElementType) if the `term` is a resolvable, reserved IRI.
+///
+/// ## Implementation details
+/// This function must contain exactly same NamedNodeRefs as [`is_reserved`].
+pub fn try_resolve_reserved(term: &Term) -> Option<ElementType> {
+    match term.as_ref() {
+        TermRef::NamedNode(named_node_ref) => match named_node_ref {
+            rdf::XML_LITERAL | rdf::HTML | rdf::PLAIN_LITERAL => {
+                Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
+            }
+            rdfs::DOMAIN
+            | rdfs::LITERAL
+            | rdfs::RANGE
+            | rdfs::RESOURCE
+            | rdfs::SUB_CLASS_OF
+            | rdfs::SUB_PROPERTY_OF
+            | owl::ALL_DISJOINT_CLASSES
+            | owl::ALL_DISJOINT_PROPERTIES
+            | owl::COMPLEMENT_OF
+            | owl::DATATYPE_COMPLEMENT_OF
+            | owl::DEPRECATED
+            | owl::DEPRECATED_CLASS
+            | owl::DEPRECATED_PROPERTY
+            | owl::DIFFERENT_FROM
+            | owl::DISJOINT_UNION_OF
+            | owl::DISJOINT_WITH
+            | owl::EQUIVALENT_CLASS
+            | owl::EQUIVALENT_PROPERTY
+            | owl::INTERSECTION_OF
+            | owl::THING
+            | owl::UNION_OF => None,
+            owl::REAL | owl::RATIONAL => {
+                Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
+            }
+            xsd::ANY_URI
+            | xsd::BASE_64_BINARY
+            | xsd::BOOLEAN
+            | xsd::BYTE
+            | xsd::DATE
+            | xsd::DATE_TIME
+            | xsd::DATE_TIME_STAMP
+            | xsd::DAY_TIME_DURATION
+            | xsd::DECIMAL
+            | xsd::DOUBLE
+            | xsd::DURATION
+            | xsd::FLOAT
+            | xsd::G_DAY
+            | xsd::G_MONTH
+            | xsd::G_MONTH_DAY
+            | xsd::G_YEAR
+            | xsd::G_YEAR_MONTH
+            | xsd::HEX_BINARY
+            | xsd::INT
+            | xsd::INTEGER
+            | xsd::LANGUAGE
+            | xsd::LONG
+            | xsd::NAME
+            | xsd::NC_NAME
+            | xsd::NEGATIVE_INTEGER
+            | xsd::NMTOKEN
+            | xsd::NON_NEGATIVE_INTEGER
+            | xsd::NON_POSITIVE_INTEGER
+            | xsd::NORMALIZED_STRING
+            | xsd::POSITIVE_INTEGER
+            | xsd::SHORT
+            | xsd::STRING
+            | xsd::TIME
+            | xsd::TOKEN
+            | xsd::UNSIGNED_BYTE
+            | xsd::UNSIGNED_INT
+            | xsd::UNSIGNED_LONG
+            | xsd::UNSIGNED_SHORT
+            | xsd::YEAR_MONTH_DURATION => {
+                Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// Removes prefix "<" and suffix ">" from the input to

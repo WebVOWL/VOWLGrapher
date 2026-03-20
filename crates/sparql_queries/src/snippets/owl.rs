@@ -67,6 +67,18 @@ impl SparqlSnippet for OwlNode {
                 BIND(owl:unionOf AS ?nodeType)
                 }"#
             }
+            Self::Real => {
+                r#"{
+                ?id a owl:real .
+                BIND(owl:real AS ?nodeType)
+                }"#
+            }
+            Self::Rational => {
+                r#"{
+                ?id a owl:rational .
+                BIND(owl:rational AS ?nodeType)
+                }"#
+            }
         }
     }
 }

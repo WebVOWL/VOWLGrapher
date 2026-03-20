@@ -6,6 +6,7 @@ pub mod owl;
 pub mod rdf;
 pub mod rdfs;
 pub mod void;
+pub mod xsd;
 
 use grapher::prelude::strum::IntoEnumIterator;
 

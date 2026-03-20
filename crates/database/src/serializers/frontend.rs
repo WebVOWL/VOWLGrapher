@@ -1070,7 +1070,14 @@ impl GraphDisplayDataSolutionSerializer {
                     // rdf::ALT => {}
                     // rdf::BAG => {}
                     // rdf::FIRST => {}
-                    // rdf::HTML => {}
+                    rdf::HTML => {
+                        self.insert_node(
+                            data_buffer,
+                            &triple,
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                        )?;
+                        return Ok(SerializationStatus::Serialized);
+                    }
                     // rdf::LANG_STRING => {}
                     // rdf::LIST => {}
                     // rdf::NIL => {}
@@ -1097,7 +1104,24 @@ impl GraphDisplayDataSolutionSerializer {
                     // rdf::SUBJECT => {}
                     // rdf::TYPE => {}
                     // rdf::VALUE => {}
-                    // rdf::XML_LITERAL => {}
+                    rdf::XML_LITERAL => {
+                        self.insert_node(
+                            data_buffer,
+                            &triple,
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                        )?;
+                        return Ok(SerializationStatus::Serialized);
+                    }
+                    rdf::PLAIN_LITERAL => {
+                        self.insert_node(
+                            data_buffer,
+                            &triple,
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                        )?;
+                        return Ok(SerializationStatus::Serialized);
+                    }
+                    // rdf::COMPOUND_LITERAL => {}
+                    // rdf::DIRECTION => {}
 
                     // ----------- RDFS ----------- //
                     rdfs::CLASS => {
@@ -1573,6 +1597,70 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::VERSION_INFO => {}
                     // owl::VERSION_IRI => {}
                     // owl::WITH_RESTRICTIONS => {}
+                    owl::REAL => {
+                        self.insert_node(
+                            data_buffer,
+                            &triple,
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                        )?;
+                        return Ok(SerializationStatus::Serialized);
+                    }
+                    owl::RATIONAL => {
+                        self.insert_node(
+                            data_buffer,
+                            &triple,
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                        )?;
+                        return Ok(SerializationStatus::Serialized);
+                    }
+
+                    // ----------- XSD ----------- //
+                    xsd::ANY_URI
+                    | xsd::BASE_64_BINARY
+                    | xsd::BOOLEAN
+                    | xsd::BYTE
+                    | xsd::DATE
+                    | xsd::DATE_TIME
+                    | xsd::DATE_TIME_STAMP
+                    | xsd::DAY_TIME_DURATION
+                    | xsd::DECIMAL
+                    | xsd::DOUBLE
+                    | xsd::DURATION
+                    | xsd::FLOAT
+                    | xsd::G_DAY
+                    | xsd::G_MONTH
+                    | xsd::G_MONTH_DAY
+                    | xsd::G_YEAR
+                    | xsd::G_YEAR_MONTH
+                    | xsd::HEX_BINARY
+                    | xsd::INT
+                    | xsd::INTEGER
+                    | xsd::LANGUAGE
+                    | xsd::LONG
+                    | xsd::NAME
+                    | xsd::NC_NAME
+                    | xsd::NEGATIVE_INTEGER
+                    | xsd::NMTOKEN
+                    | xsd::NON_NEGATIVE_INTEGER
+                    | xsd::NON_POSITIVE_INTEGER
+                    | xsd::NORMALIZED_STRING
+                    | xsd::POSITIVE_INTEGER
+                    | xsd::SHORT
+                    | xsd::STRING
+                    | xsd::TIME
+                    | xsd::TOKEN
+                    | xsd::UNSIGNED_BYTE
+                    | xsd::UNSIGNED_INT
+                    | xsd::UNSIGNED_LONG
+                    | xsd::UNSIGNED_SHORT
+                    | xsd::YEAR_MONTH_DURATION => {
+                        self.insert_node(
+                            data_buffer,
+                            &triple,
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                        )?;
+                        return Ok(SerializationStatus::Serialized);
+                    }
                     _ => {
                         match triple.target.clone() {
                             Some(target) => {

@@ -108,8 +108,6 @@ impl ElementLegend for OwlEdge {
 
 impl ElementLegend for XSDNode {
     fn legend(self) -> Option<String> {
-        match self {
-            _ => None,
-        }
+        None
     }
 }

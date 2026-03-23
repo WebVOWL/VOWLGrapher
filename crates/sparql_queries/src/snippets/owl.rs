@@ -210,14 +210,31 @@ impl SparqlSnippet for OwlEdge {
             }
             Self::ValuesFrom => {
                 r#"{
-                {
-                    ?id owl:someValuesFrom ?target .
-                }
+                { ?id owl:onProperty ?target . BIND(owl:onProperty AS ?nodeType) }
                 UNION
-                {
-                    ?id owl:allValuesFrom ?target .
-                }
-                BIND("ValuesFrom" AS ?nodeType)
+                { ?id owl:someValuesFrom ?target . BIND(owl:someValuesFrom AS ?nodeType) }
+                UNION
+                { ?id owl:allValuesFrom ?target . BIND(owl:allValuesFrom AS ?nodeType) }
+                UNION
+                { ?id owl:hasSelf ?target . BIND(owl:hasSelf AS ?nodeType) }
+                UNION
+                { ?id owl:hasValue ?target . BIND(owl:hasValue AS ?nodeType) }
+                UNION
+                { ?id owl:minCardinality ?target . BIND(owl:minCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:maxCardinality ?target . BIND(owl:maxCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:cardinality ?target . BIND(owl:cardinality AS ?nodeType) }
+                UNION
+                { ?id owl:minQualifiedCardinality ?target . BIND(owl:minQualifiedCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:maxQualifiedCardinality ?target . BIND(owl:maxQualifiedCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:qualifiedCardinality ?target . BIND(owl:qualifiedCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:onClass ?target . BIND(owl:onClass AS ?nodeType) }
+                UNION
+                { ?id owl:onDataRange ?target . BIND(owl:onDataRange AS ?nodeType) }
                 }"#
             }
         }

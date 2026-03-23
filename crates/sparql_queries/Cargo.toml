@@ -12,6 +12,5 @@
     workspace=true
 
 [dependencies]
-    const_format="0.2.35"
     grapher={workspace=true}
     vowlr-util={path="../util"}

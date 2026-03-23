@@ -6,8 +6,8 @@ use std::{
 
 use grapher::prelude::{Characteristic, ElementType, GraphDisplayData, OwlEdge, OwlType};
 use log::error;
-use oxrdf::Term;
 use lovet_util::prelude::ErrorRecord;
+use oxrdf::Term;
 
 use crate::serializers::util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES};
 

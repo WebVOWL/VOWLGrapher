@@ -1,11 +1,11 @@
 use env_logger::Env;
 use grapher::prelude::{EVENT_DISPATCHER, RenderEvent};
 use grapher::run;
+use lovet_database::prelude::LOVETStore;
+use lovet_sparql_queries::prelude::DEFAULT_QUERY;
 use perfdebugger::util::query;
 use std::env;
 use std::path::Path;
-use lovet_database::prelude::LOVETStore;
-use lovet_sparql_queries::prelude::DEFAULT_QUERY;
 
 #[tokio::main]
 async fn main() {

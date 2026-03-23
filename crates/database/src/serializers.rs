@@ -117,6 +117,23 @@ impl Display for Edge {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum RestrictionRenderMode {
+    #[default]
+    ValuesFromEdge,
+    ExistingPropertyEdge,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RestrictionState {
+    pub on_property: Option<Term>,
+    pub filler: Option<Term>,
+    pub cardinality: Option<(String, Option<String>)>,
+    pub self_restriction: bool,
+    pub requires_filler: bool,
+    pub render_mode: RestrictionRenderMode,
+}
+
 pub struct SerializationDataBuffer {
     /// Stores all resolved node elements.
     ///
@@ -188,7 +205,10 @@ pub struct SerializationDataBuffer {
     /// This lets structurally-defined ranges like complement/union expressions
     /// collapse to the same Thing node that direct owl:Thing ranges use.
     anchor_thing_map: HashMap<Term, Term>,
-
+    /// Partially assembled restriction metadata keyed by the restriction node.
+    restriction_buffer: HashMap<Term, RestrictionState>,
+    /// Final display cardinalities keyed by the concrete edge that will be emitted.
+    edge_cardinality_buffer: HashMap<Edge, (String, Option<String>)>,
     /// Stores the edges of a property.
     ///
     /// - Key = The property IRI.
@@ -242,6 +262,8 @@ impl SerializationDataBuffer {
             edges_include_map: HashMap::new(),
             global_element_mappings: HashMap::new(),
             anchor_thing_map: HashMap::new(),
+            restriction_buffer: HashMap::new(),
+            edge_cardinality_buffer: HashMap::new(),
             label_buffer: HashMap::new(),
             edge_label_buffer: HashMap::new(),
             edge_buffer: HashSet::new(),
@@ -272,6 +294,11 @@ impl SerializationDataBuffer {
             .or_default()
             .insert(range);
     }
+    pub fn restriction_mut(&mut self, restriction: &Term) -> &mut RestrictionState {
+        self.restriction_buffer
+            .entry(restriction.clone())
+            .or_default()
+    }
 }
 
 impl Default for SerializationDataBuffer {
@@ -301,6 +328,7 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
             let object_idx = iricache.get(&edge.object);
             let maybe_label = val.edge_label_buffer.remove(edge);
             let characteristics = val.edge_characteristics.remove(edge);
+            let cardinality = val.edge_cardinality_buffer.remove(edge);
 
             match (subject_idx, object_idx) {
                 (Some(subject_idx), Some(object_idx)) => {
@@ -337,6 +365,14 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
                             .characteristics
                             .insert(edge_idx, characteristics);
                     }
+
+                    if let Some(cardinality) = cardinality {
+                        let display_edge_idx = u32::try_from(display_data.edges.len() - 1)
+                            .expect("edge index overflow");
+                        display_data
+                            .cardinalities
+                            .push((display_edge_idx, cardinality));
+                    }
                 }
                 (None, _) => {
                     error!("Subject in edge not found in iricache: {}", edge.subject);
@@ -358,7 +394,6 @@ impl From<SerializationDataBuffer> for GraphDisplayData {
                 }
             }
         }
-        // TODO: handle cardinalities
 
         display_data
     }

@@ -214,30 +214,22 @@ impl GraphDisplayDataSolutionSerializer {
         };
     }
 
-    fn resolve(&self, data_buffer: &SerializationDataBuffer, mut x: Term) -> Option<Term> {
-        if let Some(elem) = data_buffer.node_element_buffer.get(&x) {
-            debug!("Resolved: {}: {}", x, elem);
-            return Some(x);
-        } else if let Some(elem) = data_buffer.edge_element_buffer.get(&x) {
-            debug!("Resolved: {}: {}", x, elem);
-            return Some(x);
+    fn resolve(&self, data_buffer: &SerializationDataBuffer, x: Term) -> Option<Term> {
+        let resolved = self.follow_redirection(data_buffer, &x);
+
+        if let Some(elem) = data_buffer.node_element_buffer.get(&resolved) {
+            debug!("Resolved: {}: {}", resolved, elem);
+            return Some(resolved);
         }
 
-        while let Some(redirected) = data_buffer.edge_redirection.get(&x) {
-            trace!("Redirected: {} -> {}", x, redirected);
-            let new_x = redirected.clone();
-            if let Some(elem) = data_buffer.node_element_buffer.get(&new_x) {
-                debug!("Resolved: {}: {}", new_x, elem);
-                return Some(new_x);
-            } else if let Some(elem) = data_buffer.edge_element_buffer.get(&new_x) {
-                debug!("Resolved: {}: {}", new_x, elem);
-                return Some(new_x);
-            }
-            debug!("Checked: {} ", new_x);
-            x = new_x;
+        if let Some(elem) = data_buffer.edge_element_buffer.get(&resolved) {
+            debug!("Resolved: {}: {}", resolved, elem);
+            return Some(resolved);
         }
+
         None
     }
+
     fn resolve_so(
         &self,
         data_buffer: &SerializationDataBuffer,
@@ -322,6 +314,19 @@ impl GraphDisplayDataSolutionSerializer {
             .insert(old.clone(), new.clone());
         self.check_unknown_buffer(data_buffer, old)?;
         Ok(())
+    }
+
+    fn follow_redirection(&self, data_buffer: &SerializationDataBuffer, term: &Term) -> Term {
+        let mut current = term.clone();
+
+        while let Some(next) = data_buffer.edge_redirection.get(&current) {
+            if *next == current {
+                break;
+            }
+            current = next.clone();
+        }
+
+        current
     }
 
     #[expect(
@@ -508,11 +513,59 @@ impl GraphDisplayDataSolutionSerializer {
         old: &Term,
         new: &Term,
     ) -> Result<(), SerializationError> {
+        if old == new {
+            return Ok(());
+        }
+
         debug!("Merging node '{old}' into '{new}'");
+        self.merge_restriction_state(data_buffer, old, new);
         data_buffer.node_element_buffer.remove(old);
         self.update_edges(data_buffer, old, new);
         self.redirect_iri(data_buffer, old, new)?;
+        self.retry_restrictions(data_buffer)?;
         Ok(())
+    }
+
+    fn merge_restriction_state(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        old: &Term,
+        new: &Term,
+    ) {
+        let Some(old_state) = data_buffer.restriction_buffer.remove(old) else {
+            return;
+        };
+
+        let super::RestrictionState {
+            on_property,
+            filler,
+            cardinality,
+            self_restriction,
+            requires_filler,
+            render_mode,
+        } = old_state;
+
+        let new_state = data_buffer
+            .restriction_buffer
+            .entry(new.clone())
+            .or_default();
+
+        if new_state.on_property.is_none() {
+            new_state.on_property = on_property;
+        }
+        if new_state.filler.is_none() {
+            new_state.filler = filler;
+        }
+        if new_state.cardinality.is_none() {
+            new_state.cardinality = cardinality;
+        }
+
+        new_state.self_restriction |= self_restriction;
+        new_state.requires_filler |= requires_filler;
+
+        if new_state.render_mode == RestrictionRenderMode::ValuesFromEdge {
+            new_state.render_mode = render_mode;
+        }
     }
 
     fn update_edges(&self, data_buffer: &mut SerializationDataBuffer, old: &Term, new: &Term) {
@@ -526,6 +579,13 @@ impl GraphDisplayDataSolutionSerializer {
                 let characteristics = data_buffer.edge_characteristics.remove(&old_edge);
 
                 data_buffer.edge_buffer.remove(&old_edge);
+
+                if old_edge.subject != *old {
+                    self.remove_edge_include(data_buffer, &old_edge.subject, &old_edge);
+                }
+                if old_edge.object != *old {
+                    self.remove_edge_include(data_buffer, &old_edge.object, &old_edge);
+                }
 
                 if edge.object == *old {
                     edge.object = new.clone();
@@ -782,6 +842,11 @@ impl GraphDisplayDataSolutionSerializer {
         debug!("Merging property '{old}' into '{new}'");
 
         data_buffer.edge_element_buffer.remove(old);
+
+        // Remove stale node placeholders for property aliases.
+        data_buffer.node_element_buffer.remove(old);
+        data_buffer.label_buffer.remove(old);
+        data_buffer.node_characteristics.remove(old);
 
         if let Some(domains) = data_buffer.property_domain_map.remove(old) {
             data_buffer
@@ -1726,14 +1791,14 @@ impl GraphDisplayDataSolutionSerializer {
                     owl::MAX_CARDINALITY => {
                         let max = Self::cardinality_literal(&triple)?;
                         data_buffer.restriction_mut(&triple.id).cardinality =
-                            Some(("0".to_string(), Some(max)));
+                            Some((String::new(), Some(max)));
                         return self.try_materialize_restriction(data_buffer, &triple.id);
                     }
 
                     owl::MAX_QUALIFIED_CARDINALITY => {
                         let state = data_buffer.restriction_mut(&triple.id);
                         state.cardinality =
-                            Some(("0".to_string(), Some(Self::cardinality_literal(&triple)?)));
+                            Some((String::new(), Some(Self::cardinality_literal(&triple)?)));
                         state.requires_filler = true;
                         return self.try_materialize_restriction(data_buffer, &triple.id);
                     }
@@ -2476,6 +2541,10 @@ impl GraphDisplayDataSolutionSerializer {
         false
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "fixed when serializer is refactored to use pointers instead of values"
+    )]
     fn cardinality_literal(triple: &Triple) -> Result<String, SerializationError> {
         match triple.target.as_ref() {
             Some(Term::Literal(literal)) => Ok(literal.value().to_string()),
@@ -2632,9 +2701,12 @@ impl GraphDisplayDataSolutionSerializer {
         let Some(property_iri) = self.resolve(data_buffer, raw_property.clone()) else {
             return Ok(SerializationStatus::Deferred);
         };
-        let Some(subject) = self.restriction_owner(data_buffer, restriction) else {
+        let Some(raw_subject) = self.restriction_owner(data_buffer, restriction) else {
             return Ok(SerializationStatus::Deferred);
         };
+        let subject = self
+            .resolve(data_buffer, raw_subject.clone())
+            .unwrap_or_else(|| self.follow_redirection(data_buffer, &raw_subject));
 
         let restriction_label = data_buffer
             .label_buffer
@@ -2759,13 +2831,13 @@ impl GraphDisplayDataSolutionSerializer {
         };
 
         for edge in edges {
-            if edge.object == *restriction
-                && edge.element_type == ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
-            {
+            if edge.object == *restriction && Self::is_restriction_owner_edge(&edge) {
                 self.remove_edge_include(data_buffer, &edge.subject, &edge);
                 self.remove_edge_include(data_buffer, &edge.object, &edge);
                 data_buffer.edge_buffer.remove(&edge);
                 data_buffer.edge_label_buffer.remove(&edge);
+                data_buffer.edge_cardinality_buffer.remove(&edge);
+                data_buffer.edge_characteristics.remove(&edge);
             }
         }
     }

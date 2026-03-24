@@ -11,7 +11,7 @@ use log::info;
 use rdf_fusion::{
     execution::results::QuadStream,
     io::{JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer},
-    model::{GraphName, NamedNodeRef},
+    model::NamedNodeRef,
 };
 use std::io;
 use std::io::BufRead;

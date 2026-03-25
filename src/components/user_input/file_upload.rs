@@ -21,7 +21,6 @@ use crate::errors::ClientErrorKind;
 
 const MAX_FILE_SIZE_BYTES: usize = 50 * 1024 * 1024;
 
-/// Check the session for if user has id if not create a new id for the user
 #[cfg(feature = "ssr")]
 pub async fn manage_user_id() -> Result<String, ServerFnError> {
     use actix_session::Session;

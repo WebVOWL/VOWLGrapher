@@ -1,4 +1,6 @@
 use crate::components::icon::Icon;
+use crate::errors::ClientErrorKind;
+use crate::errors::ErrorLogContext;
 use grapher::prelude::EVENT_DISPATCHER;
 use grapher::prelude::RenderEvent;
 use leptos::prelude::*;
@@ -10,10 +12,16 @@ pub fn PauseButton() -> impl IntoView {
     let toggle_pause = move |_| {
         let currently_paused = paused.get();
         if currently_paused {
-            let _ = EVENT_DISPATCHER.rend_write_chan.send(RenderEvent::Resumed);
+            if let Err(e) = EVENT_DISPATCHER.rend_write_chan.send(RenderEvent::Resumed) {
+                let error_context = expect_context::<ErrorLogContext>();
+                error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+            }
             paused.set(false);
         } else {
-            let _ = EVENT_DISPATCHER.rend_write_chan.send(RenderEvent::Paused);
+            if let Err(e) = EVENT_DISPATCHER.rend_write_chan.send(RenderEvent::Paused) {
+                let error_context = expect_context::<ErrorLogContext>();
+                error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+            }
             paused.set(true);
         }
     };
@@ -55,15 +63,21 @@ pub fn ResetButton() -> impl IntoView {
 
 #[component]
 pub fn ZoomInButton() -> impl IntoView {
+    let zoom_in = move |_| {
+        if let Err(e) = EVENT_DISPATCHER
+            .rend_write_chan
+            .send(RenderEvent::Zoomed(20.0))
+        {
+            let error_context = expect_context::<ErrorLogContext>();
+            error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+        }
+    };
+
     view! {
         <button
             class="flex justify-center items-center text-black bg-white border border-black transition-colors cursor-pointer w-[35px] h-[35px] hover:bg-[#dd9900]"
             title="Zoom in on the graph"
-            on:click=move |_| {
-                let _ = EVENT_DISPATCHER
-                    .rend_write_chan
-                    .send(RenderEvent::Zoomed(20.0));
-            }
+            on:click=zoom_in
         >
             <Icon icon=icondata::AiZoomInOutlined />
         </button>
@@ -72,15 +86,21 @@ pub fn ZoomInButton() -> impl IntoView {
 
 #[component]
 pub fn ZoomOutButton() -> impl IntoView {
+    let zoom_out = move |_| {
+        if let Err(e) = EVENT_DISPATCHER
+            .rend_write_chan
+            .send(RenderEvent::Zoomed(-20.0))
+        {
+            let error_context = expect_context::<ErrorLogContext>();
+            error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+        }
+    };
+
     view! {
         <button
             class="flex justify-center items-center text-black bg-white border border-black transition-colors cursor-pointer w-[35px] h-[35px] hover:bg-[#dd9900]"
             title="Zoom out on the graph"
-            on:click=move |_| {
-                let _ = EVENT_DISPATCHER
-                    .rend_write_chan
-                    .send(RenderEvent::Zoomed(-20.0));
-            }
+            on:click=zoom_out
         >
             <Icon icon=icondata::AiZoomOutOutlined />
         </button>
@@ -89,15 +109,21 @@ pub fn ZoomOutButton() -> impl IntoView {
 
 #[component]
 pub fn CenterGraphButton() -> impl IntoView {
+    let center = move |_| {
+        if let Err(e) = EVENT_DISPATCHER
+            .rend_write_chan
+            .send(RenderEvent::CenterGraph)
+        {
+            let error_context = expect_context::<ErrorLogContext>();
+            error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+        }
+    };
+
     view! {
         <button
             class="flex justify-center items-center text-black bg-white border border-black transition-colors cursor-pointer w-[35px] h-[35px] hover:bg-[#dd9900]"
             title="Center the graph"
-            on:click=move |_| {
-                let _ = EVENT_DISPATCHER
-                    .rend_write_chan
-                    .send(RenderEvent::CenterGraph);
-            }
+            on:click=center
         >
             <Icon icon=icondata::MdiImageFilterCenterFocus />
         </button>

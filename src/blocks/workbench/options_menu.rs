@@ -1,6 +1,7 @@
 use super::WorkbenchMenuItems;
 use crate::components::tooltip::{ToolTip, ToolTipPosition};
 use crate::components::user_input::range_select::Slider;
+use crate::errors::{ClientErrorKind, ErrorLogContext};
 use grapher::prelude::*;
 use leptos::prelude::*;
 
@@ -31,7 +32,10 @@ pub fn SimulatorSettings() -> impl IntoView {
             SimulatorEvent::FreezeThresholdUpdated(freeze_thresh.get() as f32),
         ];
         for msg in messages {
-            let _ = EVENT_DISPATCHER.sim_write_chan.send(msg);
+            if let Err(e) = EVENT_DISPATCHER.sim_write_chan.send(msg) {
+                let error_context = expect_context::<ErrorLogContext>();
+                error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+            }
         }
     });
 

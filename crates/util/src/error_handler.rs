@@ -256,7 +256,7 @@ impl std::fmt::Display for ErrorRecord {
 /// The struct used by VOWL-R when things go south.
 ///
 /// # Note
-/// Every error type in use should implement [`From<T> for VOWLRServerError`].
+/// Every error type in use should implement [`From<T> for VOWLRError`].
 pub struct VOWLRError {
     pub records: Vec<ErrorRecord>,
 }
@@ -285,15 +285,13 @@ impl FromServerFnError for VOWLRError {
 
 impl From<ServerFnError> for VOWLRError {
     fn from(value: ServerFnError) -> Self {
-        let record: ErrorRecord = value.into();
-        record.into()
+        <ErrorRecord as Into<VOWLRError>>::into(value.into())
     }
 }
 
 impl From<ServerFnErrorErr> for VOWLRError {
     fn from(value: ServerFnErrorErr) -> Self {
-        let record: ErrorRecord = value.into();
-        record.into()
+        <ErrorRecord as Into<VOWLRError>>::into(value.into())
     }
 }
 

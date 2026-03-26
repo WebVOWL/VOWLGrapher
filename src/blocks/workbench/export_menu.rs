@@ -1,7 +1,6 @@
 use super::WorkbenchMenuItems;
-use crate::blocks::workbench::error_log::ErrorLogContext;
 use crate::components::icon::Icon;
-use crate::error::ClientErrorKind;
+use crate::errors::{ClientErrorKind, ErrorLogContext};
 use futures::StreamExt;
 use leptos::prelude::*;
 use leptos::server_fn::codec::{ByteStream, Streaming};

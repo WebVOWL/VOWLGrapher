@@ -203,7 +203,6 @@ impl From<VOWLRStoreError> for ErrorRecord {
 
 impl From<VOWLRStoreError> for VOWLRError {
     fn from(value: VOWLRStoreError) -> Self {
-        let record: ErrorRecord = value.into();
-        record.into()
+        <ErrorRecord as Into<VOWLRError>>::into(value.into())
     }
 }

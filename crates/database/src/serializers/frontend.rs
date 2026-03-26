@@ -27,7 +27,7 @@ use rdf_fusion::{
 };
 use unescape_zero_copy::unescape_default;
 use vowlr_parser::errors::VOWLRStoreError;
-use vowlr_util::prelude::VOWLRError;
+use vowlr_util::prelude::{ErrorRecord, VOWLRError};
 
 pub struct GraphDisplayDataSolutionSerializer;
 pub enum SerializationStatus {
@@ -58,8 +58,9 @@ impl GraphDisplayDataSolutionSerializer {
             let solution = match maybe_solution {
                 Ok(solution) => solution,
                 Err(e) => {
-                    let a: VOWLRStoreError = e.into();
-                    data_buffer.failed_buffer.push(a.into());
+                    data_buffer
+                        .failed_buffer
+                        .push(<VOWLRStoreError as Into<ErrorRecord>>::into(e.into()));
                     continue;
                 }
             };

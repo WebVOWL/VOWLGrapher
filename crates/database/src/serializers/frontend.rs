@@ -36,11 +36,16 @@ impl GraphDisplayDataSolutionSerializer {
         Self {}
     }
 
+    /// Serializes a query solution stream into the data buffer.
+    ///
+    /// This method tries to continue serializing despite errors.
+    /// As such, the `Ok` value contains non-fatal errors encountered during
+    /// serialization. The `Err` value contains fatal errors, preventing serialization.
     pub async fn serialize_nodes_stream(
         &self,
         data: &mut GraphDisplayData,
         mut solution_stream: QuerySolutionStream,
-    ) -> Result<(), VOWLRError> {
+    ) -> Result<Option<VOWLRError>, VOWLRError> {
         let mut count: u32 = 0;
         info!("Serializing query solution stream...");
         let start_time = Instant::now();
@@ -115,15 +120,17 @@ impl GraphDisplayDataSolutionSerializer {
             data_buffer.edge_characteristics.len() + data_buffer.node_characteristics.len(),
         );
         debug!("{}", data_buffer);
-        if !data_buffer.failed_buffer.is_empty() {
+        let errors = if !data_buffer.failed_buffer.is_empty() {
             let total = data_buffer.failed_buffer.len();
             let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
             error!("Failed to serialize {} triples:\n{}", total, err);
-            return Err(err);
-        }
+            Some(err)
+        } else {
+            None
+        };
         *data = data_buffer.into();
         debug!("{}", data);
-        Ok(())
+        Ok(errors)
     }
 
     /// Extract label info from the query solution and store until

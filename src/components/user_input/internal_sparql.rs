@@ -47,27 +47,6 @@ pub async fn load_graph(query: String, clean_load: bool) {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct GraphElementData {
-    pub counts: usize,
-    pub enabled: bool,
-}
-
-impl GraphElementData {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl Default for GraphElementData {
-    fn default() -> Self {
-        Self {
-            counts: 0,
-            enabled: true,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct GraphDataContext {
     pub element_counts: RwSignal<HashMap<ElementType, usize>>,

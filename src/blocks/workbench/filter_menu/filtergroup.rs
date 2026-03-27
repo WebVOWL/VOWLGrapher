@@ -14,6 +14,7 @@ pub fn FilterGroup<T>(
 where
     T: std::fmt::Display + ElementLegend + Copy + Clone + Eq + Hash + Send + Sync + 'static,
 {
+    let last_checked = expect_context::<RwSignal<u64>>();
     move || {
         let current_items = items.get();
         if current_items.is_empty() {
@@ -75,6 +76,7 @@ where
                                                 map.insert(*item, target_state);
                                             }
                                         });
+                                    last_checked.update(|old| { *old += 1 });
                                 }
                             />
                         </label>

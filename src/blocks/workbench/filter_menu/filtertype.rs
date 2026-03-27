@@ -13,6 +13,7 @@ pub fn FilterType<T>(
 where
     T: std::fmt::Display + ElementLegend + Copy + Clone + Eq + Hash + Send + Sync + 'static,
 {
+    let last_checked = expect_context::<RwSignal<u64>>();
     view! {
         <div style=move || {
             if is_open.get() {
@@ -62,6 +63,7 @@ where
                                                     let current = *map.get(&item).unwrap_or(&true);
                                                     map.insert(item, !current);
                                                 });
+                                            last_checked.update(|old| { *old += 1 });
                                         }
                                     />
                                     <div class="flex gap-2 items-center">

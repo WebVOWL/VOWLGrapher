@@ -26,16 +26,16 @@ pub enum StoredOntology {
     /// - Classes: 22
     /// - Size: 13 kB
     FriendOfAFriend,
-    /// Dummy data to benchmark render performance across visualization tools.
-    ///
-    /// - Classes: 2.5k
-    /// - Size: 160 kB
-    RenderingBenchmark,
     /// Clinical Trials Ontology (CTO).
     ///
     /// - Classes: 273
     /// - Size: 589 kB
     ClinicalTrialsOntology,
+    /// Dummy data to benchmark render performance across visualization tools.
+    ///
+    /// - Classes: 2.5k
+    /// - Size: 160 kB
+    RenderingBenchmark,
     /// The Environment Ontology (ENVO).
     ///
     /// - Classes: 6.9k
@@ -47,8 +47,8 @@ impl StoredOntology {
     pub const fn path(&self) -> &'static str {
         match self {
             Self::FriendOfAFriend => "src/assets/data/foaf.ttl",
-            Self::RenderingBenchmark => "src/assets/data/vowlr-benchmark-2500.ofn",
             Self::ClinicalTrialsOntology => "src/assets/data/ClinicalTrialOntology-merged.owl",
+            Self::RenderingBenchmark => "src/assets/data/vowlr-benchmark-2500.ofn",
             Self::EnvironmentOntology => "src/assets/data/envo.owl",
         }
     }
@@ -60,12 +60,11 @@ impl Display for StoredOntology {
             Self::FriendOfAFriend => {
                 write!(f, "Friend of a Friend (FOAF) vocabulary (22 classes)")
             }
-
-            Self::RenderingBenchmark => {
-                write!(f, "Rendering Benchmark (2.5k classes)")
-            }
             Self::ClinicalTrialsOntology => {
                 write!(f, "Clinical Trials Ontology (CTO) (273 classes)")
+            }
+            Self::RenderingBenchmark => {
+                write!(f, "Rendering Benchmark (2.5k classes)")
             }
             Self::EnvironmentOntology => {
                 write!(f, "The Environment Ontology (6.9k classes)")
@@ -80,8 +79,8 @@ impl TryFrom<&str> for StoredOntology {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "Friend of a Friend (FOAF) vocabulary (22 classes)" => Ok(Self::FriendOfAFriend),
-            "Rendering Benchmark (2.5k classes)" => Ok(Self::RenderingBenchmark),
             "Clinical Trials Ontology (CTO) (273 classes)" => Ok(Self::ClinicalTrialsOntology),
+            "Rendering Benchmark (2.5k classes)" => Ok(Self::RenderingBenchmark),
             "The Environment Ontology (6.9k classes)" => Ok(Self::EnvironmentOntology),
 
             _ => Err(ServerFnError::ServerError(format!(

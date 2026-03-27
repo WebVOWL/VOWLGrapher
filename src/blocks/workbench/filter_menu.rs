@@ -5,6 +5,7 @@ mod filtertype;
 mod meta_filter;
 mod properties;
 mod special_operators;
+
 use crate::components::user_input::internal_sparql::GraphDataContext;
 use crate::components::user_input::internal_sparql::load_graph;
 
@@ -33,49 +34,19 @@ pub fn FilterMenu() -> impl IntoView {
     let open_set_operations = RwSignal::new(false);
     let open_properties = RwSignal::new(false);
 
-    // let _ = Resource::new_rkyv(
-    //     move || element_checks.get(),
-    //     async move |checks| {
-    //         let query =
-    //             QueryAssembler::assemble_filtered_query(&checks /* , char_checks.get()*/);
-    //         leptos::logging::log!("{}", query);
+    let last_checked = RwSignal::new(0_u64);
+    provide_context(last_checked);
 
-    //         load_graph(query).await;
-    //     },
-    // );
-
-    // Effect::new(move || {
-    //     let query = QueryAssembler::assemble_filtered_query(&element_checks.read());
-
-    //     leptos::logging::log!("{}", query);
-
-    //     spawn_local_scoped_with_cancellation(async move {
-    //         load_graph(query).await;
-    //     });
-    // });
-
-    Effect::watch(
-        move || element_checks.get(),
-        move |checks, _, _| {
-            let query =
-                QueryAssembler::assemble_filtered_query(checks /* , char_checks.get()*/);
+    Effect::new(move || {
+        if *last_checked.read() > 0 {
+            let query = QueryAssembler::assemble_filtered_query(&element_checks.read_untracked());
             leptos::logging::log!("{}", query);
 
             spawn_local_scoped_with_cancellation(async move {
-                load_graph(query).await;
+                load_graph(query, false).await;
             });
-        },
-        false,
-    );
-
-    // let _ = Signal::derive(move || {
-    //     let query = QueryAssembler::assemble_filtered_query(&element_checks.get());
-    //     leptos::logging::log!("{}", query);
-
-    //     spawn_local_scoped_with_cancellation(async move {
-    //         load_graph(query).await;
-    //     });
-    // });
+        }
+    });
 
     view! {
         <WorkbenchMenuItems title="Filter by Type">
@@ -94,6 +65,7 @@ pub fn FilterMenu() -> impl IntoView {
                                     map.insert(*k, target);
                                 }
                             });
+                        last_checked.update(|old| { *old += 1 });
                     }
                 >
                     {move || {
@@ -159,16 +131,6 @@ pub fn FilterMenu() -> impl IntoView {
                 counts=element_counts
             />
 
-        // <FilterGroup
-        // name="Characteristics"
-        // is_open=open_chars
-        // set_open=set_open_chars
-        // items=characteristics
-        // checks=char_checks.into()
-        // set_checks=set_char_checks
-        // counts=char_counts.into()
-        // on_change=update_query
-        // />
         </WorkbenchMenuItems>
     }
 }

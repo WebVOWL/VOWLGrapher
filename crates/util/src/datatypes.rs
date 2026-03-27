@@ -1,12 +1,17 @@
 use std::path::Path;
 
-use rkyv::{Archive, Deserialize as RDeserialize, Serialize as RSerialize};
-use serde::{Deserialize, Serialize};
-
 /// Supported content types.
 #[repr(C)]
 #[derive(
-    Archive, RDeserialize, RSerialize, Deserialize, Serialize, Debug, Copy, Clone, strum::Display,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+    serde::Deserialize,
+    serde::Serialize,
+    Debug,
+    Copy,
+    Clone,
+    strum::Display,
 )]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum DataType {

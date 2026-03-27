@@ -128,7 +128,12 @@ impl GraphDisplayDataSolutionSerializer {
         let errors = if !data_buffer.failed_buffer.is_empty() {
             let total = data_buffer.failed_buffer.len();
             let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
-            error!("Failed to serialize {} triples:\n{}", total, err);
+            error!(
+                "Failed to serialize {} triple{}:\n{}",
+                total,
+                if total != 1 { "s" } else { "" },
+                err
+            );
             Some(err)
         } else {
             None

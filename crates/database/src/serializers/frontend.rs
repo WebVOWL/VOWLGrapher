@@ -388,10 +388,10 @@ impl GraphDisplayDataSolutionSerializer {
         let new_type = if edge_type != ElementType::NoDraw
             && self.is_external(data_buffer, &triple.element_type)
         {
-                ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty))
-            } else {
-                edge_type
-            };
+            ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty))
+        } else {
+            edge_type
+        };
         match self.resolve_so(data_buffer, triple) {
             (Some(sub_iri), Some(obj_iri)) => {
                 let should_hash_property = [
@@ -482,11 +482,6 @@ impl GraphDisplayDataSolutionSerializer {
         let old_edges = data_buffer.edges_include_map.remove(old);
         if let Some(old_edges) = old_edges {
             debug!("Updating edges from '{}' to '{}'", old, new);
-            // info!("old_edges: ");
-            // for edge in old_edges.iter() {
-            //     info!("edge: {} ", edge);
-            // }
-
             for mut edge in old_edges.into_iter() {
                 data_buffer.edge_buffer.remove(&edge);
                 if edge.object == *old {
@@ -498,10 +493,6 @@ impl GraphDisplayDataSolutionSerializer {
                 data_buffer.edge_buffer.insert(edge.clone());
                 self.insert_edge_include(data_buffer, new, edge.clone());
             }
-            // info!("new_edges: ");
-            // for edge in data_buffer.edge_buffer.iter() {
-            //     info!("edge: {} ", edge);
-            // }
         }
     }
 
@@ -1077,8 +1068,6 @@ impl GraphDisplayDataSolutionSerializer {
         data_buffer: &mut SerializationDataBuffer,
         triple: Triple,
     ) -> Result<SerializationStatus, SerializationError> {
-        // TODO: Collect errors and show to frontend
-        debug!("{}", triple);
         match &triple.element_type {
             Term::BlankNode(bnode) => {
                 // The query must never put blank nodes in the ?nodeType variable
@@ -1830,10 +1819,6 @@ impl GraphDisplayDataSolutionSerializer {
                                                 }),
                                             )
                                         } else {
-                                            trace!(
-                                                "Adding unknown buffer: target: {}, triple: {}",
-                                                target, triple
-                                            );
                                             self.add_to_unknown_buffer(
                                                 data_buffer,
                                                 target,
@@ -1934,10 +1919,6 @@ impl GraphDisplayDataSolutionSerializer {
                                     }
 
                                     (Some(_), None, Some(_)) => {
-                                        trace!(
-                                            "Adding unknown buffer: element type: {}, triple: {}",
-                                            triple.element_type, triple
-                                        );
                                         self.add_to_unknown_buffer(
                                             data_buffer,
                                             triple.element_type.clone(),
@@ -1946,7 +1927,6 @@ impl GraphDisplayDataSolutionSerializer {
                                         return Ok(SerializationStatus::Deferred);
                                     }
                                     _ => {
-                                        trace!("Adding unknown buffer: triple: {}", triple);
                                         self.add_to_unknown_buffer(
                                             data_buffer,
                                             triple.id.clone(),

@@ -65,7 +65,7 @@ async fn main() -> std::io::Result<()> {
                 }
             })
             .service(Files::new("/", site_root.as_ref()))
-            //.wrap(middleware::Compress::default())
+            .wrap(middleware::Compress::default())
             .wrap(
                 middleware::DefaultHeaders::new()
                     .add(("Cross-Origin-Opener-Policy", "same-origin"))

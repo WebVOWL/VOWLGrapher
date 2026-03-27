@@ -2,13 +2,16 @@ use super::WorkbenchMenuItems;
 use crate::blocks::workbench::GraphDataContext;
 use crate::components::progress_bar::LoadingCircle;
 use crate::components::user_input::internal_sparql::load_graph;
+use crate::components::user_input::stored_ontology::StoredOntology;
 use crate::components::user_input::stored_ontology::load_stored_ontology;
 use crate::components::{icon::Icon, user_input::file_upload::FileUpload};
 use crate::errors::ErrorLogContext;
 use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation;
 use log::info;
+use strum::IntoEnumIterator;
 use vowlr_sparql_queries::prelude::DEFAULT_QUERY;
+use web_sys::Event;
 use web_sys::HtmlInputElement;
 
 const MAX_FILE_SIZE_BYTES: f64 = 50.0 * 1024.0 * 1024.0;
@@ -16,20 +19,63 @@ const MAX_FILE_SIZE_BYTES: f64 = 50.0 * 1024.0 * 1024.0;
 #[component]
 pub fn SelectStaticInput() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
-    let selected_ontology = RwSignal::new(String::new());
-    let loading = RwSignal::new(false);
+
+    let selected_ontology = RwSignal::new(StoredOntology::FriendOfAFriend);
+    // let _ = AsyncDerived::new(|| async {
+    //     async move || {
+    //         if let Err(e) =
+    //             load_stored_ontology(selected_ontology.get(), DEFAULT_QUERY.to_string()).await
+    //         {
+    //             error_context.extend(e.records);
+    //         }
+    //     }
+    // });
+
+    let stored_res2 = Resource::new_rkyv(
+        move || selected_ontology.get(),
+        move |ontology| async move {
+            match load_stored_ontology(ontology).await {
+                Ok(()) => {
+                    // TODO: This runs on the server and has no access to expect_context.
+                    // load_graph(DEFAULT_QUERY.to_string()).await;
+                }
+                Err(e) => {
+                    error_context.extend(e.records);
+                }
+            }
+        },
+    );
+
+    // let stored_res = LocalResource::new(move || {
+    //     load_stored_ontology(selected_ontology.get(), DEFAULT_QUERY.to_string())
+    // });
+
+    // if let Some(result) = stored_res.get()
+    //     && let Err(e) = result
+    // {
+    //     error_context.extend(e.records);
+    // }
+
+    let update_selected_ontology = move |ev: Event| {
+        let target: HtmlInputElement = event_target::<HtmlInputElement>(&ev);
+        let name = target.value();
+        if name.is_empty() {
+            return;
+        }
+        match name.try_into() {
+            Ok(ontology) => {
+                selected_ontology.set(ontology);
+            }
+            Err(e) => {
+                error_context.push(e.into());
+            }
+        }
+    };
 
     let ontologies = move || {
-        vec![
-            "Friend of a Friend (FOAF) vocabulary (22 classes)".to_string(),
-            "Clinical Trials Ontology (CTO) (273 classes)".to_string(),
-            "VOWL-R Benchmark Ontology (2.5k nodes)".to_string(),
-            "The Environment Ontology (6.9k classes)".to_string(),
-        ]
-        .into_iter()
+        StoredOntology::iter()
         .map(|ontology| {
-            let ontology_value = ontology.clone();
-            view! { <option value=ontology_value>{ontology}</option> }
+                view! { <option value=ontology.to_string()>{ontology.to_string()}</option> }
         })
         .collect_view()
     };
@@ -39,41 +85,22 @@ pub fn SelectStaticInput() -> impl IntoView {
             <label class="block mb-1">"Premade Ontology:"</label>
             <select
                 class="p-1 w-full text-sm bg-gray-200 rounded border-b-0"
-                prop:value=selected_ontology
-                on:change=move |ev| {
-                    let target: HtmlInputElement = event_target::<
-                        HtmlInputElement,
-                    >(&ev);
-                    let name = target.value();
-                    if name.is_empty() {
-                        return;
-                    }
-                    selected_ontology.set(name.clone());
-                    loading.set(true);
-                    spawn_local_scoped_with_cancellation(async move {
-                        if let Err(e) = load_stored_ontology(name, DEFAULT_QUERY.to_string()).await {
-                            error_context.extend(e.records);
-                        }
-                        loading.set(false);
-                    });
-                }
+                prop:value=selected_ontology.read().to_string()
+                on:change=update_selected_ontology
             >
                 <option value="" disabled=true selected=true>
                     "Select an ontology"
                 </option>
                 {ontologies()}
             </select>
-            {move || {
-                loading
-                    .get()
-                    .then(|| {
-                        view! {
-                            <div class="mt-1 text-sm text-center">
-                                <LoadingCircle />
-                            </div>
-                        }
-                    })
-            }}
+            <Suspense fallback=move || {
+                view! {}
+            }>
+                {move || Suspend::new(async move {
+                    stored_res2.await;
+                    view! {}
+                })}
+            </Suspense>
         </div>
     }
 }

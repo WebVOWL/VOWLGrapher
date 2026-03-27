@@ -1,32 +1,109 @@
 use leptos::prelude::*;
 use leptos::server_fn::ServerFnError;
 use leptos::server_fn::codec::Rkyv;
+use std::fmt::Display;
 use std::path::Path;
 #[cfg(feature = "server")]
 use vowlr_database::prelude::VOWLRStore;
 use vowlr_util::prelude::VOWLRError;
 
-use crate::components::user_input::internal_sparql::load_graph;
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    strum::EnumIter,
+    rkyv::Archive,
+    rkyv::Deserialize,
+    rkyv::Serialize,
+    serde::Deserialize,
+    serde::Serialize,
+)]
+pub enum StoredOntology {
+    /// Friend of a Friend (FOAF) vocabulary.
+    ///
+    /// - Classes: 22
+    /// - Size: 13 kB
+    FriendOfAFriend,
+    /// Dummy data to benchmark render performance across visualization tools.
+    ///
+    /// - Classes: 2.5k
+    /// - Size: 160 kB
+    RenderingBenchmark,
+    /// Clinical Trials Ontology (CTO).
+    ///
+    /// - Classes: 273
+    /// - Size: 589 kB
+    ClinicalTrialsOntology,
+    /// The Environment Ontology (ENVO).
+    ///
+    /// - Classes: 6.9k
+    /// - Size: 10 MB
+    EnvironmentOntology,
+}
 
-fn ontology_file_path(name: &str) -> Result<&'static str, VOWLRError> {
-    match name {
-        "Clinical Trials Ontology (CTO) (273 classes)" => {
-            Ok("src/assets/data/ClinicalTrialOntology-merged.owl")
+impl StoredOntology {
+    pub const fn path(&self) -> &'static str {
+        match self {
+            Self::FriendOfAFriend => "src/assets/data/foaf.ttl",
+            Self::RenderingBenchmark => "src/assets/data/vowlr-benchmark-2500.ofn",
+            Self::ClinicalTrialsOntology => "src/assets/data/ClinicalTrialOntology-merged.owl",
+            Self::EnvironmentOntology => "src/assets/data/envo.owl",
         }
-        "Friend of a Friend (FOAF) vocabulary (22 classes)" => Ok("src/assets/data/foaf.ttl"),
-        "VOWL-R Benchmark Ontology (2.5k nodes)" => Ok("src/assets/data/vowlr-benchmark-2500.ofn"),
-        "The Environment Ontology (6.9k classes)" => Ok("src/assets/data/envo.owl"),
-        _ => Err(ServerFnError::ServerError(format!("Unknown ontology: {name}")).into()),
+    }
+}
+
+impl Display for StoredOntology {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FriendOfAFriend => {
+                write!(f, "Friend of a Friend (FOAF) vocabulary (22 classes)")
+            }
+
+            Self::RenderingBenchmark => {
+                write!(f, "Rendering Benchmark (2.5k classes)")
+            }
+            Self::ClinicalTrialsOntology => {
+                write!(f, "Clinical Trials Ontology (CTO) (273 classes)")
+            }
+            Self::EnvironmentOntology => {
+                write!(f, "The Environment Ontology (6.9k classes)")
+            }
+        }
+    }
+}
+
+impl TryFrom<&str> for StoredOntology {
+    type Error = ServerFnError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Friend of a Friend (FOAF) vocabulary (22 classes)" => Ok(Self::FriendOfAFriend),
+            "Rendering Benchmark (2.5k classes)" => Ok(Self::RenderingBenchmark),
+            "Clinical Trials Ontology (CTO) (273 classes)" => Ok(Self::ClinicalTrialsOntology),
+            "The Environment Ontology (6.9k classes)" => Ok(Self::EnvironmentOntology),
+
+            _ => Err(ServerFnError::ServerError(format!(
+                "Unknown ontology: {value}"
+            ))),
+        }
+    }
+}
+
+impl TryFrom<String> for StoredOntology {
+    type Error = ServerFnError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.as_str().try_into()
     }
 }
 
 #[server(input = Rkyv, output = Rkyv)]
-pub async fn load_stored_ontology(name: String, query: String) -> Result<(), VOWLRError> {
-    let file_path = ontology_file_path(&name)?;
-    let path = Path::new(file_path);
+pub async fn load_stored_ontology(ontology: StoredOntology) -> Result<(), VOWLRError> {
+    let path = Path::new(ontology.path());
     let store = VOWLRStore::default();
 
     store.insert_file(path, false).await?;
-    load_graph(query).await;
     Ok(())
 }

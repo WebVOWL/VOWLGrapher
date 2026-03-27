@@ -8,22 +8,16 @@ mod options_menu;
 // mod search_menu;1
 use crate::components::lists::{ListDetails, ListElement};
 use crate::components::menu::vertical_menu::VerticalMenu;
+use crate::components::user_input::internal_sparql::GraphDataContext;
 use crate::errors::ErrorLogContext;
 use about_menu::AboutMenu;
 use error_log::ErrorMenu;
 use export_menu::ExportMenu;
 use filter_menu::FilterMenu;
-use grapher::prelude::GraphDisplayData;
 use leptos::prelude::*;
 use ontology_menu::OntologyMenu;
 use options_menu::OptionsMenu;
 // use search_menu::SearchMenu;
-
-#[derive(Clone)]
-pub struct GraphDataContext {
-    pub graph_data: RwSignal<GraphDisplayData>,
-    pub total_graph_data: RwSignal<GraphDisplayData>,
-}
 
 #[component]
 fn WorkbenchMenuItems(#[prop(into)] title: String, children: Children) -> impl IntoView {
@@ -39,16 +33,11 @@ fn WorkbenchMenuItems(#[prop(into)] title: String, children: Children) -> impl I
 
 #[component]
 pub fn NewWorkbench() -> impl IntoView {
-    let graph_data = RwSignal::new(GraphDisplayData::new());
-    let total_graph_data = RwSignal::new(GraphDisplayData::new());
-
-    provide_context(GraphDataContext {
-        graph_data,
-        total_graph_data,
-    });
-
     let error_context = ErrorLogContext::default();
     provide_context(error_context);
+
+    let graph_context = GraphDataContext::default();
+    provide_context(graph_context);
 
     let error_title = Signal::derive(move || {
         let count = error_context.len();

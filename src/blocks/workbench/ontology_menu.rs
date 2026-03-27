@@ -1,6 +1,4 @@
 use super::WorkbenchMenuItems;
-use crate::blocks::workbench::GraphDataContext;
-use crate::components::progress_bar::LoadingCircle;
 use crate::components::user_input::internal_sparql::load_graph;
 use crate::components::user_input::stored_ontology::StoredOntology;
 use crate::components::user_input::stored_ontology::load_stored_ontology;
@@ -74,10 +72,10 @@ pub fn SelectStaticInput() -> impl IntoView {
 
     let ontologies = move || {
         StoredOntology::iter()
-        .map(|ontology| {
+            .map(|ontology| {
                 view! { <option value=ontology.to_string()>{ontology.to_string()}</option> }
-        })
-        .collect_view()
+            })
+            .collect_view()
     };
 
     view! {
@@ -107,10 +105,6 @@ pub fn SelectStaticInput() -> impl IntoView {
 
 #[component]
 pub fn UploadInput() -> impl IntoView {
-    let GraphDataContext {
-        graph_data: _,
-        total_graph_data: _,
-    } = expect_context::<GraphDataContext>();
     let error_context = expect_context::<ErrorLogContext>();
     let upload = FileUpload::new();
     let local_loading_done = upload.local_action.value();

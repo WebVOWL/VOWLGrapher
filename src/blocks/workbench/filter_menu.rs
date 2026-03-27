@@ -5,13 +5,13 @@ mod filtertype;
 mod meta_filter;
 mod properties;
 mod special_operators;
-
+use crate::components::user_input::internal_sparql::GraphDataContext;
 use crate::components::user_input::internal_sparql::load_graph;
 
-use super::{GraphDataContext, WorkbenchMenuItems};
+use super::WorkbenchMenuItems;
 use grapher::prelude::ElementType;
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
-use std::collections::HashMap;
+
 use vowlr_sparql_queries::prelude::QueryAssembler;
 
 use classes::{is_owl_class, is_rdf_class};
@@ -23,75 +23,36 @@ use special_operators::is_set_operator;
 #[component]
 pub fn FilterMenu() -> impl IntoView {
     let GraphDataContext {
-        graph_data: _,
-        total_graph_data,
+        element_counts,
+        element_checks,
     } = expect_context::<GraphDataContext>();
-    let element_counts = Memo::new(move |_| {
-        let mut counts: HashMap<ElementType, usize> = HashMap::new();
-        total_graph_data.with(|data| {
-            for element in &data.elements {
-                *counts.entry(*element).or_insert(0) += 1;
-            }
-        });
-        counts
-    });
-
-    // let char_counts = Memo::new(move |_| {
-    //     let mut counts: HashMap<Characteristic, usize> = HashMap::new();
-    //     total_graph_data.with(|data| {
-    //         for char_str in data.characteristics.values() {
-    //             for part in char_str.split('\n') {
-    //                 let c = match part.trim() {
-    //                     "transitive" => Some(Characteristic::Transitive),
-    //                     "functional" => Some(Characteristic::FunctionalProperty),
-    //                     "inverse functional" => Some(Characteristic::InverseFunctionalProperty),
-    //                     "symmetric" => Some(Characteristic::SymmetricProperty),
-    //                     "asymmetric" => Some(Characteristic::AsymmetricProperty),
-    //                     "reflexive" => Some(Characteristic::ReflexiveProperty),
-    //                     "irreflexive" => Some(Characteristic::IrreflexiveProperty),
-    //                     _ => None,
-    //                 };
-    //                 if let Some(characteristic) = c {
-    //                     *counts.entry(characteristic).or_insert(0) += 1;
-    //                 }
-    //             }
-    //         }
-    //     });
-    //     counts
-    // });
-
-    let element_checks = RwSignal::new(HashMap::new());
-
-    element_checks.update_untracked(|map| {
-        for elem in element_counts.read_untracked().keys() {
-            map.insert(*elem, true);
-        }
-    });
-
-    // let mut initial_char_checks = HashMap::new();
-    // let all_chars = vec![
-    //     Characteristic::Transitive,
-    //     Characteristic::FunctionalProperty,
-    //     Characteristic::InverseFunctionalProperty,
-    //     Characteristic::ReflexiveProperty,
-    //     Characteristic::IrreflexiveProperty,
-    //     Characteristic::SymmetricProperty,
-    //     Characteristic::AsymmetricProperty,
-    // ];
-    // for characteristic in &all_chars {
-    //     initial_char_checks.insert(characteristic.clone(), true);
-    // }
-    // let (char_checks, set_char_checks) = signal(initial_char_checks);
-
-    // 5. Characteristics
-    // let characteristics = all_chars.clone();
 
     // Accordion State
     let open_owl = RwSignal::new(false);
     let open_rdf = RwSignal::new(false);
     let open_set_operations = RwSignal::new(false);
     let open_properties = RwSignal::new(false);
-    // let (open_chars, set_open_chars) = signal(false);
+
+    // let _ = Resource::new_rkyv(
+    //     move || element_checks.get(),
+    //     async move |checks| {
+    //         let query =
+    //             QueryAssembler::assemble_filtered_query(&checks /* , char_checks.get()*/);
+    //         leptos::logging::log!("{}", query);
+
+    //         load_graph(query).await;
+    //     },
+    // );
+
+    // Effect::new(move || {
+    //     let query = QueryAssembler::assemble_filtered_query(&element_checks.read());
+
+    //     leptos::logging::log!("{}", query);
+
+    //     spawn_local_scoped_with_cancellation(async move {
+    //         load_graph(query).await;
+    //     });
+    // });
 
     Effect::watch(
         move || element_checks.get(),
@@ -106,6 +67,15 @@ pub fn FilterMenu() -> impl IntoView {
         },
         false,
     );
+
+    // let _ = Signal::derive(move || {
+    //     let query = QueryAssembler::assemble_filtered_query(&element_checks.get());
+    //     leptos::logging::log!("{}", query);
+
+    //     spawn_local_scoped_with_cancellation(async move {
+    //         load_graph(query).await;
+    //     });
+    // });
 
     view! {
         <WorkbenchMenuItems title="Filter by Type">

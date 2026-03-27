@@ -79,7 +79,7 @@ impl VOWLRStore {
             .await?;
         info!(
             "Loaded {} quads in {} s",
-            self.session.len().await.unwrap(),
+            self.session.len().await?,
             Instant::now()
                 .checked_duration_since(start_time)
                 .unwrap_or(Duration::new(0, 0))
@@ -92,8 +92,7 @@ impl VOWLRStore {
         let mut file = File::create(path)?;
         let mut results = parse_stream_to(self.session.stream().await?, DataType::OWL).await?;
         while let Some(result) = results.next().await {
-            let result = result.unwrap();
-            std::io::Write::write_all(&mut file, &result)?;
+            std::io::Write::write_all(&mut file, &result?)?;
         }
 
         Ok(())
@@ -146,7 +145,7 @@ impl VOWLRStore {
                 .await?;
             info!(
                 "Loaded {} quads in {} s",
-                self.session.len().await.unwrap(),
+                self.session.len().await?,
                 Instant::now()
                     .checked_duration_since(start_time)
                     .unwrap_or(Duration::new(0, 0))

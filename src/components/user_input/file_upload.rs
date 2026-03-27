@@ -14,8 +14,10 @@ use std::path::Path;
 use std::rc::Rc;
 #[cfg(feature = "server")]
 use vowlr_database::prelude::VOWLRStore;
-use vowlr_util::prelude::DataType;
+use vowlr_util::prelude::{DataType, VOWLRError};
 use web_sys::{FileList, FormData};
+
+use crate::errors::ClientErrorKind;
 
 const MAX_FILE_SIZE_BYTES: usize = 50 * 1024 * 1024;
 
@@ -86,20 +88,19 @@ pub async fn ontology_progress(filename: String) -> Result<TextStream, ServerFnE
 #[server(
     input = MultipartFormData,
 )]
-pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), ServerFnError> {
+pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWLRError> {
     let mut session = VOWLRStore::default();
-    #[expect(
-        clippy::expect_used,
-        reason = "MultipartData::into_inner always returns Some on the server-side"
-    )]
-    let mut data = data.into_inner().expect("data must be server-side");
+
+    let mut data = data
+        .into_inner()
+        .ok_or_else(|| ServerFnError::new("data must be server-side"))?;
     let mut count = 0;
     let mut dtype = DataType::UNKNOWN;
     while let Ok(Some(mut field)) = data.next_field().await {
         let name = field.file_name().unwrap_or_default().to_string();
 
         if name.is_empty() {
-            return Err(ServerFnError::new("Received empty file string"));
+            return Err(ServerFnError::new("Received empty file string").into());
         }
 
         info!("Receiving file '{name}'");
@@ -118,7 +119,8 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), Serv
                 return Err(ServerFnError::ServerError(format!(
                     "File {name} exceeds the maximum allowed size of {}MB.",
                     MAX_FILE_SIZE_BYTES / 1024 / 1024
-                )));
+                ))
+                .into());
             }
 
             session.upload_chunk(&chunk).await?;
@@ -136,15 +138,13 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), Serv
 
 /// Remote reads url and calls for the datatype label and returns (label, data content)
 #[server]
-pub async fn handle_remote(url: String) -> Result<(DataType, usize), ServerFnError> {
+pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError> {
     debug!("Sending request to remote: '{url}'");
     let client = Client::new();
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
-            return Err(ServerFnError::ServerError(format!(
-                "Error fetching URL: {e}"
-            )));
+            return Err(ServerFnError::ServerError(format!("Error fetching URL: {e}")).into());
         }
     };
 
@@ -154,17 +154,15 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), ServerFnErr
             return Err(ServerFnError::ServerError(format!(
                 "Remote file exceeds the maximum allowed size of {}MB.",
                 MAX_FILE_SIZE_BYTES / 1024 / 1024
-            )));
+            ))
+            .into());
         }
     }
 
     let mut session = VOWLRStore::default();
     let progress_key = url.clone();
     progress::reset(&progress_key);
-    session
-        .start_upload(&url)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    session.start_upload(&url).await?;
 
     let mut total = 0;
     let dtype = Path::new(&url).into();
@@ -180,10 +178,7 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), ServerFnErr
     }
 
     progress::remove(&progress_key);
-    session
-        .complete_upload()
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    session.complete_upload().await?;
     Ok((dtype, total))
 }
 
@@ -193,7 +188,7 @@ pub async fn handle_sparql(
     endpoint: String,
     query: String,
     format: Option<String>,
-) -> Result<(DataType, usize), ServerFnError> {
+) -> Result<(DataType, usize), VOWLRError> {
     let client = Client::new();
     let mut session = VOWLRStore::default();
 
@@ -224,10 +219,7 @@ pub async fn handle_sparql(
             chunk_result.map_err(|e| ServerFnError::new(format!("Error reading chunk: {e}")))?;
 
         total += chunk.len();
-        session
-            .upload_chunk(&chunk)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        session.upload_chunk(&chunk).await?;
         progress::add_chunk(&progress_key, chunk.len()).await;
     }
 
@@ -245,7 +237,7 @@ pub async fn handle_sparql(
 pub struct UploadProgress {
     pub filename: RwSignal<String>,
     pub url_name: RwSignal<String>,
-    pub file_size: RwSignal<usize>,
+    pub file_size: RwSignal<f64>,
     pub upload_progress: RwSignal<i32>,
     pub parsing_status: RwSignal<String>,
     pub parsing_done: RwSignal<bool>,
@@ -257,7 +249,7 @@ impl UploadProgress {
         Self {
             filename: RwSignal::new(String::new()),
             url_name: RwSignal::new(String::new()),
-            file_size: RwSignal::new(0),
+            file_size: RwSignal::new(0.0),
             upload_progress: RwSignal::new(0),
             parsing_status: RwSignal::new(String::new()),
             parsing_done: RwSignal::new(false),
@@ -266,7 +258,7 @@ impl UploadProgress {
     }
 
     #[expect(unused, reason = "not yet implemented")]
-    fn track_progress<F>(&self, key: &str, total_size: Option<usize>, is_url: bool, dispatch: F)
+    fn track_progress<F>(&self, key: &str, total_size: Option<f64>, is_url: bool, dispatch: F)
     where
         F: FnOnce() + 'static,
     {
@@ -338,33 +330,29 @@ impl UploadProgress {
         });
     }
 
-    pub fn upload_files<F>(&self, file_list: &FileList, dispatch: F)
+    #[allow(
+        clippy::missing_errors_doc,
+        reason = "why does clippy only complain about this method? (TODO: Add docs to all functions)"
+    )]
+    pub fn upload_files<F>(&self, file_list: &FileList, dispatch: F) -> Result<(), VOWLRError>
     where
         F: FnOnce(FormData) + 'static,
     {
         let len = file_list.length();
-        #[expect(clippy::expect_used, reason = "this should never fail")]
-        let form = FormData::new().expect("creating formdata should succeed (see https://developer.mozilla.org/en-US/docs/Web/API/FormData/append)");
+        let form =
+            FormData::new().map_err(|e| ClientErrorKind::JavaScriptError(format!("{e:#?}")))?;
         info!("Preparing filelist with {len} files");
 
         // let mut total_size = 0;
         if let Some(file) = file_list.item(0) {
             self.filename.set(file.name());
-
-            // TODO: handle file sizes > usize::MAX
-            #[expect(clippy::cast_possible_truncation)]
-            #[expect(clippy::cast_sign_loss, reason = "file size cannot be negative")]
-            self.file_size.set(file.size() as usize);
+            self.file_size.set(file.size());
         }
 
         for i in 0..len {
             if let Some(file) = file_list.item(i) {
-                #[expect(
-                    clippy::expect_used,
-                    reason = "this should never fail"
-                )]
                 form.append_with_blob("file_to_upload", &file)
-                    .expect("appending to formdata should succeed (see https://developer.mozilla.org/en-US/docs/Web/API/FormData/append)");
+                    .map_err(|e| ClientErrorKind::JavaScriptError(format!("{e:#?}")))?;
             }
         }
 
@@ -372,6 +360,7 @@ impl UploadProgress {
         self.track_progress(&fname, Some(self.file_size.get()), false, move || {
             dispatch(form);
         });
+        Ok(())
     }
 
     pub fn upload_url<F>(&self, url: &str, dispatch: F)
@@ -405,11 +394,11 @@ impl Default for UploadProgress {
 #[derive(Clone)]
 pub struct FileUpload {
     pub mode: RwSignal<String>,
-    pub local_action: Action<FormData, Result<(DataType, usize), ServerFnError>>,
-    pub remote_action: Action<String, Result<(DataType, usize), ServerFnError>>,
+    pub local_action: Action<FormData, Result<(DataType, usize), VOWLRError>>,
+    pub remote_action: Action<String, Result<(DataType, usize), VOWLRError>>,
     #[expect(clippy::type_complexity)]
     pub sparql_action:
-        Action<(String, String, Option<String>), Result<(DataType, usize), ServerFnError>>,
+        Action<(String, String, Option<String>), Result<(DataType, usize), VOWLRError>>,
     pub tracker: Rc<UploadProgress>,
 }
 
@@ -418,18 +407,17 @@ impl FileUpload {
         let mode = RwSignal::new("local".to_string());
 
         let local_action =
-            Action::<FormData, Result<(DataType, usize), ServerFnError>>::new_local(|data| {
+            Action::<FormData, Result<(DataType, usize), VOWLRError>>::new_local(|data| {
                 handle_local(data.clone().into())
             });
 
-        let remote_action =
-            Action::<String, Result<(DataType, usize), ServerFnError>>::new(|url| {
-                handle_remote(url.clone())
-            });
+        let remote_action = Action::<String, Result<(DataType, usize), VOWLRError>>::new(|url| {
+            handle_remote(url.clone())
+        });
 
         let sparql_action = Action::<
             (String, String, Option<String>),
-            Result<(DataType, usize), ServerFnError>,
+            Result<(DataType, usize), VOWLRError>,
         >::new(|(endpoint, query, format)| {
             handle_sparql(endpoint.clone(), query.clone(), format.clone())
         });
@@ -445,7 +433,7 @@ impl FileUpload {
         }
     }
 
-    pub fn get_result(&self) -> Option<Result<(DataType, usize), ServerFnError>> {
+    pub fn get_result(&self) -> Option<Result<(DataType, usize), VOWLRError>> {
         match self.mode.get().as_str() {
             "local" => self.local_action.value().get(),
             "remote" => self.remote_action.value().get(),

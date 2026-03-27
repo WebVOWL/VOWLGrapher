@@ -100,7 +100,7 @@ pub fn UploadInput() -> impl IntoView {
                     });
                 }
                 Err(e) => {
-                    error_context.push(e.into());
+                    error_context.extend(e.records);
                 }
             }
         }
@@ -115,11 +115,39 @@ pub fn UploadInput() -> impl IntoView {
                     });
                 }
                 Err(e) => {
-                    error_context.push(e.into());
+                    error_context.extend(e.records);
                 }
             }
         }
     });
+
+    let upload_files = move |ev: Event| {
+        let input: HtmlInputElement = event_target(&ev);
+        if let Some(files) = input.files() {
+            if let Some(file) = files.item(0)
+                && file.size() > MAX_FILE_SIZE_BYTES
+            {
+                let err_msg = format!(
+                    "File {} exceeds the maximum allowed size of {}MB.",
+                    file.name(),
+                    MAX_FILE_SIZE_BYTES / 1024.0 / 1024.0
+                );
+                error_context.push(ClientErrorKind::FileUploadError(err_msg).into());
+                input.set_value("");
+                return;
+            }
+
+            if let Err(e) = tracker_file.upload_files(&files, move |form| {
+                info!("Uploading files");
+                upload.local_action.dispatch_local(form);
+                upload.mode.set("local".to_string());
+            }) {
+                error_context.extend(e.records);
+            }
+        } else {
+            info!("Found no files to upload");
+        }
+    };
 
     view! {
         <div class="mb-2">
@@ -151,33 +179,7 @@ pub fn UploadInput() -> impl IntoView {
                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     multiple=""
                     accept=".owl,.ofn,.owx,.xml,.json,.ttl,.rdf,.nt,.nq,.trig,.jsonld,.n3,.srj,.srx,.json,.xml,.csv,.tsv"
-                    on:input=move |ev| {
-                        let input: HtmlInputElement = event_target(&ev);
-                        if let Some(files) = input.files() {
-                            if let Some(file) = files.item(0) && file.size() > MAX_FILE_SIZE_BYTES {
-                                let err_msg = format!(
-                                    "File {} exceeds the maximum allowed size of {}MB.",
-                                    file.name(), MAX_FILE_SIZE_BYTES / 1024.0 / 1024.0
-                                );
-                                error_context
-                                    .push(ClientErrorKind::FileUploadError(err_msg).into());
-                                input.set_value("");
-                                return;
-                            }
-
-                            tracker_file
-                                .upload_files(
-                                    &files,
-                                    move |form| {
-                                        info!("Uploading files");
-                                        upload.local_action.dispatch_local(form);
-                                        upload.mode.set("local".to_string());
-                                    },
-                                );
-                        } else {
-                            info!("Found no files to upload");
-                        }
-                    }
+                    on:input=upload_files
                 />
                 <label
                     for="file-upload"

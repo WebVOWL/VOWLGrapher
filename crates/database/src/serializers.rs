@@ -2,26 +2,30 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
     hash::{Hash, Hasher},
+    rc::Rc,
 };
 
 use grapher::prelude::{Characteristic, ElementType, GraphDisplayData, OwlEdge, OwlType};
 use log::error;
-use oxrdf::Term;
 use vowlr_util::prelude::ErrorRecord;
 
-use crate::serializers::util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES};
+use crate::serializers::{
+    index::TermIndex,
+    util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES},
+};
 
 pub mod frontend;
+pub mod index;
 pub mod util;
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct Triple {
     /// The subject
-    id: Term,
+    id: usize,
     /// The predicate
-    element_type: Term,
+    element_type: usize,
     /// The object
-    target: Option<Term>,
+    target: Option<usize>,
 }
 
 impl Display for Triple {
@@ -42,7 +46,7 @@ impl Display for Triple {
 }
 
 impl Triple {
-    pub fn new(id: Term, element_type: Term, target: Option<Term>) -> Self {
+    pub fn new(id: usize, element_type: usize, target: Option<usize>) -> Self {
         Self {
             id,
             element_type,
@@ -53,14 +57,14 @@ impl Triple {
 
 #[derive(Debug, Clone, Eq)]
 pub struct Edge {
-    /// The subject IRI
-    subject: Term,
+    /// The subject term
+    subject: usize,
     /// The element type
     element_type: ElementType,
-    /// The object IRI
-    object: Term,
-    /// The property IRI
-    property: Option<Term>,
+    /// The object term
+    object: usize,
+    /// The property term
+    property: Option<usize>,
 }
 
 impl PartialEq for Edge {
@@ -135,6 +139,10 @@ pub struct RestrictionState {
 }
 
 pub struct SerializationDataBuffer {
+    /// Maps terms to integer ids and vice-versa.
+    ///
+    /// Reduces memory usage and allocations.
+    term_index: TermIndex,
     /// Stores all resolved node elements.
     ///
     /// These elements may mutate during serialization
@@ -143,7 +151,7 @@ pub struct SerializationDataBuffer {
     ///
     /// - Key = The subject IRI of a triple.
     /// - Value = The ElementType of `Key`.
-    node_element_buffer: HashMap<Term, ElementType>,
+    node_element_buffer: HashMap<usize, ElementType>,
     /// Stores all resolved edge elements.
     ///
     /// These elements may mutate during serialization
@@ -152,7 +160,7 @@ pub struct SerializationDataBuffer {
     ///
     /// - Key = The subject IRI of a triple.
     /// - Value = The ElementType of `Key`.
-    edge_element_buffer: HashMap<Term, ElementType>,
+    edge_element_buffer: HashMap<usize, ElementType>,
     /// Keeps track of edges that should point to a node different
     /// from their definition.
     ///
@@ -190,21 +198,16 @@ pub struct SerializationDataBuffer {
     ///     ex:Mother owl:intersectionOf ex:blanknode2
     /// ```
     /// In this case, `blanknode1` is effectively omitted from serialization.
-    edge_redirection: HashMap<Term, Term>,
+    edge_redirection: HashMap<usize, usize>,
     /// Maps from element IRI to a set of the edges that include it.
     ///
     /// Used to remap when nodes are merges.
-    edges_include_map: HashMap<Term, HashSet<Edge>>,
-    /// Stores indices of element instances.
-    ///
-    /// Used in cases where multiple elements should refer to a particular instance.
-    /// E.g. multiple properties referring to the same instance of owl:Thing.
-    global_element_mappings: HashMap<ElementType, usize>,
+    edges_include_map: HashMap<usize, HashSet<Rc<Edge>>>,
     /// Canonical synthesized Thing node per resolved domain.
     ///
     /// This lets structurally-defined ranges like complement/union expressions
     /// collapse to the same Thing node that direct owl:Thing ranges use.
-    anchor_thing_map: HashMap<Term, Term>,
+    anchor_thing_map: HashMap<usize, usize>,
     /// Partially assembled restriction metadata keyed by the restriction node.
     restriction_buffer: HashMap<Term, RestrictionState>,
     /// Final display cardinalities keyed by the concrete edge that will be emitted.
@@ -213,33 +216,33 @@ pub struct SerializationDataBuffer {
     ///
     /// - Key = The property IRI.
     /// - Value = The edges of the property.
-    property_edge_map: HashMap<Term, Edge>,
+    property_edge_map: HashMap<usize, Rc<Edge>>,
     /// Stores the domains of a property.
     ///
     /// - Key = The property IRI.
     /// - Value = The domains of the property.
-    property_domain_map: HashMap<Term, HashSet<Term>>,
+    property_domain_map: HashMap<usize, HashSet<usize>>,
     /// Stores the ranges of a property.
     ///
     /// - Key = The property IRI.
     /// - Value = The ranges of the property.
-    property_range_map: HashMap<Term, HashSet<Term>>,
+    property_range_map: HashMap<usize, HashSet<usize>>,
     /// Stores labels of subject/object.
     ///
     /// - Key = The IRI the label belongs to.
     /// - Value = The label.
-    label_buffer: HashMap<Term, String>,
+    label_buffer: HashMap<usize, String>,
     /// Stores labels of edges.
     ///
     /// - Key = The edge.
     /// - Value = The label.
-    edge_label_buffer: HashMap<Edge, String>,
+    edge_label_buffer: HashMap<Rc<Edge>, String>,
     /// Edges in graph, to avoid duplicates
-    edge_buffer: HashSet<Edge>,
+    edge_buffer: HashSet<Rc<Edge>>,
     /// Maps from edge to its characteristic.
-    edge_characteristics: HashMap<Edge, HashSet<Characteristic>>,
+    edge_characteristics: HashMap<Rc<Edge>, HashSet<Characteristic>>,
     /// Maps from node iri to its characteristics.
-    node_characteristics: HashMap<Term, HashSet<Characteristic>>,
+    node_characteristics: HashMap<usize, HashSet<Characteristic>>,
     /// Maps from node iri to number of individuals
     individual_count_buffer: HashMap<Term, u32>,
     /// Stores unresolved triples.
@@ -247,7 +250,7 @@ pub struct SerializationDataBuffer {
     /// - Key = The unresolved IRI of the triple
     ///   can be either the subject, object or both (in this case, subject is used)
     /// - Value = The unresolved triples.
-    unknown_buffer: HashMap<Term, HashSet<Triple>>,
+    unknown_buffer: HashMap<usize, HashSet<Rc<Triple>>>,
     /// Stores errors encountered during serialization.
     failed_buffer: Vec<ErrorRecord>,
     /// The base IRI of the document.
@@ -258,11 +261,11 @@ pub struct SerializationDataBuffer {
 impl SerializationDataBuffer {
     pub fn new() -> Self {
         Self {
+            term_index: TermIndex::new(),
             node_element_buffer: HashMap::new(),
             edge_element_buffer: HashMap::new(),
             edge_redirection: HashMap::new(),
             edges_include_map: HashMap::new(),
-            global_element_mappings: HashMap::new(),
             anchor_thing_map: HashMap::new(),
             restriction_buffer: HashMap::new(),
             edge_cardinality_buffer: HashMap::new(),
@@ -282,16 +285,16 @@ impl SerializationDataBuffer {
     }
 }
 impl SerializationDataBuffer {
-    pub fn add_property_edge(&mut self, property_iri: Term, edge: Edge) {
+    pub fn add_property_edge(&mut self, property_iri: usize, edge: Rc<Edge>) {
         self.property_edge_map.insert(property_iri, edge);
     }
-    pub fn add_property_domain(&mut self, property_iri: Term, domain: Term) {
+    pub fn add_property_domain(&mut self, property_iri: usize, domain: usize) {
         self.property_domain_map
             .entry(property_iri)
             .or_default()
             .insert(domain);
     }
-    pub fn add_property_range(&mut self, property_iri: Term, range: Term) {
+    pub fn add_property_range(&mut self, property_iri: usize, range: usize) {
         self.property_range_map
             .entry(property_iri)
             .or_default()
@@ -313,17 +316,21 @@ impl Default for SerializationDataBuffer {
 impl From<SerializationDataBuffer> for GraphDisplayData {
     fn from(mut val: SerializationDataBuffer) -> Self {
         let mut display_data = GraphDisplayData::new();
-        let mut iricache: HashMap<Term, usize> = HashMap::new();
-        let mut inverse_edge_indices: HashMap<Term, usize> = HashMap::new();
 
-        for (iri, element) in val.node_element_buffer.into_iter() {
-            let label = val.label_buffer.remove(&iri);
+        // Maps an RDF term's corresponding ID to a [`GraphDisplayData`] index.
+        let mut iricache: HashMap<usize, usize> = HashMap::new();
+
+        // Maps an RDF term's corresponding ID to a [`GraphDisplayData`] index.
+        let mut inverse_edge_indices: HashMap<usize, usize> = HashMap::new();
+
+        for (term_id, element) in val.node_element_buffer.into_iter() {
+            let label = val.label_buffer.remove(&term_id);
             if label.is_none() {
-                error!("Label not found for iri: {}, using None", iri);
+                error!("Label not found for iri: {}, using None", term_id);
             }
             display_data.labels.push(label);
             display_data.elements.push(element);
-            iricache.insert(iri, display_data.elements.len() - 1);
+            iricache.insert(term_id, display_data.elements.len() - 1);
         }
 
         for edge in val.edge_buffer.iter() {
@@ -440,10 +447,6 @@ impl Display for SerializationDataBuffer {
                 writeln!(f, "\t\t\t{}", edge)?;
             }
             writeln!(f, "\t\t}}")?;
-        }
-        writeln!(f, "\tglobal_element_mappings:")?;
-        for (element, index) in self.global_element_mappings.iter() {
-            writeln!(f, "\t\t{} : {}", element, index)?;
         }
         writeln!(f, "\tlabel_buffer:")?;
         for (iri, label) in self.label_buffer.iter() {

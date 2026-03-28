@@ -1,4 +1,4 @@
-use std::panic::Location;
+use std::{panic::Location, rc::Rc};
 
 use crate::serializers::Triple;
 use oxrdf::{BlankNodeIdParseError, IriParseError};
@@ -7,15 +7,15 @@ use vowlr_util::prelude::{ErrorRecord, ErrorSeverity, ErrorType, VOWLRError, get
 #[derive(Debug)]
 pub enum SerializationErrorKind {
     /// An error raised when the object of a triple is required but missing.
-    MissingObject(Triple, String),
+    MissingObject(Rc<Triple>, String),
     /// An error raised when the subject of a triple is required but missing.
-    MissingSubject(Triple, String),
+    MissingSubject(Rc<Triple>, String),
     /// An error raised when the serializer encountered an unrecoverable problem.
-    SerializationFailed(Triple, String),
+    SerializationFailed(Rc<Triple>, String),
     /// An error raised during Iri or IriRef validation.
-    IriParseError(String, IriParseError),
-    /// An error raised during BlankNode IDs validation
-    BlankNodeParseError(String, BlankNodeIdParseError),
+    IriParseError(String, Box<IriParseError>),
+    /// An error raised during BlankNode IDs validation.
+    BlankNodeParseError(String, Box<BlankNodeIdParseError>),
     /// An error raised if the query type is not supported.
     ///
     /// Some types are: SELECT, ASK, CONSTRUCT.

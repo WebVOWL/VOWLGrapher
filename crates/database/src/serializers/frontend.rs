@@ -1,16 +1,20 @@
 use std::{
     collections::{HashMap, HashSet},
     mem::take,
+    rc::Rc,
     time::{Duration, Instant},
 };
 
 use super::{Edge, RestrictionRenderMode, SerializationDataBuffer, Triple};
 use crate::{
     errors::{SerializationError, SerializationErrorKind},
-    serializers::util::{
-        PROPERTY_EDGE_TYPES, is_reserved, is_synthetic,
-        synthetic::{SYNTH_LITERAL, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING},
-        synthetic_iri, trim_tag_circumfix, try_resolve_reserved,
+    serializers::{
+        index::TermIndex,
+        util::{
+            PROPERTY_EDGE_TYPES, is_reserved, is_synthetic,
+            synthetic::{SYNTH_LITERAL, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING},
+            synthetic_iri, trim_tag_circumfix, try_resolve_reserved,
+        },
     },
     vocab::{owl, rdf, rdfs, xsd},
 };
@@ -29,7 +33,13 @@ use unescape_zero_copy::unescape_default;
 use vowlr_parser::errors::VOWLRStoreError;
 use vowlr_util::prelude::{ErrorRecord, VOWLRError};
 
-pub struct GraphDisplayDataSolutionSerializer;
+pub struct GraphDisplayDataSolutionSerializer {
+    /// Maps terms to integer ids and vice-versa.
+    ///
+    /// Reduces memory usage and allocations.
+    term_index: TermIndex,
+}
+
 pub enum SerializationStatus {
     Serialized,
     Deferred,
@@ -37,7 +47,9 @@ pub enum SerializationStatus {
 
 impl GraphDisplayDataSolutionSerializer {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            term_index: TermIndex::new(),
+        }
     }
 
     /// Serializes a query solution stream into the data buffer.
@@ -50,10 +62,12 @@ impl GraphDisplayDataSolutionSerializer {
         data: &mut GraphDisplayData,
         mut solution_stream: QuerySolutionStream,
     ) -> Result<Option<VOWLRError>, VOWLRError> {
-        let mut count: u32 = 0;
+        let mut count: u64 = 0;
         info!("Serializing query solution stream...");
         let start_time = Instant::now();
         let mut data_buffer = SerializationDataBuffer::new();
+
+        // TODO: solution_stream.next() should return owned values.
         while let Some(maybe_solution) = solution_stream.next().await {
             let solution = match maybe_solution {
                 Ok(solution) => solution,
@@ -68,17 +82,25 @@ impl GraphDisplayDataSolutionSerializer {
                 continue;
             };
 
-            self.extract_label(&mut data_buffer, solution.get("label"), id_term);
+            let subject_term_id = data_buffer.term_index.insert(id_term.to_owned());
+            self.extract_label(
+                &mut data_buffer,
+                solution.get("label"),
+                id_term,
+                &subject_term_id,
+            );
 
             let Some(node_type_term) = solution.get("nodeType") else {
                 continue;
             };
 
-            let triple: Triple = Triple {
-                id: id_term.to_owned(),
-                element_type: node_type_term.to_owned(),
-                target: solution.get("target").map(|term| term.to_owned()),
-            };
+            let triple = Rc::new(Triple {
+                id: subject_term_id,
+                element_type: data_buffer.term_index.insert(node_type_term.to_owned()),
+                target: solution
+                    .get("target")
+                    .map(|term| data_buffer.term_index.insert(term.to_owned())),
+            });
 
             self.write_node_triple(&mut data_buffer, triple)
                 .or_else(|e| {
@@ -150,9 +172,10 @@ impl GraphDisplayDataSolutionSerializer {
         data_buffer: &mut SerializationDataBuffer,
         label: Option<&Term>,
         id_term: &Term,
+        subject_term_id: &usize,
     ) {
         // Prevent overriding labels
-        if data_buffer.label_buffer.contains_key(id_term) {
+        if data_buffer.label_buffer.contains_key(subject_term_id) {
             return;
         }
 
@@ -182,7 +205,7 @@ impl GraphDisplayDataSolutionSerializer {
                     trace!("Inserting label '{clean_label}' for iri '{}'", id_term);
                     data_buffer
                         .label_buffer
-                        .insert(id_term.clone(), clean_label);
+                        .insert(*subject_term_id, clean_label);
                 } else {
                     debug!("Empty label detected for iri '{}'", id_term);
                 }
@@ -197,7 +220,7 @@ impl GraphDisplayDataSolutionSerializer {
                             trace!("Inserting fragment '{frag}' as label for iri '{}'", id_term);
                             data_buffer
                                 .label_buffer
-                                .insert(id_term.clone(), frag.to_string());
+                                .insert(*subject_term_id, frag.to_string());
                         }
                         // Case 2.2: Look for path in iri
                         None => {
@@ -210,7 +233,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     );
                                     data_buffer
                                         .label_buffer
-                                        .insert(id_term.clone(), path.1.to_string());
+                                        .insert(*subject_term_id, path.1.to_string());
                                 }
                                 None => {
                                     debug!("No path found in iri '{iri}'");
@@ -1246,9 +1269,18 @@ impl GraphDisplayDataSolutionSerializer {
     fn write_node_triple(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: Triple,
+        triple: Rc<Triple>,
     ) -> Result<SerializationStatus, SerializationError> {
-        match &triple.element_type {
+        let predicate_term = data_buffer
+            .term_index
+            .get(&triple.element_type)
+            .ok_or_else(|| {
+                SerializationErrorKind::SerializationFailed(
+                    triple.clone(),
+                    "Failed to find predicate in term index".to_string(),
+                )
+            })?;
+        match *predicate_term {
             Term::BlankNode(bnode) => {
                 // The query must never put blank nodes in the ?nodeType variable
                 let msg = format!("Illegal blank node during serialization: '{bnode}'");

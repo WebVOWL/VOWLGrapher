@@ -1,303 +1,321 @@
-    PREFIX owl: <http://www.w3.org/2002/07/owl#>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-    PREFIX vowlr: <http://www.example.com/iri#>
-    PREFIX xml: <http://www.w3.org/XML/1998/namespace>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX vowlr: <http://www.example.com/iri#>
+PREFIX xml: <http://www.w3.org/XML/1998/namespace>
+            SELECT DISTINCT ?id ?nodeType ?target ?label
+            WHERE {
+                {
+                # AnonymousClass
+                {
+                    ?id a owl:Class .
+                    FILTER(!isIRI(?id))
+                }
+                UNION
+                {
+                    ?id a owl:Restriction .
+                    FILTER(!isIRI(?id))
+                }
 
-    SELECT ?id ?nodeType ?target ?label
-    WHERE {
-        GRAPH <graph_uri> {
-            {
-            # 1. Identify Named Classes
-            ?id a owl:Class .
-            FILTER(isIRI(?id))
-            BIND(owl:Class AS ?nodeType)
-            }
-            UNION
-            {
-                ?id a owl:Class
-                FILTER(!isIRI(?id))
+                FILTER NOT EXISTS {
+                    ?named rdfs:subClassOf ?id .
+                    FILTER(isIRI(?named))
+                    {
+                        { ?id owl:unionOf ?u }
+                        UNION
+                        { ?id owl:intersectionOf ?i }
+                        UNION
+                        { ?id owl:complementOf ?c }
+                        UNION
+                        { ?id owl:disjointUnionOf ?d }
+                    }
+                }
+
                 BIND("blanknode" AS ?nodeType)
-            }
-            UNION
-            {
-                ?id a owl:Ontology .
-                BIND(owl:Ontology AS ?nodeType)
-            }
-            UNION
-            {
-                # Identify Intersections
-                # Any node (usually blank) that is the subject of an intersectionOf list
-                ?id owl:intersectionOf ?target .
-                BIND(owl:intersectionOf AS ?nodeType)
-            }
-            UNION
-            {
-                # 3. Identify Unions
-                ?id owl:unionOf ?list .
-                BIND(owl:unionOf AS ?nodeType)
-            }
-            # UNION
-            # {
-            #     ?id a owl:Restriction .
-            #     BIND(owl:Restriction AS ?nodeType)
-            # }
-            UNION
-            {
-                # COMPLEMENT
-                ?id owl:complementOf ?target .
+                } UNION {
+                # owl:Class
+                ?id a owl:Class .
+                FILTER(isIRI(?id))
+                BIND(owl:Class AS ?nodeType)
+                } UNION {
+                # owl:complementOf
+                {
+                    ?id owl:complementOf ?target .
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:complementOf ?target .
+                    BIND(?named AS ?id)
+                }
                 BIND(owl:complementOf AS ?nodeType)
-            }
-            UNION
-            {
-                # DEPRECATED CLASS
+                } UNION {
                 ?id a owl:DeprecatedClass .
                 BIND(owl:DeprecatedClass AS ?nodeType)
-            }
-            UNION
-            {
-                #EQUILVALENT CLASS
+                } UNION {
                 ?id owl:equivalentClass ?target
                 BIND(owl:equivalentClass AS ?nodeType)
-            }
-            UNION
-            {
-                # DISJONT UNION
-                ?id owl:disjointUnionOf ?target .
+                } UNION {
+                # owl:disjointUnionOf
+                {
+                    ?id owl:disjointUnionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:disjointUnionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    BIND(?named AS ?id)
+                }
                 BIND(owl:disjointUnionOf AS ?nodeType)
-            }
-            UNION
-            {
-                # THING
+                } UNION {
+                # owl:intersectionOf
+                {
+                    ?id owl:intersectionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:intersectionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    BIND(?named AS ?id)
+                }
+                BIND(owl:intersectionOf AS ?nodeType)
+                } UNION {
                 ?id a owl:Thing .
                 BIND(owl:Thing AS ?nodeType)
-            }
-            UNION
-            {
-                # RDFS CLASS
+                } UNION {
+                # owl:unionOf
+                {
+                    ?id owl:unionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    FILTER NOT EXISTS {
+                        ?named rdfs:subClassOf ?id .
+                        FILTER(isIRI(?named))
+                        FILTER(!isIRI(?id))
+                    }
+                }
+                UNION
+                {
+                    ?named rdfs:subClassOf ?anon .
+                    FILTER(isIRI(?named))
+                    FILTER(!isIRI(?anon))
+                    ?anon owl:unionOf/rdf:rest*/rdf:first ?target .
+                    FILTER(?target != rdf:nil)
+                    BIND(?named AS ?id)
+                }
+                BIND(owl:unionOf AS ?nodeType)
+                } UNION {
+                ?id a owl:real .
+                BIND(owl:real AS ?nodeType)
+                } UNION {
+                ?id a owl:rational .
+                BIND(owl:rational AS ?nodeType)
+                } UNION {
+                ?id a owl:DatatypeProperty .
+                BIND(owl:DatatypeProperty AS ?nodeType)
+                } UNION {
+                ?id owl:disjointWith ?target
+                BIND(owl:disjointWith AS ?nodeType)
+                } UNION {
+                ?id a owl:DeprecatedProperty .
+                BIND(owl:DeprecatedProperty AS ?nodeType)
+                } UNION {
+                ?id owl:inverseOf ?target .
+                BIND(owl:inverseOf AS ?nodeType)
+                } UNION {
+                ?id a owl:ObjectProperty
+                BIND(owl:ObjectProperty AS ?nodeType)
+                } UNION {
+                # Cardinalities
+                { ?id owl:onProperty ?target . BIND(owl:onProperty AS ?nodeType) }
+                UNION
+                { ?id owl:someValuesFrom ?target . BIND(owl:someValuesFrom AS ?nodeType) }
+                UNION
+                { ?id owl:allValuesFrom ?target . BIND(owl:allValuesFrom AS ?nodeType) }
+                UNION
+                { ?id owl:hasSelf ?target . BIND(owl:hasSelf AS ?nodeType) }
+                UNION
+                { ?id owl:hasValue ?target . BIND(owl:hasValue AS ?nodeType) }
+                UNION
+                { ?id owl:minCardinality ?target . BIND(owl:minCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:maxCardinality ?target . BIND(owl:maxCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:cardinality ?target . BIND(owl:cardinality AS ?nodeType) }
+                UNION
+                { ?id owl:minQualifiedCardinality ?target . BIND(owl:minQualifiedCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:maxQualifiedCardinality ?target . BIND(owl:maxQualifiedCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:qualifiedCardinality ?target . BIND(owl:qualifiedCardinality AS ?nodeType) }
+                UNION
+                { ?id owl:onClass ?target . BIND(owl:onClass AS ?nodeType) }
+                UNION
+                { ?id owl:onDataRange ?target . BIND(owl:onDataRange AS ?nodeType) }
+                } UNION {
+                ?id rdf:Property ?target
+                BIND(rdf:Property AS ?nodeType)
+                } UNION {
                 ?id a rdfs:Class .
                 FILTER(?id != owl:Class)
+                FILTER NOT EXISTS { ?id a owl:Class }
                 BIND(rdfs:Class AS ?nodeType)
-            }
-            UNION
-            {
-                # LITERAL
+                } UNION {
                 ?id a rdfs:Literal .
                 BIND(rdfs:Literal AS ?nodeType)
-
-            }
-            UNION {
-                ?target ?nodeType ?intermediate .
-                ?intermediate rdf:first ?firstItem .
-                ?intermediate rdf:rest*/rdf:first ?id .
-                FILTER(?nodeType IN (
-                    owl:intersectionOf,
-                    owl:unionOf,
-                    owl:oneOf,
-                    owl:disjointUnionOf
-                ))
-
-                # 6. Safety: Remove nil to avoid phantom edges
-                # FILTER(?label != rdf:nil)
-            } UNION {
-                VALUES ?property {
-                    owl:DeprecatedProperty
-                    owl:DatatypeProperty
-                    owl:ObjectProperty
-                    rdf:Property
-                }
-                ?nodeType a ?property .
-                ?nodeType rdfs:range ?target .
-                ?nodeType rdfs:domain ?id .
-            } UNION {
-                VALUES ?property {
-                    owl:DeprecatedProperty
-                    owl:DatatypeProperty
-                    owl:ObjectProperty
-                    rdf:Property
-                }
-                ?nodeType a ?property .
-                ?nodeType rdfs:range ?target .
-                FILTER NOT EXISTS { ?nodeType rdfs:domain ?x }
-                BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?id)
-            } UNION {
-                VALUES ?property {
-                    owl:DeprecatedProperty
-                    owl:DatatypeProperty
-                    owl:ObjectProperty
-                    rdf:Property
-                }
-                ?nodeType a ?property .
-                ?nodeType rdfs:domain ?id .
-                FILTER NOT EXISTS { ?nodeType rdfs:range ?x }
-                BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?target)
-            } UNION {
-                VALUES ?property {
-                    owl:DeprecatedProperty
-                    owl:DatatypeProperty
-                    owl:ObjectProperty
-                    rdf:Property
-                }
-                ?nodeType a ?property .
-                FILTER NOT EXISTS { ?nodeType rdfs:range ?x }
-                FILTER NOT EXISTS { ?nodeType rdfs:domain ?x }
-                BIND(owl:Thing AS ?id)
-                BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?target)
-            }
-            UNION
-            {
-                # RESOURCE
+                } UNION {
                 ?id a rdfs:Resource .
                 FILTER(isIRI(?id) || isBlank(?id))
                 BIND(rdfs:Resource AS ?nodeType)
-            }
-            #########
-            # EDGES #
-            #########
-            UNION
-            {
-                # OBJECT PROPERTY
-                ?id a owl:ObjectProperty
-                BIND(owl:ObjectProperty AS ?nodeType)
-            }
-            UNION
-            {
-                # Identify RDF properties
-                ?id rdf:Property ?target
-                BIND(rdf:Property AS ?nodeType)
-            }
-            UNION
-            {
-                # Identify subclasses
-                ?id rdfs:subClassOf ?target
+                } UNION {
+                ?id a rdfs:Datatype .
+                BIND(rdfs:Datatype AS ?nodeType)
+                } UNION {
+                ?id rdfs:subClassOf ?target .
+                FILTER NOT EXISTS { ?target owl:unionOf ?u }
+                FILTER NOT EXISTS { ?target owl:intersectionOf ?i }
+                FILTER NOT EXISTS { ?target owl:complementOf ?c }
+                FILTER NOT EXISTS { ?target owl:disjointUnionOf ?d }
                 BIND(rdfs:subClassOf AS ?nodeType)
-            }
-            UNION
-            {
-                # Identify OWL datatype properties
-                ?id a owl:DatatypeProperty
-                BIND(owl:DatatypeProperty AS ?nodeType)
-            }
-            UNION
-            {
-                # Identify OWL disjoint with
-                ?id owl:disjointWith ?target
-                BIND(owl:disjointWith AS ?nodeType)
-            }
-            UNION
-            {
-                # DEPRECATED PROPERTY
-                ?id a owl:DeprecatedProperty .
-                BIND(owl:DeprecatedProperty AS ?nodeType)
-            }
-            UNION
-            {
-                # INVERSE OF
-                ?id owl:inverseOf ?target .
-                BIND(owl:inverseOf AS ?nodeType)
-            }
-            UNION
-            {
-                {
-                    # Domain
-                    ?id rdfs:domain ?target
-                    BIND(rdfs:domain AS ?nodeType)
-                }
-                UNION
-                {
-                    # Range
-                    ?id rdfs:range ?target
-                    BIND(rdfs:range AS ?nodeType)
-                }
-            }
-            UNION
-            {
-                # VALUES FROM
-                {
-                    ?id owl:someValuesFrom ?target
-                }
-                UNION
-                {
-                    ?id owl:allValuesFrom ?target
-                }
-                BIND("ValuesFrom" AS ?nodeType)
-            }
-            ###########
-            # General #
-            ###########
-            UNION
-            {
-                # EXTERNALS
-                # 1. Elements whose base URI differs from that of the visualized ontology.
-                #    p. 6 of https://www.semantic-web-journal.net/system/files/swj1114.pdf
-                # 2. A base URI is EITHER `xml:base` OR that of the document.
-                #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
-                ?id xml:base ?base .
-                BIND(xml:base AS ?nodeType)
-            }
+                } UNION {
+                ?id a owl:TransitiveProperty
+                BIND(owl:TransitiveProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:FunctionalProperty
+                BIND(owl:FunctionalProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:InverseFunctionalProperty
+                BIND(owl:InverseFunctionalProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:ReflexiveProperty
+                BIND(owl:ReflexiveProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:IrreflexiveProperty
+                BIND(owl:IrreflexiveProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:SymmetricProperty
+                BIND(owl:SymmetricProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:AsymmetricProperty
+                BIND(owl:AsymmetricProperty AS ?nodeType)
+            } UNION {
+                ?id a owl:hasKey
+                BIND(owl:hasKey AS ?nodeType)
+            } UNION {
+            # Get the base URI of the document.
+            ?id a owl:Ontology .
+            BIND(owl:Ontology AS ?nodeType)
+            } UNION {
+            # Get the base URI of the document.
+            ?id xml:base ?base .
+            BIND(xml:base AS ?nodeType)
+            } UNION {
+            # Flatten collections. Currently only supports select OWL types.
+            ?id ?nodeType ?intermediate .
+            ?intermediate rdf:first ?firstItem .
+            ?intermediate rdf:rest*/rdf:first ?target .
+            FILTER(?nodeType IN (
+                owl:oneOf
+            ))
 
-            UNION
-            {
-                # WIP: Identify OWL deprecated properties
-                # ?id owl:deprecated "true"^^<http://www.w3.org/2001/XMLSchema#boolean>
-                # BIND("DeprecatedProperty" AS ?nodeType)
-
-                # DEPRECATED
-                ?id owl:deprecated ?target .
-                BIND(owl:deprecated AS ?nodeType)
+            # 6. Safety: Remove nil to avoid phantom edges
+            # FILTER(?label != rdf:nil)
+            } UNION {
+        # Find the domain and range of any property, and restructure so they appear as singular triples
+        {
+            VALUES ?property {
+                owl:DeprecatedProperty
+                owl:DatatypeProperty
+                owl:ObjectProperty
+                rdf:Property
             }
-            UNION
-            {
-                # Characteristics
-                VALUES ?char {
-                    owl:TransitiveProperty
-                    owl:FunctionalProperty
-                    owl:InverseFunctionalProperty
-                    owl:ReflexiveProperty
-                    owl:IrreflexiveProperty
-                    owl:SymmetricProperty
-                    owl:AsymmetricProperty
-                    owl:hasKey
-                }
-                ?id a ?char .
-                OPTIONAL {?id rdfs:range ?target}
-                BIND(?char as ?nodeType)
+            ?nodeType a ?property .
+            ?nodeType rdfs:range ?target .
+            ?nodeType rdfs:domain ?id .
+        } UNION {
+            VALUES ?property {
+                owl:DeprecatedProperty
+                owl:DatatypeProperty
+                owl:ObjectProperty
+                rdf:Property
             }
-            UNION
-            {
-                    # Find labels for elements in the following order:
-                    # SPARQL
-                    # 1. Use rdfs:label, if exists.
-                    #    https://www.w3.org/TR/rdf-schema/#ch_label
-                    # 2. Use rdf:resource, if exists.
-                    #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-empty-property-elements
-                    # 3. Use rdf:ID, if exists.
-                    #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
-                    # SERIALIZER
-                    # 4. Use fragment identifier of rdf:about, if exists.
-                    #    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-node-property-elements
-                    # 5. If fragment not found but rdf:about exists, use whole string.
-                    #    TODO: Insert link to docs about using prefix notation.
-                    # 6. Create a fallback label from the ElementType.
-                    OPTIONAL { ?id rdfs:label ?theLabel }
-                    OPTIONAL { ?id rdf:resource ?resLabel }
-                    OPTIONAL { ?id rdf:ID ?idLabel }
-                    BIND (
-                        COALESCE(
-                            IF( BOUND(?theLabel), ?theLabel, 1/0 ),
-                            IF( BOUND(?resLabel), ?resLabel, 1/0 ),
-                            IF( BOUND(?idLabel), ?idLabel, 1/0 ),
-                            ""
-                        ) AS ?label
-                    )
-                }
-            BIND(
-                IF(?nodeType = owl:Ontology, 0,
-                    IF(?nodeType = owl:Class, 1, 2)
-                )
-                AS ?weight
-            )
+            ?nodeType a ?property .
+            ?nodeType rdfs:range ?target .
+            FILTER NOT EXISTS { ?nodeType rdfs:domain ?x }
+            BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?id)
+        } UNION {
+            VALUES ?property {
+                owl:DeprecatedProperty
+                owl:DatatypeProperty
+                owl:ObjectProperty
+                rdf:Property
+            }
+            ?nodeType a ?property .
+            ?nodeType rdfs:domain ?id .
+            FILTER NOT EXISTS { ?nodeType rdfs:range ?x }
+            BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?target)
+        } UNION {
+            VALUES ?property {
+                owl:DeprecatedProperty
+                owl:DatatypeProperty
+                owl:ObjectProperty
+                rdf:Property
+            }
+            ?nodeType a ?property .
+            FILTER NOT EXISTS { ?nodeType rdfs:range ?x }
+            FILTER NOT EXISTS { ?nodeType rdfs:domain ?x }
+            BIND(owl:Thing AS ?id)
+            BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?target)
         }
-    }
-    ORDER BY ?weight
+        } UNION {
+            # Generic, deprecated OWL elements.
+            ?id owl:deprecated ?target .
+            FILTER(?target = "true"^^xsd:boolean || lcase(str(?target)) = "true")
+            BIND(owl:deprecated AS ?nodeType)
+            } UNION {
+            # Find labels for elements.
+            OPTIONAL { ?id rdfs:label ?theLabel }
+            OPTIONAL { ?id rdf:resource ?resLabel }
+            OPTIONAL { ?id rdf:ID ?idLabel }
+            BIND (
+                COALESCE(
+                    IF( BOUND(?theLabel), ?theLabel, 1/0 ),
+                    IF( BOUND(?resLabel), ?resLabel, 1/0 ),
+                    IF( BOUND(?idLabel), ?idLabel, 1/0 ),
+                    ""
+                ) AS ?label
+            )
+            }
+                BIND(
+                    IF(?nodeType = owl:Ontology, 0,
+                        IF(?nodeType = owl:Class, 1, 2)
+                    )
+                    AS ?weight
+                )
+            }
+            ORDER BY ?weight

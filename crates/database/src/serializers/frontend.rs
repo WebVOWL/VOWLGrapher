@@ -3277,6 +3277,14 @@ impl GraphDisplayDataSolutionSerializer {
     ) -> Result<SerializationStatus, SerializationError> {
         let Some(resolved_property_term_id) = self.resolve(data_buffer, triple.subject_term_id)?
         else {
+            if is_reserved(&property_iri) {
+                debug!(
+                    "Skipping characteristic '{}' for reserved built-in '{}'",
+                    characteristic, property_iri
+                );
+                return Ok(SerializationStatus::Serialized);
+            }
+
             debug!(
                 "Deferring characteristic '{}' for '{}': property unresolved",
                 characteristic,
@@ -3346,6 +3354,13 @@ impl GraphDisplayDataSolutionSerializer {
             return Ok(SerializationStatus::Deferred);
         }
 
+        if is_reserved(&resolved_iri) {
+            debug!(
+                "Skipping characteristic '{}' for reserved built-in '{}'",
+                characteristic, resolved_iri
+            );
+            return SerializationStatus::Serialized;
+        }
         // No attach point yet
         debug!(
             "Deferring characteristic '{}' for '{}': no attach point available yet",
@@ -3430,6 +3445,30 @@ impl GraphDisplayDataSolutionSerializer {
                 Ok(val) => Ok(val),
                 Err(e) => Err(SerializationErrorKind::SerializationFailedTriple(
                     data_buffer.term_index.display_triple(triple)?,
+            .into()),
+        }
+    }
+
+    fn is_ephemeral_restriction_node(
+        data_buffer: &SerializationDataBuffer,
+        restriction: &Term,
+    ) -> bool {
+        restriction.is_blank_node()
+            || matches!(
+                data_buffer.node_element_buffer.get(restriction),
+                Some(ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass)))
+            )
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "fixed when serializer is refactored to use pointers instead of values"
+    )]
+    fn individual_count_literal(triple: &Triple) -> Result<u32, SerializationError> {
+        match triple.target.as_ref() {
+            Some(Term::Literal(literal)) => literal.value().parse::<u32>().map_err(|e| {
+                SerializationErrorKind::SerializationFailed(
+                    triple.clone(),
                     format!(
                         "Expected individual count literal, got '{}': {}",
                         literal.value(),
@@ -3469,6 +3508,13 @@ impl GraphDisplayDataSolutionSerializer {
         data_buffer: &SerializationDataBuffer,
         restriction_term_id: &usize,
     ) -> Result<Option<usize>, SerializationError> {
+        // After an owl:equivalentClass merge, restriction state can live on the
+        // named class IRI itself. In that case, the class is the owner and must
+        // not be inferred from incoming subclass edges.
+        if !Self::is_ephemeral_restriction_node(data_buffer, restriction) {
+            return Some(restriction.clone());
+        }
+
         let result = data_buffer
             .edges_include_map
             .read()?
@@ -3480,6 +3526,48 @@ impl GraphDisplayDataSolutionSerializer {
                 })
             });
         Ok(result)
+    }
+
+    fn remove_restriction_stub(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        restriction: &Term,
+    ) {
+        if !Self::is_ephemeral_restriction_node(data_buffer, restriction) {
+            return;
+        }
+
+        if let Some(edges) = data_buffer.edges_include_map.get(restriction).cloned() {
+            for edge in edges {
+                if edge.object == *restriction && Self::is_restriction_owner_edge(&edge) {
+                    self.remove_edge_include(data_buffer, &edge.subject, &edge);
+                    self.remove_edge_include(data_buffer, &edge.object, &edge);
+                    data_buffer.edge_buffer.remove(&edge);
+                    data_buffer.edge_label_buffer.remove(&edge);
+                    data_buffer.edge_cardinality_buffer.remove(&edge);
+                    data_buffer.edge_characteristics.remove(&edge);
+                }
+            }
+        }
+    }
+
+    fn remove_restriction_node(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        restriction: &Term,
+    ) {
+        // Named classes can temporarily carry restriction state after merging
+        // an anonymous equivalentClass expression. Clear only the restriction state.
+        if !Self::is_ephemeral_restriction_node(data_buffer, restriction) {
+            data_buffer.restriction_buffer.remove(restriction);
+            return;
+        }
+
+        data_buffer.node_element_buffer.remove(restriction);
+        data_buffer.label_buffer.remove(restriction);
+        data_buffer.node_characteristics.remove(restriction);
+        data_buffer.edges_include_map.remove(restriction);
+        data_buffer.restriction_buffer.remove(restriction);
     }
 
     fn default_restriction_target(

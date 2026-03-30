@@ -7,39 +7,49 @@ impl SparqlSnippet for Characteristic {
         match self {
             Characteristic::TransitiveProperty => {
                 r#"{
-                ?id a owl:TransitiveProperty
-                BIND(owl:TransitiveProperty AS ?nodeType)
-            }"#
+                    ?id a owl:TransitiveProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:TransitiveProperty AS ?nodeType)
+                }"#
             }
             Characteristic::FunctionalProperty => {
                 r#"{
-                ?id a owl:FunctionalProperty
-                BIND(owl:FunctionalProperty AS ?nodeType)
-            }"#
+                    ?id a owl:FunctionalProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:FunctionalProperty AS ?nodeType)
+                }"#
             }
+
             Characteristic::InverseFunctionalProperty => {
                 r#"{
-                ?id a owl:InverseFunctionalProperty
-                BIND(owl:InverseFunctionalProperty AS ?nodeType)
-            }"#
+                    ?id a owl:InverseFunctionalProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:InverseFunctionalProperty AS ?nodeType)
+                }"#
             }
+
             Characteristic::ReflexiveProperty => {
                 r#"{
-                ?id a owl:ReflexiveProperty
-                BIND(owl:ReflexiveProperty AS ?nodeType)
-            }"#
+                    ?id a owl:ReflexiveProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:ReflexiveProperty AS ?nodeType)
+                }"#
             }
+
             Characteristic::IrreflexiveProperty => {
                 r#"{
-                ?id a owl:IrreflexiveProperty
-                BIND(owl:IrreflexiveProperty AS ?nodeType)
-            }"#
+                    ?id a owl:IrreflexiveProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:IrreflexiveProperty AS ?nodeType)
+                }"#
             }
+
             Characteristic::SymmetricProperty => {
                 r#"{
-                ?id a owl:SymmetricProperty
-                BIND(owl:SymmetricProperty AS ?nodeType)
-            }"#
+                    ?id a owl:SymmetricProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:SymmetricProperty AS ?nodeType)
+                }"#
             }
             Characteristic::AsymmetricProperty => {
                 r#"{

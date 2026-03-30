@@ -8,9 +8,9 @@ use super::{Edge, RestrictionRenderMode, SerializationDataBuffer, Triple};
 use crate::{
     errors::{SerializationError, SerializationErrorKind},
     serializers::util::{
-        get_reserved_iris, is_reserved, is_synthetic,
+        PROPERTY_EDGE_TYPES, is_reserved, is_synthetic,
         synthetic::{SYNTH_LITERAL, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING},
-        synthetic_iri, trim_tag_circumfix, trim_tag_circumfix, try_resolve_reserved,
+        synthetic_iri, trim_tag_circumfix, try_resolve_reserved,
     },
     vocab::{owl, rdf, rdfs, xsd},
 };
@@ -427,13 +427,12 @@ impl GraphDisplayDataSolutionSerializer {
         };
 
         // Skip external check for NoDraw edges - they should always retain their type
-        let new_type = if edge_type != ElementType::NoDraw
-            && self.is_external(data_buffer, &triple.element_type)
-        {
-            ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty))
-        } else {
-            edge_type
-        };
+        let new_type =
+            if edge_type != ElementType::NoDraw && self.is_external(data_buffer, external_probe) {
+                ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty))
+            } else {
+                edge_type
+            };
         match self.resolve_so(data_buffer, triple) {
             (Some(sub_iri), Some(obj_iri)) => {
                 let should_hash_property = [
@@ -1376,15 +1375,16 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // rdfs::SEE_ALSO => {}
                     rdfs::SUB_CLASS_OF => {
-                        if triple.id == owl::THING.into()
-                            && triple
-                                .target
-                                .as_ref()
-                                .is_some_and(|target| *target == owl::THING.into())
-                        {
+                        if triple.target.as_ref().is_some_and(|target| {
+                            target == &triple.id
+                                && is_synthetic(&triple.id)
+                                && data_buffer.node_element_buffer.get(&triple.id).copied()
+                                    == Some(ElementType::Owl(OwlType::Node(OwlNode::Thing)))
+                        }) {
                             debug!("Skipping synthetic owl:Thing self-subclass triple");
                             return Ok(SerializationStatus::Serialized);
                         }
+
                         match self.insert_edge(
                             data_buffer,
                             &triple,
@@ -1393,8 +1393,7 @@ impl GraphDisplayDataSolutionSerializer {
                         ) {
                             Some(_) => {
                                 if let Some(restriction) = triple.target.as_ref() {
-                                    let _ =
-                                        self.try_materialize_restriction(data_buffer, restriction)?;
+                                    self.try_materialize_restriction(data_buffer, restriction)?;
                                 } else {
                                     self.retry_restrictions(data_buffer)?;
                                 }
@@ -1415,8 +1414,6 @@ impl GraphDisplayDataSolutionSerializer {
 
                     // owl::ALL_DISJOINT_CLASSES => {},
                     // owl::ALL_DISJOINT_PROPERTIES => {},
-
-                    //TODO: OWL1
                     owl::ALL_VALUES_FROM => {
                         let state = data_buffer.restriction_mut(&triple.id);
                         state.filler = triple.target.clone();
@@ -1445,8 +1442,6 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::BACKWARD_COMPATIBLE_WITH => {},
                     // owl::BOTTOM_DATA_PROPERTY => {},
                     // owl::BOTTOM_OBJECT_PROPERTY => {},
-
-                    //TODO: OWL1
                     owl::CARDINALITY => {
                         let exact = Self::cardinality_literal(&triple)?;
                         data_buffer.restriction_mut(&triple.id).cardinality =
@@ -1728,7 +1723,6 @@ impl GraphDisplayDataSolutionSerializer {
                         return self.try_materialize_restriction(data_buffer, &triple.id);
                     }
 
-                    //TODO: OWL1
                     owl::HAS_VALUE => {
                         let state = data_buffer.restriction_mut(&triple.id);
                         state.filler = triple.target.clone();
@@ -1787,7 +1781,6 @@ impl GraphDisplayDataSolutionSerializer {
                         ));
                     }
 
-                    //TODO: OWL1
                     owl::MAX_CARDINALITY => {
                         let max = Self::cardinality_literal(&triple)?;
                         data_buffer.restriction_mut(&triple.id).cardinality =
@@ -1803,8 +1796,6 @@ impl GraphDisplayDataSolutionSerializer {
                         return self.try_materialize_restriction(data_buffer, &triple.id);
                     }
                     // owl::MEMBERS => {}
-
-                    //TODO: OWL1
                     owl::MIN_CARDINALITY => {
                         let min = Self::cardinality_literal(&triple)?;
                         data_buffer.restriction_mut(&triple.id).cardinality = Some((min, None));
@@ -1856,8 +1847,6 @@ impl GraphDisplayDataSolutionSerializer {
                     }
                     // owl::ON_DATATYPE => {}
                     // owl::ON_PROPERTIES => {}
-
-                    //TODO: OWL1
                     owl::ON_PROPERTY => {
                         let Some(target) = triple.target.clone() else {
                             return Err(SerializationErrorKind::MissingObject(
@@ -1888,8 +1877,6 @@ impl GraphDisplayDataSolutionSerializer {
 
                     //TODO: OWL1
                     // owl::SAME_AS => {}
-
-                    //TODO: OWL1
                     owl::SOME_VALUES_FROM => {
                         let state = data_buffer.restriction_mut(&triple.id);
                         state.filler = triple.target.clone();
@@ -2600,7 +2587,7 @@ impl GraphDisplayDataSolutionSerializer {
     ) -> Result<Term, SerializationError> {
         match data_buffer.edge_element_buffer.get(property_iri).copied() {
             Some(ElementType::Owl(OwlType::Edge(OwlEdge::DatatypeProperty))) => {
-                let literal_iri = Self::synthetic_iri(property_iri, "_literal");
+                let literal_iri = synthetic_iri(property_iri, "_literal");
                 let literal_triple = self.create_triple(literal_iri, rdfs::LITERAL.into(), None)?;
                 let literal_id = literal_triple.id.clone();
 
@@ -2632,7 +2619,7 @@ impl GraphDisplayDataSolutionSerializer {
         restriction: &Term,
         literal: &rdf_fusion::model::Literal,
     ) -> Result<Term, SerializationError> {
-        let literal_iri = Self::synthetic_iri(restriction, "_value");
+        let literal_iri = synthetic_iri(restriction, "_value");
         let literal_triple = self.create_triple(literal_iri, rdfs::LITERAL.into(), None)?;
         let literal_id = literal_triple.id.clone();
 
@@ -2826,18 +2813,16 @@ impl GraphDisplayDataSolutionSerializer {
         data_buffer: &mut SerializationDataBuffer,
         restriction: &Term,
     ) {
-        let Some(edges) = data_buffer.edges_include_map.get(restriction).cloned() else {
-            return;
-        };
-
-        for edge in edges {
-            if edge.object == *restriction && Self::is_restriction_owner_edge(&edge) {
-                self.remove_edge_include(data_buffer, &edge.subject, &edge);
-                self.remove_edge_include(data_buffer, &edge.object, &edge);
-                data_buffer.edge_buffer.remove(&edge);
-                data_buffer.edge_label_buffer.remove(&edge);
-                data_buffer.edge_cardinality_buffer.remove(&edge);
-                data_buffer.edge_characteristics.remove(&edge);
+        if let Some(edges) = data_buffer.edges_include_map.get(restriction).cloned() {
+            for edge in edges {
+                if edge.object == *restriction && Self::is_restriction_owner_edge(&edge) {
+                    self.remove_edge_include(data_buffer, &edge.subject, &edge);
+                    self.remove_edge_include(data_buffer, &edge.object, &edge);
+                    data_buffer.edge_buffer.remove(&edge);
+                    data_buffer.edge_label_buffer.remove(&edge);
+                    data_buffer.edge_cardinality_buffer.remove(&edge);
+                    data_buffer.edge_characteristics.remove(&edge);
+                }
             }
         }
     }
@@ -2898,7 +2883,7 @@ impl GraphDisplayDataSolutionSerializer {
             .collect::<Vec<_>>();
 
         for restriction in restrictions {
-            let _ = self.try_materialize_restriction(data_buffer, &restriction)?;
+            self.try_materialize_restriction(data_buffer, &restriction)?;
         }
 
         Ok(())
@@ -2934,21 +2919,22 @@ impl GraphDisplayDataSolutionSerializer {
         let subject = trim_tag_circumfix(&edge.subject.to_string());
         let object = trim_tag_circumfix(&edge.object.to_string());
 
-        let synthetic_subject = subject.ends_with("_thing") || subject.ends_with("_localthing");
-        let synthetic_object = object.ends_with("_thing")
-            || object.ends_with("_localthing")
-            || object.ends_with("_literal")
-            || object.ends_with("_localliteral");
+        let synthetic_subject =
+            subject.ends_with(SYNTH_THING) || subject.ends_with(SYNTH_LOCAL_THING);
+        let synthetic_object = object.ends_with(SYNTH_THING)
+            || object.ends_with(SYNTH_LOCAL_THING)
+            || object.ends_with(SYNTH_LITERAL)
+            || object.ends_with(SYNTH_LOCAL_LITERAL);
 
         synthetic_subject && synthetic_object
     }
 
     fn remove_orphan_synthetic_node(&self, data_buffer: &mut SerializationDataBuffer, iri: &Term) {
         let clean = trim_tag_circumfix(&iri.to_string());
-        let looks_synthetic = clean.ends_with("_thing")
-            || clean.ends_with("_localthing")
-            || clean.ends_with("_literal")
-            || clean.ends_with("_localliteral");
+        let looks_synthetic = clean.ends_with(SYNTH_THING)
+            || clean.ends_with(SYNTH_LOCAL_THING)
+            || clean.ends_with(SYNTH_LITERAL)
+            || clean.ends_with(SYNTH_LOCAL_LITERAL);
 
         if !looks_synthetic {
             return;

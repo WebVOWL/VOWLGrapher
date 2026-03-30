@@ -4,7 +4,9 @@ use crate::{
     },
     vocab::{owl, rdf, rdfs, xsd},
 };
-use grapher::prelude::{ElementType, OwlEdge, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType};
+use grapher::prelude::{
+    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType,
+};
 use oxrdf::{Term, TermRef};
 
 pub const SYMMETRIC_EDGE_TYPES: [ElementType; 1] =
@@ -134,6 +136,7 @@ pub fn try_resolve_reserved(term: &Term) -> Option<ElementType> {
             rdf::XML_LITERAL | rdf::HTML | rdf::PLAIN_LITERAL => {
                 Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
             }
+            owl::THING => Some(ElementType::Owl(OwlType::Node(OwlNode::Thing))),
             rdfs::DOMAIN
             | rdfs::LITERAL
             | rdfs::RANGE
@@ -153,7 +156,6 @@ pub fn try_resolve_reserved(term: &Term) -> Option<ElementType> {
             | owl::EQUIVALENT_CLASS
             | owl::EQUIVALENT_PROPERTY
             | owl::INTERSECTION_OF
-            | owl::THING
             | owl::UNION_OF => None,
             owl::REAL | owl::RATIONAL => {
                 Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))

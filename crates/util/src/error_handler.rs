@@ -15,6 +15,7 @@ use tabled::{
 
 use crate::{layout::TableHTML, time::get_timestamp};
 
+/// Error severity represents how severe or impactful a given error is.
 #[derive(
     Debug,
     Copy,
@@ -28,12 +29,23 @@ use crate::{layout::TableHTML, time::get_timestamp};
 )]
 #[strum(serialize_all = "title_case")]
 pub enum ErrorSeverity {
+    /// The total failure of the program.
+    /// It must be completely restarted (client or server, depending on where the error happened) to resume operation.
     Critical,
+    /// Partial program failure.
+    /// Some input caused it to enter an unexpected state. This should be resolvable by providing a different input.
     Error,
+    /// Something unexpected happened which may impact the program.
+    /// However, it can automatically correct/ignore the issue and continue.
     Warning,
+    /// Unknown severity.
     Unset,
 }
 
+/// Error types represent various parts of the program.
+///
+/// If it isn't possible to determine a specfic type,
+/// a generic server error or client error are available.
 #[derive(
     Debug,
     Copy,
@@ -101,6 +113,13 @@ pub struct ErrorRecord {
 }
 
 impl ErrorRecord {
+    /// Create a new instance of an error event.
+    ///
+    /// - `severity` is the error's severity.
+    /// - `error_type` is the type of error.
+    /// - `message` is the error message.
+    /// -  If #[cfg(debug_assertions)] is enabled, then `location`
+    ///    is the location of the error in the source code.
     pub fn new(
         timestamp: String,
         severity: ErrorSeverity,
@@ -258,6 +277,7 @@ impl std::fmt::Display for ErrorRecord {
 /// # Note
 /// Every error type in use should implement [`From<T> for VOWLRError`].
 pub struct VOWLRError {
+    /// Contains all error instances captured by a particular user request.
     pub records: Vec<ErrorRecord>,
 }
 
@@ -268,7 +288,7 @@ impl FromServerFnError for VOWLRError {
         value.into()
     }
 
-    fn ser(&self) -> leptos::server_fn::Bytes {
+    fn ser(&self) -> server_fn::Bytes {
         Self::Encoder::encode(self).unwrap_or_else(|e| {
             Self::Encoder::encode(&Self::from_server_fn_error(
                 ServerFnErrorErr::Serialization(e.to_string()),
@@ -277,7 +297,7 @@ impl FromServerFnError for VOWLRError {
         })
     }
 
-    fn de(data: leptos::server_fn::Bytes) -> Self {
+    fn de(data: server_fn::Bytes) -> Self {
         Self::Encoder::decode(data)
             .unwrap_or_else(|e| ServerFnErrorErr::Deserialization(e.to_string()).into_app_error())
     }

@@ -15,27 +15,71 @@ use std::path::Path;
 )]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum DataType {
+    /// Alternative syntax for [`DataType::OFN`].
+    ///
+    /// Syntax: [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/)
     OWL,
+    /// Subset of [`DataType::RDF`].
+    ///
+    /// Syntax: [OWL Functional](https://www.w3.org/TR/owl2-syntax/)
     OFN,
+    /// Alternative syntax for [`DataType::OFN`].
+    ///
+    /// Syntax: [OWL/XML](https://www.w3.org/TR/2012/REC-owl2-xml-serialization-20121211/)
     OWX,
+    /// Alternative syntax for [`DataType::RDF`].
+    ///
+    /// Syntax: [Turtle](https://www.w3.org/TR/turtle/)
     TTL,
+    /// The Resource Description Framework (RDF) is a method to describe and exchange graph data.
+    ///
+    /// Subset of [`DataType::N3`].
+    ///
+    /// Syntax: [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/)
     RDF,
+    /// Subset of [`DataType::TTL`].
+    ///
+    /// Syntax: [N-Triples](https://www.w3.org/TR/n-triples/)
     #[strum(serialize = "N-Triples")]
     NTriples,
+    /// Alternative syntax for [`DataType::RDF`].
+    ///
+    /// Syntax: [N-Quads](https://www.w3.org/TR/n-quads/)
     #[strum(serialize = "N-Quads")]
     NQuads,
+    /// Extension of [`DataType::TTL`].
+    ///
+    /// Syntax: [TriG](https://www.w3.org/TR/trig/)
     #[strum(serialize = "TriG")]
     TriG,
+    /// Linked data encoded in JSON.
+    ///
+    /// Syntax: [JSON-LD](https://www.w3.org/TR/json-ld11/)
     #[strum(serialize = "JSON-LD")]
     JsonLd,
+    /// Superset of [`DataType::RDF`].
+    ///
+    /// Syntax: [Notation3](https://www.w3.org/TeamSubmission/n3/)
     N3,
     #[strum(serialize = "SPARQL JSON")]
+    /// SPARQL query results encoded in JSON.
+    ///
+    /// Syntax: [SPARQL Results JSON](https://www.w3.org/TR/sparql11-results-json/)
     SPARQLJSON,
     #[strum(serialize = "SPARQL XML")]
+    /// SPARQL query results encoded in XML.
+    ///
+    /// Syntax: [SPARQL Results JSON](https://www.w3.org/TR/rdf-sparql-XMLres/)
     SPARQLXML,
     #[strum(serialize = "SPARQL CSV")]
+    /// SPARQL query results encoded in CSV.
+    ///
+    /// Syntax: [SPARQL Results JSON](https://www.w3.org/TR/sparql11-results-csv-tsv/)
     SPARQLCSV,
     #[strum(serialize = "SPARQL TSV")]
+    /// SPARQL query results encoded in TSV.
+    ///
+    /// Syntax: [SPARQL Results JSON](https://www.w3.org/TR/sparql11-results-csv-tsv/)
     SPARQLTSV,
     /// Fallback when type can't be determined.
     UNKNOWN,

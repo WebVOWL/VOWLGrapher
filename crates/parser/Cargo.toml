@@ -1,17 +1,19 @@
 [package]
-    authors=["khmikkelsen"]
+    authors.workspace=true
     description="Parsers for various OWL and RDF formats supported by VOWL-R"
-    edition="2024"
+    edition.workspace=true
     keywords=["parser", "owl", "rdf"]
-    license-file="LICENSE"
+    license-file.workspace=true
     name="vowlr-parser"
     readme="README.md"
-    repository="https://github.com/WebVOWL/VOWL-R"
-    version="0.1.0"
+    repository.workspace=true
+    version.workspace=true
 
 [lib]
     crate-type=["cdylib", "rlib"]
 
+[lints]
+    workspace=true
 
 [dependencies]
     futures.workspace=true

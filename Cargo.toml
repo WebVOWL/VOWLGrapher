@@ -1,25 +1,13 @@
 [package]
-    authors=[
-        "TheRealMorgenfrue",
-        "manfredhod",
-        "LouiseWolff17",
-        "khmikkelsen",
-        "nikarnik",
-    ]
-    description="WebVOWL rebuilt from stratch with a strong focus on performance and scalability."
-    edition="2024"
-    keywords=[
-        "force-directed-graph",
-        "graph",
-        "ontology",
-        "visualization",
-        "web",
-    ]
-    license-file="LICENSE"
+    authors.workspace=true
+    description.workspace=true
+    edition.workspace=true
+    keywords.workspace=true
+    license-file.workspace=true
     name="vowlr"
     readme="README.md"
-    repository="https://github.com/WebVOWL/VOWL-R"
-    version="0.1.0-alpha"
+    repository.workspace=true
+    version.workspace=true
 
 [lib]
     crate-type=["cdylib", "rlib"]
@@ -30,6 +18,28 @@
         "crates/*",
     ]
     resolver="2"
+
+    [workspace.package]
+        authors=[
+            "TheRealMorgenfrue",
+            "manfredhod",
+            "LouiseWolff17",
+            "khmikkelsen",
+            "nikarnik",
+            "TheMagzuz",
+        ]
+        description="WebVOWL rebuilt from stratch with a strong focus on performance and scalability."
+        edition="2024"
+        keywords=[
+            "force-directed-graph",
+            "graph",
+            "ontology",
+            "visualization",
+            "web",
+        ]
+        license-file="LICENSE"
+        repository="https://github.com/WebVOWL/VOWL-R"
+        version="0.1.0-alpha"
 
     [workspace.lints.rust]
         missing_docs="warn"

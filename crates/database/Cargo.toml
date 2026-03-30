@@ -1,17 +1,19 @@
 [package]
-    authors=["TheRealMorgenfrue", "LouiseWolff17", "khmikkelsen"]
+    authors.workspace=true
     description="Database code for VOWL-R"
-    edition="2024"
+    edition.workspace=true
     keywords=["rdf", "graph", "sparql", "datafusion"]
-    license-file="LICENSE"
+    license-file.workspace=true
     name="vowlr-database"
     readme="README.md"
-    repository="https://github.com/WebVOWL/VOWL-R"
-    version="0.1.0"
+    repository.workspace=true
+    version.workspace=true
 
 [lib]
     crate-type=["cdylib", "rlib"]
 
+[lints]
+    workspace=true
 
 [dependencies]
     env_logger={workspace=true}

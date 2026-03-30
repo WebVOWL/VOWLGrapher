@@ -1,11 +1,16 @@
 [package]
     authors=["TheRealMorgenfrue"]
     description="Performance & Debugging primarily of WasmGrapher, but works across all crates constituting VOWL-R"
-    edition="2024"
+    edition.workspace=true
+    keywords.workspace=true
+    license-file.workspace=true
     name="perfdebugger"
     readme="README.md"
-    version="0.1.0"
+    repository.workspace=true
+    version.workspace=true
 
+[lints]
+    workspace=true
 
 [dependencies]
     env_logger="0.11.0"

@@ -1,9 +1,13 @@
 [package]
+    authors.workspace=true
     description="Shared SPARQL query strings for VOWL-R (WASM-safe)."
-    edition="2024"
-    license="MIT OR Apache-2.0"
+    edition.workspace=true
+    keywords.workspace=true
+    license-file.workspace=true
     name="vowlr-sparql-queries"
-    version="0.1.0"
+    readme="README.md"
+    repository.workspace=true
+    version.workspace=true
 
 [lib]
     path="src/lib.rs"

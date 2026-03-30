@@ -1,16 +1,19 @@
 [package]
-    authors=["TheRealMorgenfrue", "LouiseWolff17"]
+    authors.workspace=true
     description="Utility code used by the entire VOWL-R workspace"
-    edition="2024"
-    license-file="LICENSE"
+    edition.workspace=true
+    keywords.workspace=true
+    license-file.workspace=true
     name="vowlr-util"
     readme="README.md"
-    repository="https://github.com/WebVOWL/VOWL-R"
-    version="0.1.0"
+    repository.workspace=true
+    version.workspace=true
 
 [lib]
     crate-type=["cdylib", "rlib"]
 
+[lints]
+    workspace=true
 
 [dependencies]
     leptos.workspace=true

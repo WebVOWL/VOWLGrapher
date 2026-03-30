@@ -45,6 +45,7 @@ pub const NAMED_INDIVIDUAL_COUNTS: &str = r#"{
 /// 2. A base URI is EITHER `xml:base` OR that of the document.
 ///    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
 pub const XML_BASE: &str = r#"{
+            # Get the base URI of the document.
             ?id xml:base ?base .
             BIND(xml:base AS ?nodeType)
             }"#;
@@ -53,16 +54,14 @@ pub const XML_BASE: &str = r#"{
 ///
 /// Get the base URI of the document.
 pub const ONTOLOGY: &str = r#"{
+            # Get the base URI of the document.
             ?id a owl:Ontology .
             BIND(owl:Ontology AS ?nodeType)
             }"#;
 
 /// Generic, deprecated OWL elements.
-///
-/// This query is still work-in-progress.
-/// We need to figure out what type the deprecated element is.
-/// It could be a class or a property!
 pub const OWL_DEPRECATED: &str = r#"{
+            # Generic, deprecated OWL elements.
             ?id owl:deprecated ?target .
             FILTER(?target = "true"^^xsd:boolean || lcase(str(?target)) = "true")
             BIND(owl:deprecated AS ?nodeType)
@@ -76,6 +75,7 @@ pub const OWL_DEPRECATED: &str = r#"{
 /// 3. Use rdf:ID, if exists.
 ///    https://www.w3.org/TR/rdf-syntax-grammar/#section-Syntax-ID-xml-base
 pub const LABEL: &str = r#"{
+            # Find labels for elements.
             OPTIONAL { ?id rdfs:label ?theLabel }
             OPTIONAL { ?id rdf:resource ?resLabel }
             OPTIONAL { ?id rdf:ID ?idLabel }
@@ -89,11 +89,12 @@ pub const LABEL: &str = r#"{
             )
             }"#;
 
-/// Find the domain and range of any property, and restructure so they appear as singular triples
+/// Find the domain and range of any property, and restructure so they appear as singular triples.
 pub const DOMAIN_RANGES: &str = r#"{
+        # Find the domain and range of any property, and restructure so they appear as singular triples
         {
             VALUES ?property {
-                owl:DeprecatedProperty  
+                owl:DeprecatedProperty
                 owl:DatatypeProperty
                 owl:ObjectProperty
                 rdf:Property
@@ -136,5 +137,4 @@ pub const DOMAIN_RANGES: &str = r#"{
             BIND(owl:Thing AS ?id)
             BIND(IF(?property = owl:DatatypeProperty, rdfs:Literal, owl:Thing) AS ?target)
         }
-        
         }"#;

@@ -7,6 +7,7 @@ impl SparqlSnippet for OwlNode {
         match self {
             Self::AnonymousClass => {
                 r#"{
+                # AnonymousClass
                 {
                     ?id a owl:Class .
                     FILTER(!isIRI(?id))
@@ -36,6 +37,7 @@ impl SparqlSnippet for OwlNode {
             }
             Self::Class => {
                 r#"{
+                # owl:Class
                 ?id a owl:Class .
                 FILTER(isIRI(?id))
                 BIND(owl:Class AS ?nodeType)
@@ -43,6 +45,7 @@ impl SparqlSnippet for OwlNode {
             }
             Self::Complement => {
                 r#"{
+                # owl:complementOf
                 {
                     ?id owl:complementOf ?target .
                     FILTER NOT EXISTS {
@@ -81,6 +84,7 @@ impl SparqlSnippet for OwlNode {
             }
             Self::DisjointUnion => {
                 r#"{
+                # owl:disjointUnionOf
                 {
                     ?id owl:disjointUnionOf/rdf:rest*/rdf:first ?target .
                     FILTER(?target != rdf:nil)
@@ -104,6 +108,7 @@ impl SparqlSnippet for OwlNode {
             }
             Self::IntersectionOf => {
                 r#"{
+                # owl:intersectionOf
                 {
                     ?id owl:intersectionOf/rdf:rest*/rdf:first ?target .
                     FILTER(?target != rdf:nil)
@@ -133,6 +138,7 @@ impl SparqlSnippet for OwlNode {
             }
             Self::UnionOf => {
                 r#"{
+                # owl:unionOf
                 {
                     ?id owl:unionOf/rdf:rest*/rdf:first ?target .
                     FILTER(?target != rdf:nil)
@@ -210,6 +216,7 @@ impl SparqlSnippet for OwlEdge {
             }
             Self::ValuesFrom => {
                 r#"{
+                # Cardinalities
                 { ?id owl:onProperty ?target . BIND(owl:onProperty AS ?nodeType) }
                 UNION
                 { ?id owl:someValuesFrom ?target . BIND(owl:someValuesFrom AS ?nodeType) }

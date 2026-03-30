@@ -1,3 +1,5 @@
+//! Run this workspace natively, i.e., without a browser.
+
 use env_logger::Env;
 use grapher::prelude::{EVENT_DISPATCHER, RenderEvent};
 use grapher::run;

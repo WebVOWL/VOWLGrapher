@@ -1,4 +1,9 @@
-use std::{io::Error, panic::Location};
+//! Errors thrown by the parser.
+
+use std::{
+    io::{self},
+    panic::Location,
+};
 
 use horned_owl::error::HornedError;
 
@@ -10,6 +15,7 @@ use rdf_fusion::{
 use tokio::task::JoinError;
 use vowlr_util::prelude::{ErrorRecord, ErrorSeverity, ErrorType, VOWLRError, get_timestamp};
 
+/// The type of errors thrown by the database.
 #[derive(Debug)]
 pub enum VOWLRStoreErrorKind {
     /// The file type is not supported by the server.
@@ -19,7 +25,7 @@ pub enum VOWLRStoreErrorKind {
     /// An error raised by Horned-OWL during parsing (of OWL files).
     HornedError(HornedError),
     /// Generic IO error.
-    IOError(std::io::Error),
+    IOError(io::Error),
     /// An error raised while trying to parse an invalid IRI.
     IriParseError(IriParseError),
     /// An error raised while loading a file into a Store (database).
@@ -32,6 +38,7 @@ pub enum VOWLRStoreErrorKind {
     StorageError(StorageError),
 }
 
+/// Encapsulates the error with metadata.
 #[derive(Debug)]
 pub struct VOWLRStoreError {
     /// The contained error type.
@@ -42,9 +49,9 @@ pub struct VOWLRStoreError {
     timestamp: String,
 }
 
-impl From<VOWLRStoreError> for Error {
+impl From<VOWLRStoreError> for io::Error {
     fn from(val: VOWLRStoreError) -> Self {
-        Error::other(val.to_string())
+        io::Error::other(val.to_string())
     }
 }
 impl From<String> for VOWLRStoreError {
@@ -101,9 +108,9 @@ impl From<VOWLRStoreErrorKind> for VOWLRStoreError {
     }
 }
 
-impl From<std::io::Error> for VOWLRStoreError {
+impl From<io::Error> for VOWLRStoreError {
     #[track_caller]
-    fn from(error: std::io::Error) -> Self {
+    fn from(error: io::Error) -> Self {
         VOWLRStoreError {
             inner: VOWLRStoreErrorKind::IOError(error),
             location: Location::caller(),

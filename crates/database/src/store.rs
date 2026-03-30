@@ -18,12 +18,15 @@ use crate::serializers::frontend::GraphDisplayDataSolutionSerializer;
 
 static GLOBAL_STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
 
+/// The graph database.
 pub struct VOWLRStore {
+    /// The store is the quad database and SPARQL engine.
     pub session: Store,
     upload_handle: Option<tempfile::NamedTempFile>,
 }
 
 impl VOWLRStore {
+    /// Create a new database instance.
     pub fn new(session: Store) -> Self {
         Self {
             session,
@@ -70,6 +73,9 @@ impl VOWLRStore {
     }
 
     // TTL format -> (oxittl) RDF XML quads -> (horned_owl) Normalize OWL/RDF -> Quads -> Insert into Oxigraph
+    /// Inserts a file into the store.
+    ///
+    /// Files are automatically parsed.
     pub async fn insert_file(&self, fs: &Path, lenient: bool) -> Result<(), VOWLRStoreError> {
         let parser = parser_from_path(fs, lenient)?;
         info!("Loading input into database...");
@@ -88,6 +94,7 @@ impl VOWLRStore {
         Ok(())
     }
 
+    /// Serializes the store into a file, located at the path.
     pub async fn serialize_to_file(&self, path: &Path) -> Result<(), VOWLRStoreError> {
         let mut file = File::create(path)?;
         let mut results = parse_stream_to(self.session.stream().await?, DataType::OWL).await?;
@@ -98,6 +105,7 @@ impl VOWLRStore {
         Ok(())
     }
 
+    /// Serializes the store into a stream of the specified resource type.
     pub async fn serialize_stream(
         &self,
         resource_type: DataType,
@@ -110,6 +118,9 @@ impl VOWLRStore {
         Ok(results)
     }
 
+    /// Create a temporary file on the server to upload user input into.
+    ///
+    /// TODO: Ensure this can handle multiple users.
     pub async fn start_upload(&mut self, filename: &str) -> Result<(), VOWLRStoreError> {
         let extension = Path::new(filename)
             .extension()
@@ -122,6 +133,9 @@ impl VOWLRStore {
         Ok(())
     }
 
+    /// Insert a chunk of data into the file currently in use.
+    ///
+    /// TODO: Ensure this can handle multiple users.
     pub async fn upload_chunk(&mut self, data: &[u8]) -> Result<(), VOWLRStoreError> {
         if let Some(file) = &mut self.upload_handle {
             std::io::Write::write_all(file, data)?;
@@ -132,6 +146,9 @@ impl VOWLRStore {
         }
     }
 
+    /// Finish uploading data to the file currently in use and load the file into the database.
+    ///
+    /// TODO: Ensure this can handle multiple users.
     pub async fn complete_upload(&mut self) -> Result<(), VOWLRStoreError> {
         if let Some(file) = &mut self.upload_handle {
             std::io::Write::flush(file)?;

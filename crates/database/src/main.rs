@@ -1,3 +1,7 @@
+//! Run the database in standalone mode.
+//!
+//! Only the parser and graph database are loaded.
+
 use env_logger::Env;
 use rdf_fusion::store::Store;
 use std::env;
@@ -5,6 +9,7 @@ use std::path::Path;
 use vowlr_database::prelude::VOWLRStore;
 use vowlr_sparql_queries::prelude::DEFAULT_QUERY;
 
+/// Entrypoint
 #[tokio::main]
 pub async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();

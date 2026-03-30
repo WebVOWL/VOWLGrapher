@@ -1,3 +1,5 @@
+//! Various utility functions which collectively makes up the parser.
+
 use crate::errors::{VOWLRStoreError, VOWLRStoreErrorKind};
 use futures::{StreamExt, stream::BoxStream};
 use horned_owl::{
@@ -22,8 +24,11 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use vowlr_util::prelude::DataType;
 
+/// Encapsulates the input of the parser.
 pub enum ParserInput {
+    /// The input as a byte vector of a file's contents.
     File(Vec<u8>),
+    /// A buffer of the inputThe file is read into this buffer.
     Buffer(Cursor<Vec<u8>>),
 }
 
@@ -32,12 +37,14 @@ impl ParserInput {
         clippy::result_large_err,
         reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
     )]
+    /// Reads the entire file at `path` and returns the contents as a byte vector.
     pub fn from_path(path: &Path) -> Result<Self, VOWLRStoreError> {
         std::fs::read(path)
             .map(ParserInput::File)
             .map_err(VOWLRStoreError::from)
     }
 
+    /// Returns [`self`] as a slice.
     pub fn as_slice(&self) -> &[u8] {
         match self {
             ParserInput::Buffer(cursor) => cursor.get_ref().as_slice(),
@@ -46,11 +53,15 @@ impl ParserInput {
     }
 }
 
+/// Encapsulates the various parsers in use into a parse implementation usable by RDF-Fusion.
 pub struct PreparedParser {
+    /// The parser to use.
     pub parser: RdfParser,
+    /// The input to parse.
     pub input: ParserInput,
 }
 
+/// Returns the datatype of the path, if it's supported by the parser.
 pub fn path_type(path: &Path) -> Option<DataType> {
     match path.extension().and_then(|s| s.to_str()) {
         Some("ofn") => Some(DataType::OFN),
@@ -66,6 +77,8 @@ pub fn path_type(path: &Path) -> Option<DataType> {
         _ => None,
     }
 }
+
+/// Returns the parser format for the resource type, if it's supported by the parser.
 pub fn format_from_resource_type(resource_type: &DataType) -> Option<RdfFormat> {
     match resource_type {
         DataType::RDF => Some(RdfFormat::RdfXml),
@@ -81,6 +94,10 @@ pub fn format_from_resource_type(resource_type: &DataType) -> Option<RdfFormat> 
         _ => None,
     }
 }
+
+/// Serializes a stream into an output type.
+///
+/// Useful for exporting a graph from the database.
 pub async fn parse_stream_to(
     mut stream: QuadStream,
     output_type: DataType,
@@ -171,6 +188,7 @@ pub async fn parse_stream_to(
     }
 }
 
+/// Returns the parser compatible with the file at the path.
 #[expect(
     clippy::result_large_err,
     reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
@@ -181,6 +199,7 @@ pub fn parser_from_path(path: &Path, lenient: bool) -> Result<PreparedParser, VO
     parser_from_reader(reader, path, lenient)
 }
 
+/// Returns the parser compatible with the reader, reading from the path.
 #[expect(
     clippy::result_large_err,
     reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"

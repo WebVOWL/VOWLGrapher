@@ -215,7 +215,6 @@ pub fn parser_from_reader(
     graph_iri: &str,
 ) -> Result<PreparedParser, VOWLRStoreError> {
     let make_parser = |fmt| {
-        // TODO: Handle non default graph
         let graph_node = NamedNodeRef::new(graph_iri).expect("Failed to parse graph IRI in parser");
         let parser = RdfParser::from_format(fmt).with_default_graph(graph_node);
         //.with_default_graph(NamedNode::new(format!("file:://{}", path_str)).unwrap());

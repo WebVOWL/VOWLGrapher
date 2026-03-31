@@ -106,7 +106,7 @@ impl VOWLRStore {
         let graph_iri = self.get_graph_iri(&filename);
 
         let parser = parser_from_path(fs, lenient, &graph_iri)?;
-        info!("Loading input into database for graph {}...", graph_iri);
+        info!("Loading graph '{}' into database...", graph_iri);
         let start_time = Instant::now();
 
         self.session

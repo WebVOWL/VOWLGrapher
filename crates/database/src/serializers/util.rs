@@ -1,13 +1,16 @@
 use crate::{
-    serializers::util::synthetic::{
-        SYNTH_LITERAL, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING,
+    serializers::{
+        ArcEdge, ArcTerm,
+        util::synthetic::{
+            SYNTH_LITERAL, SYNTH_LITERAL_VALUE, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING,
+        },
     },
     vocab::{owl, rdf, rdfs, xsd},
 };
 use grapher::prelude::{
-    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType,
+    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsNode, RdfsType,
 };
-use oxrdf::{Term, TermRef};
+use oxrdf::TermRef;
 
 pub const SYMMETRIC_EDGE_TYPES: [ElementType; 1] =
     [ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith))];
@@ -31,14 +34,20 @@ pub mod synthetic {
     pub const SYNTH_LOCAL_THING: &str = "_localthing";
 
     pub const SYNTH_THING: &str = "_thing";
+
+    pub const SYNTH_LITERAL_VALUE: &str = "_value";
 }
 
-pub fn is_synthetic(term: &Term) -> bool {
+/// Returns true if the term has a synthetic suffix.
+///
+/// Must contain all consts of [`synthetic`].
+pub fn is_synthetic(term: &ArcTerm) -> bool {
     let synths = [
         SYNTH_LITERAL,
         SYNTH_LOCAL_LITERAL,
         SYNTH_LOCAL_THING,
         SYNTH_THING,
+        SYNTH_LITERAL_VALUE,
     ];
     let str_term = trim_tag_circumfix(&term.to_string());
     for synth in synths {
@@ -50,8 +59,8 @@ pub fn is_synthetic(term: &Term) -> bool {
 }
 
 /// Reserved IRIs should not be overridden by e.g. "external class" ElementType.
-pub fn is_reserved(term: &Term) -> bool {
-    match term.as_ref() {
+pub fn is_reserved(term: &ArcTerm) -> bool {
+    match term.as_ref().as_ref() {
         TermRef::NamedNode(named_node_ref) => {
             matches!(
                 named_node_ref,
@@ -130,8 +139,8 @@ pub fn is_reserved(term: &Term) -> bool {
 ///
 /// ## Implementation details
 /// This function must contain exactly the same NamedNodeRefs as [`is_reserved`].
-pub fn try_resolve_reserved(term: &Term) -> Option<ElementType> {
-    match term.as_ref() {
+pub fn try_resolve_reserved(term: &ArcTerm) -> Option<ElementType> {
+    match term.as_ref().as_ref() {
         TermRef::NamedNode(named_node_ref) => match named_node_ref {
             rdf::XML_LITERAL | rdf::HTML | rdf::PLAIN_LITERAL => {
                 Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
@@ -217,7 +226,48 @@ pub fn trim_tag_circumfix(input: &str) -> String {
 }
 
 /// Generate a new IRI based on a current one.
-pub fn synthetic_iri(base: &Term, suffix: &str) -> String {
+pub fn synthetic_iri(base: &ArcTerm, suffix: &str) -> String {
     let clean = trim_tag_circumfix(&base.to_string());
     format!("{clean}{suffix}")
+}
+
+pub fn is_structural_set_node(element: ElementType) -> bool {
+    matches!(
+        element,
+        ElementType::Owl(OwlType::Node(
+            OwlNode::Complement
+                | OwlNode::IntersectionOf
+                | OwlNode::UnionOf
+                | OwlNode::DisjointUnion
+        ))
+    )
+}
+
+pub fn can_upgrade_node_type(old: ElementType, new: ElementType) -> bool {
+    if matches!(
+        old,
+        ElementType::Owl(OwlType::Node(OwlNode::Class | OwlNode::AnonymousClass))
+    ) {
+        return true;
+    }
+
+    old == ElementType::Owl(OwlType::Node(OwlNode::EquivalentClass)) && is_structural_set_node(new)
+}
+
+pub fn merge_optional_labels(left: Option<&String>, right: Option<&String>) -> Option<String> {
+    match (left, right) {
+        (Some(left), Some(right)) if left == right => Some(left.to_string()),
+        (Some(left), Some(right)) => Some(format!("{left}\n{right}")),
+        (Some(label), None) | (None, Some(label)) => Some(label.to_string()),
+        (None, None) => None,
+    }
+}
+
+pub fn is_query_fallback_endpoint(term: &ArcTerm) -> bool {
+    term.as_ref().as_ref() == owl::THING.into() || term.as_ref().as_ref() == rdfs::LITERAL.into()
+}
+
+pub fn is_restriction_owner_edge(edge: &ArcEdge) -> bool {
+    edge.edge_type == ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
+        || edge.edge_type == ElementType::NoDraw
 }

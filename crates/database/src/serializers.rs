@@ -7,6 +7,7 @@ use std::{
 };
 
 use grapher::prelude::{Characteristic, ElementType, GraphDisplayData, OwlEdge, OwlType};
+use oxrdf::Term;
 use vowlr_util::prelude::{ErrorRecord, VOWLRError};
 
 use crate::{
@@ -21,27 +22,30 @@ pub mod frontend;
 pub mod index;
 pub mod util;
 
+type ArcTerm = Arc<Term>;
 type ArcTriple = Arc<Triple>;
+type ArcEdge = Arc<Edge>;
+type ArcLockRestrictionState = Arc<RwLock<RestrictionState>>;
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct Triple {
     /// The subject.
-    subject_id: usize,
+    subject_term_id: usize,
     /// The predicate.
-    predicate_id: usize,
+    predicate_term_id: usize,
     /// The object.
-    object_id: Option<usize>,
+    object_term_id: Option<usize>,
 }
 
 impl Display for Triple {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Triple{{ ")?;
-        write!(f, "{} - ", self.subject_id)?;
-        write!(f, "{} - ", self.predicate_id)?;
+        write!(f, "{} - ", self.subject_term_id)?;
+        write!(f, "{} - ", self.predicate_term_id)?;
         write!(
             f,
             "{}",
-            self.object_id
+            self.object_term_id
                 .as_ref()
                 .map(|t| t.to_string())
                 .unwrap_or_default(),
@@ -51,45 +55,47 @@ impl Display for Triple {
 }
 
 impl Triple {
-    pub fn new(subject_id: usize, predicate_id: usize, object_id: Option<usize>) -> Self {
+    pub fn new(
+        subject_term_id: usize,
+        predicate_term_id: usize,
+        object_term_id: Option<usize>,
+    ) -> Self {
         Self {
-            subject_id,
-            predicate_id,
-            object_id,
+            subject_term_id,
+            predicate_term_id,
+            object_term_id,
         }
     }
 }
-
-type ArcEdge = Arc<Edge>;
 
 #[derive(Debug, Clone, Eq)]
 pub struct Edge {
     /// The domain of the edge.
     ///
     /// Also called the "source".
-    domain_id: usize,
+    domain_term_id: usize,
     /// The type of the edge, e.g., "Object Property".
     edge_type: ElementType,
     /// The range of the edge.
     ///
     /// Also called the "target".
-    range_id: usize,
+    range_term_id: usize,
     /// The property.
-    property_id: Option<usize>,
+    property_term_id: Option<usize>,
 }
 
 impl Edge {
     pub fn new(
-        domain_id: usize,
+        domain_term_id: usize,
         edge_type: ElementType,
-        range_id: usize,
-        property_id: Option<usize>,
+        range_term_id: usize,
+        property_term_id: Option<usize>,
     ) -> Self {
         Self {
-            domain_id,
+            domain_term_id,
             edge_type,
-            range_id,
-            property_id,
+            range_term_id,
+            property_term_id,
         }
     }
 }
@@ -97,16 +103,18 @@ impl Edge {
 impl PartialEq for Edge {
     fn eq(&self, other: &Self) -> bool {
         // Element type and property must always match
-        if self.edge_type != other.edge_type || self.property_id != other.property_id {
+        if self.edge_type != other.edge_type || self.property_term_id != other.property_term_id {
             return false;
         }
 
         // For symmetric relations, treat (A, B) and (B, A) as equal
         if SYMMETRIC_EDGE_TYPES.contains(&self.edge_type) {
-            (self.domain_id == other.domain_id && self.range_id == other.range_id)
-                || (self.domain_id == other.range_id && self.range_id == other.domain_id)
+            (self.domain_term_id == other.domain_term_id
+                && self.range_term_id == other.range_term_id)
+                || (self.domain_term_id == other.range_term_id
+                    && self.range_term_id == other.domain_term_id)
         } else {
-            self.domain_id == other.domain_id && self.range_id == other.range_id
+            self.domain_term_id == other.domain_term_id && self.range_term_id == other.range_term_id
         }
     }
 }
@@ -115,24 +123,25 @@ impl Hash for Edge {
     fn hash<H: Hasher>(&self, state: &mut H) {
         if SYMMETRIC_EDGE_TYPES.contains(&self.edge_type) {
             // For symmetric relations, hash the sorted pair
-            let (first, second) = if self.domain_id.to_string() <= self.range_id.to_string() {
-                (&self.domain_id, &self.range_id)
-            } else {
-                (&self.range_id, &self.domain_id)
-            };
+            let (first, second) =
+                if self.domain_term_id.to_string() <= self.range_term_id.to_string() {
+                    (&self.domain_term_id, &self.range_term_id)
+                } else {
+                    (&self.range_term_id, &self.domain_term_id)
+                };
 
             first.hash(state);
             second.hash(state);
             self.edge_type.hash(state);
         } else if PROPERTY_EDGE_TYPES.contains(&self.edge_type) {
-            self.domain_id.hash(state);
+            self.domain_term_id.hash(state);
             self.edge_type.hash(state);
-            self.range_id.hash(state);
-            self.property_id.hash(state);
+            self.range_term_id.hash(state);
+            self.property_term_id.hash(state);
         } else {
-            self.domain_id.hash(state);
+            self.domain_term_id.hash(state);
             self.edge_type.hash(state);
-            self.range_id.hash(state);
+            self.range_term_id.hash(state);
         }
     }
 }
@@ -142,7 +151,7 @@ impl Display for Edge {
         write!(
             f,
             "Edge{{ {} - {:?} - {} }}",
-            self.domain_id, self.edge_type, self.range_id
+            self.domain_term_id, self.edge_type, self.range_term_id
         )?;
         Ok(())
     }
@@ -154,8 +163,6 @@ pub enum RestrictionRenderMode {
     ValuesFromEdge,
     ExistingPropertyEdge,
 }
-
-type ArcLockRestrictionState = Arc<RwLock<RestrictionState>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct RestrictionState {
@@ -239,7 +246,7 @@ pub struct SerializationDataBuffer {
     /// The base IRI of the document.
     ///
     /// For instance: `http://purl.obolibrary.org/obo/envo.owl`
-    document_base: Arc<RwLock<Option<String>>>,
+    document_base: Arc<RwLock<Option<Arc<String>>>>,
 }
 impl SerializationDataBuffer {
     pub fn new() -> Self {
@@ -278,17 +285,17 @@ impl SerializationDataBuffer {
                     SerializationErrorKind::MissingLabel(msg).into(),
                 ));
             }
+            iricache.insert(term_id, display_data.elements.len());
             display_data.labels.push(label);
             display_data.elements.push(element);
-            iricache.insert(term_id, display_data.elements.len() - 1);
         }
 
         let mut edge_label_buffer = self.edge_label_buffer.write()?;
         let mut edge_characteristics = self.edge_characteristics.write()?;
         let mut edge_cardinality_buffer = self.edge_cardinality_buffer.write()?;
         for edge in self.edge_buffer.read()?.iter() {
-            let subject_idx = iricache.get(&edge.domain_id);
-            let object_idx = iricache.get(&edge.range_id);
+            let subject_idx = iricache.get(&edge.domain_term_id);
+            let object_idx = iricache.get(&edge.range_term_id);
             let maybe_label = edge_label_buffer.remove(edge);
             let characteristics = edge_characteristics.remove(edge);
             let cardinality = edge_cardinality_buffer.remove(edge);
@@ -297,7 +304,7 @@ impl SerializationDataBuffer {
                 (Some(subject_idx), Some(object_idx)) => {
                     let edge_idx =
                         if edge.edge_type == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)) {
-                            let Some(property_id) = edge.property_id else {
+                            let Some(property_id) = edge.property_term_id else {
                                 let msg = format!("Edge is missing merged property id\n{}", edge);
                                 failed.push(<SerializationError as Into<ErrorRecord>>::into(
                                     SerializationErrorKind::MissingProperty(msg).into(),
@@ -527,17 +534,17 @@ mod tests {
         let x = 1;
         let y = 2;
         let edge1 = Edge {
-            domain_id: x,
+            domain_term_id: x,
             edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith)),
-            range_id: y,
-            property_id: None,
+            range_term_id: y,
+            property_term_id: None,
         };
 
         let edge2 = Edge {
-            domain_id: y,
+            domain_term_id: y,
             edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith)),
-            range_id: x,
-            property_id: None,
+            range_term_id: x,
+            property_term_id: None,
         };
 
         // Test that they are equal
@@ -565,17 +572,17 @@ mod tests {
         let y = 2;
         let prop1 = 3;
         let edge1 = Edge {
-            domain_id: x,
+            domain_term_id: x,
             edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
-            range_id: y,
-            property_id: Some(prop1),
+            range_term_id: y,
+            property_term_id: Some(prop1),
         };
 
         let edge2 = Edge {
-            domain_id: y,
+            domain_term_id: y,
             edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
-            range_id: x,
-            property_id: Some(prop1),
+            range_term_id: x,
+            property_term_id: Some(prop1),
         };
 
         // Test that they are NOT equal

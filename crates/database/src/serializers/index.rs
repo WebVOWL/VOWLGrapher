@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use oxrdf::Term;
+use oxrdf::{Term, TermRef};
 
 use crate::errors::{SerializationError, SerializationErrorKind};
 
@@ -110,6 +110,18 @@ impl TermIndex {
             .read()?
             .get(id)
             .is_some_and(|term| term.is_literal());
+        Ok(result)
+    }
+
+    /// Returns true if the term corresponding to the id exists and is a literal with the value "true".
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn is_literal_truthy(&self, id: &usize) -> Result<bool, SerializationError> {
+        let result = self.int_index.read()?.get(id).is_some_and(
+            |term| matches!(term.as_ref().as_ref(), TermRef::Literal(lit) if lit.value() == "true"),
+        );
+
         Ok(result)
     }
 }

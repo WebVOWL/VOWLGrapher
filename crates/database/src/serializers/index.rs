@@ -1,13 +1,18 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use oxrdf::Term;
+
+use crate::errors::{SerializationError, SerializationErrorKind};
 
 #[derive(Debug, Default)]
 pub struct TermIndex {
     /// Maps an RDF term to a corresponding id.
-    str_index: HashMap<Rc<Term>, usize>,
+    str_index: RwLock<HashMap<Arc<Term>, usize>>,
     /// Maps an id to a corresponding RDF term.
-    int_index: HashMap<usize, Rc<Term>>,
+    int_index: RwLock<HashMap<usize, Arc<Term>>>,
 }
 
 impl TermIndex {
@@ -15,50 +20,96 @@ impl TermIndex {
         Self::default()
     }
 
-    /// Inserts
-    pub fn insert(&mut self, term: Term) -> usize {
-        match self.str_index.get(&term) {
-            Some(id) => *id,
+    /// Inserts a term into the index and returns its corresponding id.
+    ///
+    /// If the index did not have this term present, a new id is returned.
+    ///
+    /// If the index did have this term present, the existing id is returned.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn insert(&mut self, term: Term) -> Result<usize, SerializationError> {
+        let mut str_index = self.str_index.write()?;
+        match str_index.get(&term) {
+            Some(id) => Ok(*id),
             None => {
-                let rc_term = Rc::new(term);
-                let id = self.str_index.len();
+                let arc_term = Arc::new(term);
+                let id = str_index.len();
 
-                self.str_index.insert(rc_term.clone(), id);
-                self.int_index.insert(id, rc_term);
+                str_index.insert(arc_term.clone(), id);
+                self.int_index.write()?.insert(id, arc_term);
 
-                id
+                Ok(id)
             }
         }
     }
 
-    /// Removes a term from the index, returning the term with the id if the id was previously in the index.
-    pub fn remove(&mut self, id: &usize) -> Option<Rc<Term>> {
-        self.int_index.remove(id).inspect(|term| {
-            self.str_index.remove(term);
-        })
+    /// Removes a term from the index, returning the term corresponding to the id if
+    /// the id was previously in the index.
+    pub fn remove(&mut self, id: &usize) -> Result<Option<Arc<Term>>, SerializationError> {
+        if let Some(term) = self.int_index.write()?.remove(id) {
+            self.str_index.write()?.remove(&term);
+            return Ok(Some(term));
+        }
+        Ok(None)
     }
 
     /// Returns a reference to the term corresponding to the id.
-    pub fn get(&self, id: &usize) -> Option<Rc<Term>> {
-        self.int_index.get(id).cloned()
+    ///
+    /// # Errors
+    /// Returns an error if no term corresponding to the id was found in the index.
+    ///
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn get(&self, id: &usize) -> Result<Arc<Term>, SerializationError> {
+        let term = self
+            .int_index
+            .read()?
+            .get(id)
+            .ok_or_else(|| {
+                SerializationErrorKind::TermIndexError(format!(
+                    "Failed to find term with '{id}' in the term index"
+                ))
+            })?
+            .clone();
+        Ok(term)
     }
 
     /// Returns true if the term corresponding to the id exists and is a named node.
-    pub fn is_named_node(&self, id: &usize) -> bool {
-        self.int_index
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn is_named_node(&self, id: &usize) -> Result<bool, SerializationError> {
+        let result = self
+            .int_index
+            .read()?
             .get(id)
-            .is_some_and(|term| term.is_named_node())
+            .is_some_and(|term| term.is_named_node());
+        Ok(result)
     }
 
     /// Returns true if the term corresponding to the id exists and is a blank node.
-    pub fn is_blank_node(&self, id: &usize) -> bool {
-        self.int_index
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn is_blank_node(&self, id: &usize) -> Result<bool, SerializationError> {
+        let result = self
+            .int_index
+            .read()?
             .get(id)
-            .is_some_and(|term| term.is_blank_node())
+            .is_some_and(|term| term.is_blank_node());
+        Ok(result)
     }
 
     /// Returns true if the term corresponding to the id exists and is a literal.
-    pub fn is_literal(&self, id: &usize) -> bool {
-        self.int_index.get(id).is_some_and(|term| term.is_literal())
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn is_literal(&self, id: &usize) -> Result<bool, SerializationError> {
+        let result = self
+            .int_index
+            .read()?
+            .get(id)
+            .is_some_and(|term| term.is_literal());
+        Ok(result)
     }
 }

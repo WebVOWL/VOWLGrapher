@@ -1,20 +1,16 @@
 use std::{
-    collections::{HashMap, HashSet},
-    mem::take,
-    rc::Rc,
-    time::{Duration, Instant},
+    collections::{HashMap, HashSet}, mem::take, rc::Rc, sync::{Arc, RwLock}, time::{Duration, Instant}, usize
 };
 
 use super::{Edge, RestrictionRenderMode, SerializationDataBuffer, Triple};
 use crate::{
     errors::{SerializationError, SerializationErrorKind},
     serializers::{
-        index::TermIndex,
-        util::{
+        ArcEdge, ArcTriple, RestrictionState, index::TermIndex, util::{
             PROPERTY_EDGE_TYPES, is_reserved, is_synthetic,
             synthetic::{SYNTH_LITERAL, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING},
             synthetic_iri, trim_tag_circumfix, try_resolve_reserved,
-        },
+        }
     },
     vocab::{owl, rdf, rdfs, xsd},
 };
@@ -25,20 +21,23 @@ use grapher::prelude::{
     RdfsEdge, RdfsNode, RdfsType,
 };
 use log::{debug, error, info, trace, warn};
-use rayon::iter::ParallelBridge;
+use oxrdf::Literal;
 use rdf_fusion::{
     execution::results::QuerySolutionStream,
     model::{BlankNode, NamedNode, Term},
 };
-use std::{
-    collections::{HashMap, HashSet},
-    mem::take,
-    rc::Rc,
-    time::{Duration, Instant},
-};
+
 use unescape_zero_copy::unescape_default;
 use vowlr_parser::errors::VOWLRStoreError;
 use vowlr_util::prelude::{ErrorRecord, VOWLRError};
+
+// use rayon::iter::ParallelBridge;
+// TODO:
+// - https://morestina.net/1432/parallel-stream-processing-with-rayon
+// - https://docs.rs/rayon/latest/rayon/iter/trait.ParallelBridge.html
+// - https://users.rust-lang.org/t/parallel-work-collected-sequentially/13504/2
+// - https://docs.rs/parallel-stream/latest/parallel_stream/
+// - https://doc.rust-lang.org/nightly/std/sync/index.html
 
 pub struct GraphDisplayDataSolutionSerializer {
     /// Maps terms to integer ids and vice-versa.
@@ -57,235 +56,6 @@ impl GraphDisplayDataSolutionSerializer {
         Self {
             term_index: TermIndex::new(),
         }
-    }
-
-    pub async fn par_serialize_nodes_stream(
-        &self,
-        data: &mut GraphDisplayData,
-        mut solution_stream: QuerySolutionStream,
-    ) -> Result<(), VOWLRError> {
-        let mut count: u64 = 0;
-        info!("Serializing query solution stream...");
-        let start_time = Instant::now();
-        let mut data_buffer = SerializationDataBuffer::new();
-
-        // TODO:
-        // - https://morestina.net/1432/parallel-stream-processing-with-rayon
-        // - https://docs.rs/rayon/latest/rayon/iter/trait.ParallelBridge.html
-        // - https://users.rust-lang.org/t/parallel-work-collected-sequentially/13504/2
-        // - https://docs.rs/parallel-stream/latest/parallel_stream/
-        // - https://doc.rust-lang.org/nightly/std/sync/index.html
-        for item in solution_stream.chunks(1024) {}
-
-        while let Some(maybe_solution) = solution_stream.next().await {
-            let solution = match maybe_solution {
-                Ok(solution) => solution,
-                Err(e) => {
-                    data_buffer
-                        .failed_buffer
-                        .push(<VOWLRStoreError as Into<ErrorRecord>>::into(e.into()));
-                    continue;
-                }
-            };
-            let Some(id_term) = solution.get("id") else {
-                continue;
-            };
-
-            let subject_term_id = data_buffer.term_index.insert(id_term.to_owned());
-            self.extract_label(
-                &mut data_buffer,
-                solution.get("label"),
-                id_term,
-                &subject_term_id,
-            );
-
-            let Some(node_type_term) = solution.get("nodeType") else {
-                continue;
-            };
-
-            let triple = Rc::new(Triple {
-                id: subject_term_id,
-                element_type: data_buffer.term_index.insert(node_type_term.to_owned()),
-                target: solution
-                    .get("target")
-                    .map(|term| data_buffer.term_index.insert(term.to_owned())),
-            });
-
-            self.write_node_triple(&mut data_buffer, triple)
-                .or_else(|e| {
-                    data_buffer.failed_buffer.push(e.into());
-                    Ok::<SerializationStatus, VOWLRError>(SerializationStatus::Serialized)
-                })?;
-            count += 1;
-        }
-
-        self.check_all_unknowns(&mut data_buffer).or_else(|e| {
-            data_buffer.failed_buffer.push(e.into());
-            Ok::<(), VOWLRError>(())
-        })?;
-
-        // Catch permanently unresolved triples
-        for (term, triples) in data_buffer.unknown_buffer.drain() {
-            for triple in triples {
-                let e: SerializationError = SerializationErrorKind::SerializationFailed(
-                    triple,
-                    format!("Unresolved reference: could not map '{}'", term),
-                )
-                .into();
-                data_buffer.failed_buffer.push(e.into());
-            }
-        }
-
-        let finish_time = Instant::now()
-            .checked_duration_since(start_time)
-            .unwrap_or(Duration::new(0, 0))
-            .as_secs_f32();
-        info!(
-            "Serialization completed in {} s\n \
-            \tTotal solutions: {count}\n \
-            \tElements       : {}\n \
-            \tEdges          : {}\n \
-            \tLabels         : {}\n \
-            \tCardinalities  : {}\n \
-            \tCharacteristics: {}\n\n \
-        ",
-            finish_time,
-            data_buffer.node_element_buffer.len(),
-            data_buffer.edge_buffer.len(),
-            data_buffer.label_buffer.len(),
-            data_buffer.edge_cardinality_buffer.len(),
-            data_buffer.edge_characteristics.len() + data_buffer.node_characteristics.len(),
-        );
-        debug!("{}", data_buffer);
-        let errors = if !data_buffer.failed_buffer.is_empty() {
-            let total = data_buffer.failed_buffer.len();
-            let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
-            error!(
-                "Failed to serialize {} triple{}:\n{}",
-                total,
-                if total != 1 { "s" } else { "" },
-                err
-            );
-            Some(err)
-        } else {
-            None
-        };
-        *data = data_buffer.into();
-        debug!("{}", data);
-        Ok(errors)
-    }
-
-    /// Serializes a query solution stream into the data buffer.
-    ///
-    /// This method tries to continue serializing despite errors.
-    /// As such, the `Ok` value contains non-fatal errors encountered during
-    /// serialization. The `Err` value contains fatal errors, preventing serialization.
-    pub async fn serialize_nodes_stream(
-        &self,
-        data: &mut GraphDisplayData,
-        mut solution_stream: QuerySolutionStream,
-    ) -> Result<Option<VOWLRError>, VOWLRError> {
-        let mut count: u64 = 0;
-        info!("Serializing query solution stream...");
-        let start_time = Instant::now();
-        let mut data_buffer = SerializationDataBuffer::new();
-
-        // TODO:
-        // - https://morestina.net/1432/parallel-stream-processing-with-rayon
-        // - https://docs.rs/rayon/latest/rayon/iter/trait.ParallelBridge.html
-        // - https://users.rust-lang.org/t/parallel-work-collected-sequentially/13504/2
-        // - https://docs.rs/parallel-stream/latest/parallel_stream/
-        // - https://doc.rust-lang.org/nightly/std/sync/index.html
-        for item in solution_stream.chunks(1024) {}
-
-        while let Some(maybe_solution) = solution_stream.next().await {
-            let solution = match maybe_solution {
-                Ok(solution) => solution,
-                Err(e) => {
-                    let a: VOWLRStoreError = e.into();
-                    data_buffer.failed_buffer.push(a.into());
-                    continue;
-                }
-            };
-            let Some(id_term) = solution.get("id") else {
-                continue;
-            };
-
-            let subject_term_id = data_buffer.term_index.insert(id_term.to_owned());
-            self.extract_label(
-                &mut data_buffer,
-                solution.get("label"),
-                id_term,
-                &subject_term_id,
-            );
-
-            let Some(node_type_term) = solution.get("nodeType") else {
-                continue;
-            };
-
-            let triple = Rc::new(Triple {
-                id: subject_term_id,
-                element_type: data_buffer.term_index.insert(node_type_term.to_owned()),
-                target: solution
-                    .get("target")
-                    .map(|term| data_buffer.term_index.insert(term.to_owned())),
-            });
-
-            self.write_node_triple(&mut data_buffer, triple)
-                .or_else(|e| {
-                    data_buffer.failed_buffer.push(e.into());
-                    Ok::<SerializationStatus, VOWLRError>(SerializationStatus::Serialized)
-                })?;
-            count += 1;
-        }
-
-        self.check_all_unknowns(&mut data_buffer).or_else(|e| {
-            data_buffer.failed_buffer.push(e.into());
-            Ok::<(), VOWLRError>(())
-        })?;
-
-        // Catch permanently unresolved triples
-        for (term, triples) in data_buffer.unknown_buffer.drain() {
-            for triple in triples {
-                let e: SerializationError = SerializationErrorKind::SerializationFailed(
-                    triple,
-                    format!("Unresolved reference: could not map '{}'", term),
-                )
-                .into();
-                data_buffer.failed_buffer.push(e.into());
-            }
-        }
-
-        let finish_time = Instant::now()
-            .checked_duration_since(start_time)
-            .unwrap_or(Duration::new(0, 0))
-            .as_secs_f32();
-        info!(
-            "Serialization completed in {} s\n \
-            \tTotal solutions: {count}\n \
-            \tElements       : {}\n \
-            \tEdges          : {}\n \
-            \tLabels         : {}\n \
-            \tCardinalities  : {}\n \
-            \tCharacteristics: {}\n\n \
-        ",
-            finish_time,
-            data_buffer.node_element_buffer.len(),
-            data_buffer.edge_buffer.len(),
-            data_buffer.label_buffer.len(),
-            0,
-            data_buffer.edge_characteristics.len() + data_buffer.node_characteristics.len(),
-        );
-        debug!("{}", data_buffer);
-        if !data_buffer.failed_buffer.is_empty() {
-            let total = data_buffer.failed_buffer.len();
-            let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
-            error!("Failed to serialize {} triples:\n{}", total, err);
-            // return Err(err);
-        }
-        *data = data_buffer.into();
-        debug!("{}", data);
-        Ok(())
     }
 
     /// Serializes a query solution stream into the data buffer.
@@ -309,20 +79,21 @@ impl GraphDisplayDataSolutionSerializer {
                 Ok(solution) => solution,
                 Err(e) => {
                     data_buffer
-                        .failed_buffer
+                        .failed_buffer.write().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?
                         .push(<VOWLRStoreError as Into<ErrorRecord>>::into(e.into()));
                     continue;
                 }
             };
-            let Some(id_term) = solution.get("id") else {
+            let Some(subject_term) = solution.get("id") else {
                 continue;
             };
 
-            let subject_term_id = data_buffer.term_index.insert(id_term.to_owned());
+            // Label must be extracted between getting id and nodeType from solutions due to "continue" in the else clause.
+            let subject_term_id = data_buffer.term_index.insert(subject_term.to_owned())?;
             self.extract_label(
                 &mut data_buffer,
                 solution.get("label"),
-                id_term,
+                subject_term,
                 &subject_term_id,
             );
 
@@ -330,35 +101,35 @@ impl GraphDisplayDataSolutionSerializer {
                 continue;
             };
 
-            let triple = Rc::new(Triple {
-                id: subject_term_id,
-                element_type: data_buffer.term_index.insert(node_type_term.to_owned()),
-                target: solution
-                    .get("target")
-                    .map(|term| data_buffer.term_index.insert(term.to_owned())),
-            });
+            let object_term_id = match solution
+                    .get("target"){
+                        Some(term) => {Some( data_buffer.term_index.insert(term.to_owned())?)}
+                        None => None
+                    };
+
+            let triple = self.create_triple_from_id(subject_term_id, data_buffer.term_index.insert(node_type_term.to_owned())?, object_term_id) ;
 
             self.write_node_triple(&mut data_buffer, triple)
                 .or_else(|e| {
-                    data_buffer.failed_buffer.push(e.into());
+                    data_buffer.failed_buffer.write().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.push(e.into());
                     Ok::<SerializationStatus, VOWLRError>(SerializationStatus::Serialized)
                 })?;
             count += 1;
         }
         self.check_all_unknowns(&mut data_buffer).or_else(|e| {
-            data_buffer.failed_buffer.push(e.into());
+            data_buffer.failed_buffer.write().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.push(e.into());
             Ok::<(), VOWLRError>(())
         })?;
 
         // Catch permanently unresolved triples
-        for (term, triples) in data_buffer.unknown_buffer.drain() {
+        for (term_id, triples) in data_buffer.unknown_buffer.write().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.drain() {
             for triple in triples {
-                let e: SerializationError = SerializationErrorKind::SerializationFailed(
+                let e: SerializationError = SerializationErrorKind::SerializationFailedTriple(
                     triple,
-                    format!("Unresolved reference: could not map '{}'", term),
+                    format!("Unresolved reference: could not map '{}'", term_id),
                 )
                 .into();
-                data_buffer.failed_buffer.push(e.into());
+                data_buffer.failed_buffer.write().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.push(e.into());
             }
         }
 
@@ -376,16 +147,17 @@ impl GraphDisplayDataSolutionSerializer {
             \tCharacteristics: {}\n\n \
         ",
             finish_time,
-            data_buffer.node_element_buffer.len(),
-            data_buffer.edge_buffer.len(),
-            data_buffer.label_buffer.len(),
-            data_buffer.edge_cardinality_buffer.len(),
-            data_buffer.edge_characteristics.len() + data_buffer.node_characteristics.len(),
+            data_buffer.node_element_buffer.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.len(),
+            data_buffer.edge_buffer.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.len(),
+            data_buffer.label_buffer.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.len(),
+            data_buffer.edge_cardinality_buffer.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.len(),
+            data_buffer.edge_characteristics.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.len() + data_buffer.node_characteristics.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.len(),
         );
         debug!("{}", data_buffer);
-        let errors = if !data_buffer.failed_buffer.is_empty() {
-            let total = data_buffer.failed_buffer.len();
-            let err: VOWLRError = take(&mut data_buffer.failed_buffer).into();
+        let errors = if !data_buffer.failed_buffer.read().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?.is_empty() {
+            let mut failed_buffer = data_buffer.failed_buffer.write().map_err(|pe| <SerializationError as Into<VOWLRError>>::into(pe.into()))?;
+            let total = failed_buffer.len();
+            let err: VOWLRError = take(&mut *failed_buffer).into();
             error!(
                 "Failed to serialize {} triple{}:\n{}",
                 total,
@@ -396,9 +168,24 @@ impl GraphDisplayDataSolutionSerializer {
         } else {
             None
         };
-        *data = data_buffer.into();
+        let (converted, convert_errors) = data_buffer.convert_into()?;
+        *data = converted;
         debug!("{}", data);
-        Ok(errors)
+   
+        let all_errors = match (errors, convert_errors) {
+            (Some(mut e), Some(mut ce)) => {
+                let ue = take(&mut e.records).into_iter().chain(take(&mut ce.records).into_iter()).collect::<Vec<_>>();
+                Some(ue.into())
+            }
+            (Some(e), None) => {Some(e)}
+            (None, Some(ce)) => {Some(ce)}
+            (None, None) => {None}
+
+        };
+   
+   
+   
+        Ok(all_errors)
     }
 
     /// Extract label info from the query solution and store until
@@ -406,19 +193,19 @@ impl GraphDisplayDataSolutionSerializer {
     fn extract_label(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        label: Option<&Term>,
-        id_term: &Term,
-        subject_term_id: &usize,
-    ) {
+        maybe_label: Option<&Term>,
+        term: &Term,
+        term_id: &usize,
+    ) -> Result<(), SerializationError> {
         // Prevent overriding labels
-        if data_buffer.label_buffer.contains_key(subject_term_id) {
-            return;
+        if data_buffer.label_buffer.read()?.contains_key(term_id) {
+            return Ok(());
         }
 
-        match label {
+        match maybe_label {
             // Case 1: Label is a rdfs:label OR rdfs:Resource OR rdf:ID
-            Some(label_term) => {
-                let str_label = label_term.to_string();
+            Some(label) => {
+                let str_label = label.to_string();
 
                 // Handle cases where label is: "Some Label"@en or contains "
                 let split_label = str_label.split_inclusive("\"").collect::<Vec<_>>();
@@ -438,38 +225,34 @@ impl GraphDisplayDataSolutionSerializer {
                 };
 
                 if !clean_label.is_empty() {
-                    trace!("Inserting label '{clean_label}' for iri '{}'", id_term);
-                    data_buffer
-                        .label_buffer
-                        .insert(*subject_term_id, clean_label);
+                    trace!("Inserting label '{clean_label}' for term '{}'", term);
+                    data_buffer.label_buffer.write()?.insert(*term_id, clean_label);
                 } else {
-                    debug!("Empty label detected for iri '{}'", id_term);
+                    debug!("Empty label detected for term '{}'", term);
                 }
             }
-            // Case 2: Try parsing the iri
+            // Case 2: Try parsing the term
             None => {
-                let iri = id_term.to_string();
+                let iri = term.to_string();
                 match Iri::parse(trim_tag_circumfix(&iri)) {
                     // Case 2.1: Look for fragments in the iri
-                    Ok(id_iri) => match id_iri.fragment() {
+                    Ok(parsed_iri) => match parsed_iri.fragment() {
                         Some(frag) => {
-                            trace!("Inserting fragment '{frag}' as label for iri '{}'", id_term);
-                            data_buffer
-                                .label_buffer
-                                .insert(*subject_term_id, frag.to_string());
+                            trace!("Inserting fragment '{frag}' as label for iri '{}'", term);
+                            data_buffer.label_buffer.write()?.insert(*term_id, frag.to_string());
                         }
                         // Case 2.2: Look for path in iri
                         None => {
                             debug!("No fragment found in iri '{iri}'");
-                            match id_iri.path().rsplit_once('/') {
+                            match parsed_iri.path().rsplit_once('/') {
                                 Some(path) => {
                                     trace!(
                                         "Inserting path '{}' as label for iri '{}'",
-                                        path.1, id_term
+                                        path.1, term
                                     );
                                     data_buffer
-                                        .label_buffer
-                                        .insert(*subject_term_id, path.1.to_string());
+                                        .label_buffer.write()?
+                                        .insert(*term_id, path.1.to_string());
                                 }
                                 None => {
                                     debug!("No path found in iri '{iri}'");
@@ -484,21 +267,23 @@ impl GraphDisplayDataSolutionSerializer {
                 }
             }
         };
+        Ok(())
     }
 
-    fn resolve(&self, data_buffer: &SerializationDataBuffer, mut x: Term) -> Option<Term> {
-        let resolved = self.follow_redirection(data_buffer, &x);
+    /// Returns the term if its element type is known.
+    fn resolve(&self, data_buffer: &SerializationDataBuffer, term_id: usize) -> Result<Option<usize>, SerializationError> {
+        let resolved = self.follow_redirection(data_buffer, term_id)?;
 
-        if let Some(elem) = data_buffer.node_element_buffer.get(&resolved) {
+        if let Some(elem) = data_buffer.node_element_buffer.read()?.get(&resolved) {
             debug!("Resolved: {}: {}", resolved, elem);
-            return Some(resolved);
+            return Ok(Some(resolved));
         }
 
-        if let Some(elem) = data_buffer.edge_element_buffer.get(&resolved) {
+        if let Some(elem) = data_buffer.edge_element_buffer.read()?.get(&resolved) {
             debug!("Resolved: {}: {}", resolved, elem);
-            return Some(resolved);
+            return Ok(Some(resolved));
         }
-        None
+        Ok(None)
     }
 
     /// Returns the subject and object of the triple if their element type is known.
@@ -506,16 +291,16 @@ impl GraphDisplayDataSolutionSerializer {
         &self,
         data_buffer: &SerializationDataBuffer,
         triple: &Triple,
-    ) -> (Option<usize>, Option<usize>) {
-        let resolved_subject = self.resolve(data_buffer, triple.id);
-        let resolved_object = match &triple.target {
-            Some(target) => self.resolve(data_buffer, *target),
+    ) -> Result<(Option<usize>, Option<usize>), SerializationError> {
+        let resolved_subject = self.resolve(data_buffer, triple.subject_id)?;
+        let resolved_object = match &triple.object_id {
+            Some(target) => self.resolve(data_buffer, *target)?,
             None => {
                 debug!("Cannot resolve object of triple:\n {}", triple);
                 None
             }
         };
-        (resolved_subject, resolved_object)
+        Ok((resolved_subject, resolved_object))
     }
 
     /// Add subject of triple to the element buffer.
@@ -524,19 +309,21 @@ impl GraphDisplayDataSolutionSerializer {
     /// identifies itself as multiple elements. E.g. an element is both an rdfs:Class and a owl:class.
     fn add_to_element_buffer(
         &self,
-        element_buffer: &mut HashMap<usize, ElementType>,
-        triple: &Triple,
+        element_buffer: &mut Arc<RwLock<HashMap<usize, ElementType>>>,
+        triple: &ArcTriple,
         element_type: ElementType,
-    ) {
-        if let Some(element) = element_buffer.get(&triple.id) {
+    ) -> Result<(), SerializationError> {
+        // TODO: Check for potential deadlock with read and write (read must be out of scope before write)
+        if let Some(element) = element_buffer.read()?.get(&triple.subject_id) {
             warn!(
                 "Attempted to register '{}' to subject '{}' already registered as '{}'. Skipping",
-                element_type, triple.id, element
+                element_type, triple.subject_id, element
             );
         } else {
-            trace!("Adding to element buffer: {}: {}", triple.id, element_type);
-            element_buffer.insert(triple.id, element_type);
+            trace!("Adding to element buffer: {}: {}", triple.subject_id, element_type);
+            element_buffer.write()?.insert(triple.subject_id, element_type);
         }
+        Ok(())
     }
 
     /// Add an IRI to the unresolved, unknown buffer.
@@ -544,64 +331,73 @@ impl GraphDisplayDataSolutionSerializer {
         &self,
         data_buffer: &mut SerializationDataBuffer,
         element_iri: usize,
-        triple: Rc<Triple>,
-    ) {
+        triple: ArcTriple,
+    ) -> Result<(), SerializationError> {
         trace!("Adding to unknown buffer: {}: {}", element_iri, triple);
-        if let Some(id_unknowns) = data_buffer.unknown_buffer.get_mut(&element_iri) {
-            id_unknowns.insert(triple);
-        } else {
-            let mut id_unknowns = HashSet::new();
-            id_unknowns.insert(triple);
-            data_buffer.unknown_buffer.insert(element_iri, id_unknowns);
-        }
+
+        data_buffer
+            .unknown_buffer.write()?
+            .entry(element_iri)
+            .or_default()
+            .insert(triple);
+
+
+
+        Ok(())
     }
 
     /// Insert an edge into the element's edge set.
     fn insert_edge_include(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        element_iri: usize,
-        edge: Rc<Edge>,
-    ) {
+        element_id: usize,
+        edge: ArcEdge,
+    ) -> Result<(), SerializationError> {
         data_buffer
-            .edges_include_map
-            .entry(element_iri)
+            .edges_include_map.write()?
+            .entry(element_id)
             .or_default()
             .insert(edge);
+        Ok(())
     }
 
     pub fn redirect_iri(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        old: usize,
-        new: usize,
+        old_id: usize,
+        new_id: usize,
     ) -> Result<(), SerializationError> {
-        debug!("Redirecting '{}' to '{}'", old, new);
-        data_buffer.edge_redirection.insert(old, new);
-        self.check_unknown_buffer(data_buffer, &old)?;
+        debug!("Redirecting '{}' to '{}'", old_id, new_id);
+        {
+        data_buffer.edge_redirection.write()?.insert(old_id, new_id);
+        }self.check_unknown_buffer(data_buffer, &old_id)?;
         Ok(())
     }
 
-    fn follow_redirection(&self, data_buffer: &SerializationDataBuffer, term: &Term) -> Term {
-        let mut current = term.clone();
+    fn follow_redirection(&self, data_buffer: &SerializationDataBuffer, term_id: usize) -> Result<usize, SerializationError> {
+        let mut current = term_id;
 
-        while let Some(next) = data_buffer.edge_redirection.get(&current) {
+        let edge_redirection = data_buffer.edge_redirection.read()?;
+        while let Some(next) = edge_redirection.get(&current) {
             if *next == current {
                 break;
             }
-            current = next.clone();
+            current = *next;
         }
 
-        current
+        Ok(current)
     }
 
     pub fn check_unknown_buffer(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        term: &usize,
+        term_id: &usize,
     ) -> Result<(), SerializationError> {
-        let triple = data_buffer.unknown_buffer.remove(term);
-        if let Some(triples) = triple {
+        let maybe_triples = {
+            data_buffer.unknown_buffer.write()?.remove(term_id)
+        };
+        
+        if let Some(triples) = maybe_triples {
             for triple in triples {
                 self.write_node_triple(data_buffer, triple)?;
             }
@@ -612,7 +408,7 @@ impl GraphDisplayDataSolutionSerializer {
     fn insert_node(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: &Triple,
+        triple: ArcTriple,
         node_type: ElementType,
     ) -> Result<(), SerializationError> {
         self.insert_node_impl(data_buffer, triple, node_type, true)
@@ -621,26 +417,26 @@ impl GraphDisplayDataSolutionSerializer {
     fn insert_node_impl(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: &Triple,
+        triple: ArcTriple,
         node_type: ElementType,
         retry_restrictions: bool,
     ) -> Result<(), SerializationError> {
-        if data_buffer.edge_redirection.contains_key(&triple.id) {
+        if data_buffer.edge_redirection.read()?.contains_key(&triple.subject_id) {
             debug!(
                 "Skipping insert_node for '{}': already redirected",
-                triple.id
+                triple.subject_id
             );
             return Ok(());
         }
 
-        let new_type = if self.is_external(data_buffer, &triple.id) {
+        let new_type = if self.is_external(data_buffer, &triple.subject_id)? {
             ElementType::Owl(OwlType::Node(OwlNode::ExternalClass))
         } else {
             node_type
         };
 
-        self.add_to_element_buffer(&mut data_buffer.node_element_buffer, triple, new_type);
-        self.check_unknown_buffer(data_buffer, &triple.id)?;
+        self.add_to_element_buffer(&mut data_buffer.node_element_buffer, &triple, new_type);
+        self.check_unknown_buffer(data_buffer, &triple.subject_id)?;
 
         if retry_restrictions {
             self.retry_restrictions(data_buffer)?;
@@ -652,7 +448,7 @@ impl GraphDisplayDataSolutionSerializer {
     fn insert_node_without_retry(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: &Triple,
+        triple: ArcTriple,
         node_type: ElementType,
     ) -> Result<(), SerializationError> {
         self.insert_node_impl(data_buffer, triple, node_type, false)
@@ -666,112 +462,109 @@ impl GraphDisplayDataSolutionSerializer {
     fn insert_edge(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: Rc<Triple>,
+        triple: ArcTriple,
         edge_type: ElementType,
         label: Option<String>,
-    ) -> Option<Rc<Edge>> {
+    ) -> Result<Option<ArcEdge>, SerializationError> {
         let external_probe = if PROPERTY_EDGE_TYPES.contains(&edge_type) {
-            &triple.element_type
+            &triple.predicate_id
         } else {
-            &triple.id
+            &triple.subject_id
         };
 
         // Skip external check for NoDraw edges - they should always retain their type
         let new_type =
-            if edge_type != ElementType::NoDraw && self.is_external(data_buffer, external_probe) {
+            if edge_type != ElementType::NoDraw && self.is_external(data_buffer, external_probe)? {
                 ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty))
             } else {
                 edge_type
             };
-        match self.resolve_so(data_buffer, &triple) {
-            (Some(sub_iri), Some(obj_iri)) => {
+
+        match self.resolve_so(data_buffer, &triple)? {
+            (Some(subject_id), Some(object_id)) => {
                 let should_hash_property = [
                     ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
                     ElementType::Owl(OwlType::Edge(OwlEdge::DatatypeProperty)),
                     ElementType::Owl(OwlType::Edge(OwlEdge::DeprecatedProperty)),
                     ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty)),
                 ];
-                let property = if should_hash_property.contains(&new_type) {
-                    Some(triple.element_type)
+                let property_id = if should_hash_property.contains(&new_type) {
+                    Some(triple.predicate_id)
                 } else {
                     None
                 };
-                let edge = Rc::new(Edge {
-                    subject: sub_iri,
-                    element_type: new_type,
-                    object: obj_iri,
-                    property,
-                });
-
+                let edge = self.create_edge_from_id(subject_id, new_type, object_id, property_id);
                 trace!(
                     "Inserting edge: {} -> {} -> {}",
-                    edge.subject, edge.element_type, edge.object
+                    edge.domain_id, edge.edge_type, edge.range_id
                 );
 
                 data_buffer
-                    .edge_element_buffer
-                    .insert(triple.element_type, edge.element_type);
+                    .edge_element_buffer.write()?
+                    .insert(triple.predicate_id, edge.edge_type);
 
-                data_buffer.edge_buffer.insert(edge.clone());
-                self.insert_edge_include(data_buffer, sub_iri, edge.clone());
-                self.insert_edge_include(data_buffer, obj_iri, edge.clone());
+                data_buffer.edge_buffer.write()?.insert(edge.clone());
+                self.insert_edge_include(data_buffer, subject_id, edge.clone())?;
+                self.insert_edge_include(data_buffer, object_id, edge.clone())?;
 
                 data_buffer
-                    .edge_label_buffer
+                    .edge_label_buffer.write()?
                     .insert(edge.clone(), label.unwrap_or(new_type.to_string()));
-                return Some(edge);
+                return Ok(Some(edge));
             }
             (None, Some(_)) => {
                 debug!("Cannot resolve subject of triple:\n {}", triple);
-                self.add_to_unknown_buffer(data_buffer, triple.id, triple);
+                self.add_to_unknown_buffer(data_buffer, triple.subject_id, triple)?;
             }
             (Some(_), None) => {
-                if let Some(obj_iri) = &triple.target {
+                if let Some(obj_iri) = &triple.object_id {
                     // resolve_so already warns about unresolved object. No need to repeat it here.
-                    self.add_to_unknown_buffer(data_buffer, obj_iri.clone(), triple.clone());
+                    self.add_to_unknown_buffer(data_buffer, obj_iri.clone(), triple.clone())?;
                 }
             }
             _ => {
                 debug!("Cannot resolve subject and object of triple:\n {}", triple);
-                self.add_to_unknown_buffer(data_buffer, triple.id.clone(), triple.clone());
+                self.add_to_unknown_buffer(data_buffer, triple.subject_id.clone(), triple.clone())?;
             }
         }
-        None
+        Ok(None)
     }
 
-    fn is_external(&self, data_buffer: &SerializationDataBuffer, term_id: &usize) -> bool {
-        if let Some(term) = data_buffer.term_index.get(term_id) {
+    fn is_external(&self, data_buffer: &SerializationDataBuffer, term_id: &usize) -> Result<bool, SerializationError> {
+        let term =data_buffer.term_index.get(term_id)?;
+
             if term.is_blank_node() {
-                return false;
+                return Ok(false);
             }
             let clean_term = trim_tag_circumfix(&term.to_string());
-            match &data_buffer.document_base {
+            match *data_buffer.document_base.read()? {
                 Some(base) => {
-                    return !(clean_term.contains(base) || is_reserved(&term) || is_synthetic(iri));
+                    Ok(!(clean_term.contains(&base)
+                        || is_reserved(&term)
+                        || is_synthetic(&term)))
                 }
                 None => {
                     warn!("Cannot determine externals: Missing document base!");
-                    return false;
+                    Ok(false)
                 }
             }
         }
-        false
-    }
 
     fn merge_nodes(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        old: &usize,
-        new: &usize,
+        old: usize,
+        new: usize,
     ) -> Result<(), SerializationError> {
         if old == new {
             return Ok(());
         }
 
         debug!("Merging node '{old}' into '{new}'");
-        self.merge_restriction_state(data_buffer, old, new);
-        data_buffer.node_element_buffer.remove(old);
-        self.update_edges(data_buffer, old, new);
+        self.merge_restriction_state(data_buffer, old, new)?;
+        {
+        data_buffer.node_element_buffer.write()?.remove(&old);
+        }self.update_edges(data_buffer, old, new);
         self.merge_individual_counts(data_buffer, old, new);
         self.redirect_iri(data_buffer, old, new)?;
         self.retry_restrictions(data_buffer)?;
@@ -781,26 +574,25 @@ impl GraphDisplayDataSolutionSerializer {
     fn merge_restriction_state(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        old: &Term,
-        new: &Term,
-    ) {
-        let Some(old_state) = data_buffer.restriction_buffer.remove(old) else {
-            return;
+        old_id: usize,
+        new_id: usize,
+    ) -> Result<(), SerializationError> {
+        let restriction_buffer = data_buffer.restriction_buffer.write()?;
+
+        let Some(old_state) = restriction_buffer.remove(&old_id) else {
+            return Ok(());
         };
 
-        let super::RestrictionState {
+        let RestrictionState {
             on_property,
             filler,
             cardinality,
             self_restriction,
             requires_filler,
             render_mode,
-        } = old_state;
+        } = *old_state.read()?;
 
-        let new_state = data_buffer
-            .restriction_buffer
-            .entry(new.clone())
-            .or_default();
+        let new_state = restriction_buffer.entry(new_id).or_default().write()?;
 
         if new_state.on_property.is_none() {
             new_state.on_property = on_property;
@@ -818,12 +610,18 @@ impl GraphDisplayDataSolutionSerializer {
         if new_state.render_mode == RestrictionRenderMode::ValuesFromEdge {
             new_state.render_mode = render_mode;
         }
+        Ok(())
     }
 
-    fn update_edges(&self, data_buffer: &mut SerializationDataBuffer, old: &usize, new: usize) {
-        let old_edges = data_buffer.edges_include_map.remove(old);
+    fn update_edges(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        old_id: usize,
+        new_id: usize,
+    ) -> Result<(), SerializationError> {
+        let old_edges = data_buffer.edges_include_map.remove(old_id);
         if let Some(old_edges) = old_edges {
-            debug!("Updating edges from '{}' to '{}'", old, new);
+            debug!("Updating edges from '{}' to '{}'", old_id, new_id);
             for mut edge in old_edges {
                 let old_edge = edge.clone();
                 let label = data_buffer.edge_label_buffer.remove(&old_edge);
@@ -832,18 +630,18 @@ impl GraphDisplayDataSolutionSerializer {
 
                 data_buffer.edge_buffer.remove(&old_edge);
 
-                if old_edge.subject != *old {
+                if old_edge.subject != *old_id {
                     self.remove_edge_include(data_buffer, &old_edge.subject, &old_edge);
                 }
-                if old_edge.object != *old {
-                    self.remove_edge_include(data_buffer, &old_edge.object, &old_edge);
+                if old_edge.range_id != *old_id {
+                    self.remove_edge_include(data_buffer, &old_edge.range_id, &old_edge);
                 }
 
-                if edge.object == *old {
-                    edge.object = Some(new);
+                if edge.object == *old_id {
+                    edge.object = new_id;
                 }
-                if edge.subject == *old {
-                    edge.subject = new.clone();
+                if edge.subject == *old_id {
+                    edge.subject = new_id;
                 }
 
                 let is_degenerate_structural_edge = edge.subject == edge.object
@@ -859,7 +657,7 @@ impl GraphDisplayDataSolutionSerializer {
                 }
 
                 data_buffer.edge_buffer.insert(edge.clone());
-                self.insert_edge_include(data_buffer, new, edge.clone());
+                self.insert_edge_include(data_buffer, new_id, edge.clone());
                 if let Some(label) = label {
                     data_buffer.edge_label_buffer.insert(edge.clone(), label);
                 }
@@ -881,29 +679,33 @@ impl GraphDisplayDataSolutionSerializer {
                 }
             }
         }
+        Ok(())
     }
 
     fn upgrade_node_type(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        iri: &Term,
+        term_id: &usize,
         new_element: ElementType,
     ) {
-        let old_elem_opt = data_buffer.node_element_buffer.get(iri).cloned();
+        let old_elem_opt = data_buffer.node_element_buffer.get(term_id).cloned();
         match old_elem_opt {
             Some(old_elem) => {
                 if Self::can_upgrade_node_type(old_elem, new_element) {
                     data_buffer
                         .node_element_buffer
-                        .insert(iri.clone(), new_element);
+                        .insert(*term_id, new_element);
                 }
                 debug!(
                     "Upgraded subject '{}' from {} to {}",
-                    iri, old_elem, new_element
+                    term_id, old_elem, new_element
                 )
             }
             None => {
-                warn!("Upgraded unresolved subject '{}' to {}", iri, new_element)
+                warn!(
+                    "Upgraded unresolved subject '{}' to {}",
+                    term_id, new_element
+                )
             }
         }
     }
@@ -920,11 +722,14 @@ impl GraphDisplayDataSolutionSerializer {
         )
     }
 
-    fn has_named_equivalent_aliases(data_buffer: &SerializationDataBuffer, iri: &Term) -> bool {
+    fn has_named_equivalent_aliases(
+        data_buffer: &SerializationDataBuffer,
+        term_id: &usize,
+    ) -> bool {
         data_buffer
             .edge_redirection
             .iter()
-            .any(|(alias, target)| target == iri && matches!(alias, Term::NamedNode(_)))
+            .any(|(alias, target)| target == term_id && data_buffer.term_index.is_named_node(alias))
     }
 
     fn can_upgrade_node_type(old: ElementType, new: ElementType) -> bool {
@@ -939,8 +744,12 @@ impl GraphDisplayDataSolutionSerializer {
             && Self::is_structural_set_node(new)
     }
 
-    fn upgrade_deprecated_node_type(&self, data_buffer: &mut SerializationDataBuffer, iri: &Term) {
-        let old_elem_opt = data_buffer.node_element_buffer.get(iri).copied();
+    fn upgrade_deprecated_node_type(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        term_id: &usize,
+    ) {
+        let old_elem_opt = data_buffer.node_element_buffer.get(term_id).copied();
         match old_elem_opt {
             Some(old_elem)
                 if matches!(
@@ -953,22 +762,22 @@ impl GraphDisplayDataSolutionSerializer {
                 let new_element = ElementType::Owl(OwlType::Node(OwlNode::DeprecatedClass));
                 data_buffer
                     .node_element_buffer
-                    .insert(iri.clone(), new_element);
+                    .insert(*term_id, new_element);
                 debug!(
                     "Upgraded deprecated class '{}' from {} to {}",
-                    iri, old_elem, new_element
+                    term_id, old_elem, new_element
                 );
             }
             Some(old_elem) => {
                 warn!(
                     "Skipping owl:Deprecated node upgrade for '{}': {} is not a class",
-                    iri, old_elem
+                    term_id, old_elem
                 );
             }
             None => {
                 warn!(
                     "Cannot upgrade unresolved subject '{}' to DeprecatedClass",
-                    iri
+                    term_id
                 );
             }
         }
@@ -977,14 +786,14 @@ impl GraphDisplayDataSolutionSerializer {
     fn upgrade_property_type(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        property_iri: &Term,
+        property_id: &usize,
         new_element: ElementType,
     ) {
-        let old_elem_opt = data_buffer.edge_element_buffer.get(property_iri).copied();
+        let old_elem_opt = data_buffer.edge_element_buffer.get(property_id).copied();
         let Some(old_elem) = old_elem_opt else {
             warn!(
                 "Cannot upgrade unresolved property '{}' to {}",
-                property_iri, new_element
+                property_id, new_element
             );
             return;
         };
@@ -1000,40 +809,41 @@ impl GraphDisplayDataSolutionSerializer {
         ) {
             warn!(
                 "Skipping owl:Deprecated property upgrade for '{}': {} is not a property",
-                property_iri, old_elem
+                property_id, old_elem
             );
             return;
         }
 
         data_buffer
             .edge_element_buffer
-            .insert(property_iri.clone(), new_element);
+            .insert(*property_id, new_element);
 
-        let Some(old_edge) = data_buffer.property_edge_map.get(property_iri).cloned() else {
+        let Some(old_edge) = data_buffer.property_edge_map.get(property_id).cloned() else {
             debug!(
                 "Upgraded property '{}' from {} to {} before edge materialization",
-                property_iri, old_elem, new_element
+                property_id, old_elem, new_element
             );
             return;
         };
 
-        if old_edge.element_type == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)) {
+        if old_edge.edge_type == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)) {
             debug!(
                 "Keeping merged inverse edge for '{}' as {} instead of downgrading it to {}",
-                property_iri, old_edge.element_type, new_element
+                property_id, old_edge.edge_type, new_element
             );
             return;
         }
 
+        // TODO: Check if can be replaced with mutation on old_edge
         let mut new_edge = old_edge.clone();
-        new_edge.element_type = new_element;
+        new_edge.edge_type = new_element;
 
         data_buffer.edge_buffer.remove(&old_edge);
         data_buffer.edge_buffer.insert(new_edge.clone());
 
         let label = data_buffer
             .label_buffer
-            .get(property_iri)
+            .get(property_id)
             .cloned()
             .or_else(|| data_buffer.edge_label_buffer.remove(&old_edge))
             .unwrap_or_else(|| new_element.to_string());
@@ -1047,32 +857,32 @@ impl GraphDisplayDataSolutionSerializer {
                 .insert(new_edge.clone(), characteristics);
         }
 
-        if let Some(edges) = data_buffer.edges_include_map.get_mut(&old_edge.subject) {
+        if let Some(edges) = data_buffer.edges_include_map.get_mut(&old_edge.domain) {
             edges.remove(&old_edge);
             edges.insert(new_edge.clone());
         }
-        if let Some(edges) = data_buffer.edges_include_map.get_mut(&old_edge.object) {
+        if let Some(edges) = data_buffer.edges_include_map.get_mut(&old_edge.range) {
             edges.remove(&old_edge);
             edges.insert(new_edge.clone());
         }
 
         data_buffer
             .property_edge_map
-            .insert(property_iri.clone(), new_edge);
+            .insert(property_id.clone(), new_edge);
 
         debug!(
             "Upgraded deprecated property '{}' from {} to {}",
-            property_iri, old_elem, new_element
+            property_id, old_elem, new_element
         );
     }
 
     fn remove_edge_include(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        element_iri: &Term,
-        edge: &Edge,
+        element_id: &usize,
+        edge: &Rc<Edge>,
     ) {
-        if let Some(edges) = data_buffer.edges_include_map.get_mut(element_iri) {
+        if let Some(edges) = data_buffer.edges_include_map.get_mut(element_id) {
             edges.remove(edge);
         }
     }
@@ -1080,50 +890,50 @@ impl GraphDisplayDataSolutionSerializer {
     fn merge_properties(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        old: &Term,
-        new: &Term,
+        old_id: &usize,
+        new_id: &usize,
     ) -> Result<(), SerializationError> {
-        if old == new {
+        if old_id == new_id {
             return Ok(());
         }
 
-        debug!("Merging property '{old}' into '{new}'");
+        debug!("Merging property '{old_id}' into '{new_id}'");
 
-        data_buffer.edge_element_buffer.remove(old);
+        data_buffer.edge_element_buffer.remove(old_id);
 
         // Remove stale node placeholders for property aliases.
-        data_buffer.node_element_buffer.remove(old);
-        data_buffer.label_buffer.remove(old);
-        data_buffer.node_characteristics.remove(old);
+        data_buffer.node_element_buffer.remove(old_id);
+        data_buffer.label_buffer.remove(old_id);
+        data_buffer.node_characteristics.remove(old_id);
 
-        if let Some(domains) = data_buffer.property_domain_map.remove(old) {
+        if let Some(domains) = data_buffer.property_domain_map.remove(old_id) {
             data_buffer
                 .property_domain_map
-                .entry(new.clone())
+                .entry(*new_id)
                 .or_default()
                 .extend(domains);
         }
 
-        if let Some(ranges) = data_buffer.property_range_map.remove(old) {
+        if let Some(ranges) = data_buffer.property_range_map.remove(old_id) {
             data_buffer
                 .property_range_map
-                .entry(new.clone())
+                .entry(*new_id)
                 .or_default()
                 .extend(ranges);
         }
 
-        self.redirect_iri(data_buffer, old, new)?;
+        self.redirect_iri(data_buffer, *old_id, *new_id)?;
         Ok(())
     }
 
     fn normalize_inverse_endpoint(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        endpoint: &Term,
-        opposite: &Term,
-    ) -> Result<Term, SerializationError> {
-        let Some(element_type) = data_buffer.node_element_buffer.get(endpoint).copied() else {
-            return Ok(endpoint.clone());
+        endpoint_id: &usize,
+        opposite_id: &usize,
+    ) -> Result<usize, SerializationError> {
+        let Some(element_type) = data_buffer.node_element_buffer.get(endpoint_id) else {
+            return Ok(*endpoint_id);
         };
 
         match element_type {
@@ -1133,24 +943,24 @@ impl GraphDisplayDataSolutionSerializer {
                 | OwlNode::UnionOf
                 | OwlNode::DisjointUnion
                 | OwlNode::EquivalentClass,
-            )) => self.get_or_create_anchor_thing(data_buffer, opposite),
-            _ => Ok(endpoint.clone()),
+            )) => self.get_or_create_anchor_thing(data_buffer, opposite_id),
+            _ => Ok(*endpoint_id),
         }
     }
 
     fn inverse_edge_endpoints(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        property_iri: &Term,
-    ) -> Result<Option<(Term, Term)>, SerializationError> {
+        property_id: &usize,
+    ) -> Result<Option<(usize, usize)>, SerializationError> {
         let domain = data_buffer
             .property_domain_map
-            .get(property_iri)
+            .get(property_id)
             .and_then(|domains| domains.iter().next())
             .cloned();
         let range = data_buffer
             .property_range_map
-            .get(property_iri)
+            .get(property_id)
             .and_then(|ranges| ranges.iter().next())
             .cloned();
 
@@ -1158,7 +968,7 @@ impl GraphDisplayDataSolutionSerializer {
             (Some(domain), Some(range)) => {
                 let subject = self.normalize_inverse_endpoint(data_buffer, &domain, &range)?;
                 let object = self.normalize_inverse_endpoint(data_buffer, &range, &domain)?;
-                Ok(Some((subject, object)))
+                Ok(Some((*subject, *object)))
             }
             _ => Ok(None),
         }
@@ -1167,20 +977,20 @@ impl GraphDisplayDataSolutionSerializer {
     fn insert_inverse_of(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: Triple,
+        triple: Rc<Triple>,
     ) -> SerializationStatus {
-        let left_property_raw = triple.id.clone();
-        let Some(right_property_raw) = triple.target.clone() else {
+        let left_property_raw = triple.subject_id;
+        let Some(right_property_raw) = triple.object_id else {
             warn!("owl:inverseOf triple is missing a target: {}", triple);
             return SerializationStatus::Serialized;
         };
 
-        let Some(left_property) = self.resolve(data_buffer, left_property_raw.clone()) else {
+        let Some(left_property) = self.resolve(data_buffer, left_property_raw) else {
             self.add_to_unknown_buffer(data_buffer, left_property_raw, triple);
             return SerializationStatus::Deferred;
         };
 
-        let Some(right_property) = self.resolve(data_buffer, right_property_raw.clone()) else {
+        let Some(right_property) = self.resolve(data_buffer, right_property_raw) else {
             self.add_to_unknown_buffer(data_buffer, right_property_raw, triple);
             return SerializationStatus::Deferred;
         };
@@ -1193,7 +1003,7 @@ impl GraphDisplayDataSolutionSerializer {
             match self.inverse_edge_endpoints(data_buffer, &left_property) {
                 Ok(Some(endpoints)) => endpoints,
                 Ok(None) => {
-                    self.add_to_unknown_buffer(data_buffer, left_property.clone(), triple);
+                    self.add_to_unknown_buffer(data_buffer, left_property, triple);
                     return SerializationStatus::Deferred;
                 }
                 Err(err) => {
@@ -1209,7 +1019,7 @@ impl GraphDisplayDataSolutionSerializer {
             match self.inverse_edge_endpoints(data_buffer, &right_property) {
                 Ok(Some(endpoints)) => endpoints,
                 Ok(None) => {
-                    self.add_to_unknown_buffer(data_buffer, right_property.clone(), triple);
+                    self.add_to_unknown_buffer(data_buffer, right_property, triple);
                     return SerializationStatus::Deferred;
                 }
                 Err(err) => {
@@ -1259,15 +1069,15 @@ impl GraphDisplayDataSolutionSerializer {
         }
 
         if let Some(left_edge) = left_edge.as_ref() {
-            self.remove_edge_include(data_buffer, &left_edge.subject, left_edge);
-            self.remove_edge_include(data_buffer, &left_edge.object, left_edge);
+            self.remove_edge_include(data_buffer, &left_edge.domain, left_edge);
+            self.remove_edge_include(data_buffer, &left_edge.range_id, left_edge);
             data_buffer.edge_buffer.remove(left_edge);
             data_buffer.edge_label_buffer.remove(left_edge);
         }
 
         if let Some(right_edge) = right_edge.as_ref() {
-            self.remove_edge_include(data_buffer, &right_edge.subject, right_edge);
-            self.remove_edge_include(data_buffer, &right_edge.object, right_edge);
+            self.remove_edge_include(data_buffer, &right_edge.domain, right_edge);
+            self.remove_edge_include(data_buffer, &right_edge.range_id, right_edge);
             data_buffer.edge_buffer.remove(right_edge);
             data_buffer.edge_label_buffer.remove(right_edge);
         }
@@ -1284,28 +1094,28 @@ impl GraphDisplayDataSolutionSerializer {
             merged_characteristics.extend(right_characteristics);
         }
 
-        let inverse_property = Some(left_property.clone());
+        let inverse_property = Some(left_property);
         let inverse_edges = [
-            Edge {
-                subject: left_subject.clone(),
-                element_type: ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)),
-                object: left_object.clone(),
-                property: inverse_property.clone(),
-            },
-            Edge {
-                subject: left_object,
-                element_type: ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)),
-                object: left_subject,
-                property: inverse_property,
-            },
+            Rc::new(Edge {
+                domain_id: left_subject,
+                edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)),
+                range_id: left_object,
+                property_id: inverse_property,
+            }),
+            Rc::new(Edge {
+                domain_id: left_object,
+                edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)),
+                range_id: left_subject,
+                property_id: inverse_property,
+            }),
         ];
 
         let canonical_edge = inverse_edges[0].clone();
 
         for edge in inverse_edges {
             data_buffer.edge_buffer.insert(edge.clone());
-            self.insert_edge_include(data_buffer, &edge.subject, edge.clone());
-            self.insert_edge_include(data_buffer, &edge.object, edge.clone());
+            self.insert_edge_include(data_buffer, edge.domain_id, edge.clone());
+            self.insert_edge_include(data_buffer, edge.range_id, edge.clone());
             if let Some(label) = merged_label.clone() {
                 data_buffer.edge_label_buffer.insert(edge.clone(), label);
             }
@@ -1319,7 +1129,7 @@ impl GraphDisplayDataSolutionSerializer {
 
         data_buffer
             .property_edge_map
-            .insert(left_property.clone(), canonical_edge);
+            .insert(left_property, canonical_edge);
         data_buffer.property_edge_map.remove(&right_property);
 
         SerializationStatus::Serialized
@@ -1329,50 +1139,77 @@ impl GraphDisplayDataSolutionSerializer {
     fn extend_element_label(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        element: &Term,
+        element_id: &usize,
         label_to_append: String,
     ) {
         debug!(
             "Extending element '{}' with label '{}'",
-            element, label_to_append
+            element_id, label_to_append
         );
-        if let Some(label) = data_buffer.label_buffer.get_mut(element) {
+        if let Some(label) = data_buffer.label_buffer.get_mut(element_id) {
             label.push_str(format!("\n{}", label_to_append).as_str());
         } else {
             data_buffer
                 .label_buffer
-                .insert(element.clone(), label_to_append.clone());
+                .insert(*element_id, label_to_append);
         }
     }
 
-    fn create_named_node(&self, iri: String) -> Result<NamedNode, SerializationError> {
-        Ok(NamedNode::new(&iri).map_err(|e| SerializationErrorKind::IriParseError(iri, e))?)
+    fn create_named_node(&self, iri: &String) -> Result<NamedNode, SerializationError> {
+        Ok(NamedNode::new(iri)
+            .map_err(|e| SerializationErrorKind::IriParseError(iri.clone(), Box::new(e)))?)
     }
 
-    fn create_blank_node(&self, id: String) -> Result<BlankNode, SerializationError> {
-        Ok(BlankNode::new(&id).map_err(|e| SerializationErrorKind::BlankNodeParseError(id, e))?)
+    fn create_blank_node(&self, id: &String) -> Result<BlankNode, SerializationError> {
+        Ok(BlankNode::new(id)
+            .map_err(|e| SerializationErrorKind::BlankNodeParseError(id.clone(), Box::new(e)))?)
     }
 
-    fn create_triple(
+    fn create_triple_from_iri(
         &self,
-        id: String,
-        element_type: NamedNode,
-        object_iri: Option<String>,
-    ) -> Result<Triple, SerializationError> {
-        let subject = match NamedNode::new(id.clone()) {
-            Ok(node) => Term::NamedNode(node),
-            Err(_) => Term::BlankNode(self.create_blank_node(id)?),
+        term_index: &mut TermIndex,
+        subject_iri: &String,
+        predicate_iri: &String,
+        object_iri: Option<&String>,
+    ) -> Result<ArcTriple, SerializationError> {
+        let subject_id = {
+            let subject_term = match NamedNode::new(subject_iri) {
+                Ok(node) => Term::NamedNode(node),
+                Err(_) => Term::BlankNode(self.create_blank_node(subject_iri)?),
+            };
+            term_index.insert(subject_term)?
         };
 
-        let object = match object_iri {
-            Some(iri) => Some(Term::NamedNode(self.create_named_node(iri)?)),
+        let predicate_id =
+            term_index.insert(Term::NamedNode(self.create_named_node(predicate_iri)?))?;
+
+        let object_id = match object_iri {
+            Some(iri) => Some(term_index.insert(Term::NamedNode(self.create_named_node(iri)?))?),
             None => None,
         };
 
-        let t = Triple::new(subject, Term::NamedNode(element_type), object);
-        debug!("Created new triple: {}", t);
-        Ok(t)
+        let triple = Triple::new(subject_id, predicate_id, object_id).into();
+        debug!("Created new triple: {}", triple);
+        Ok(triple)
     }
+
+    fn create_triple_from_id(&self,
+        subject_id: usize,
+        predicate_id: usize,
+        object_id: Option<usize>,
+    ) -> ArcTriple {
+        let triple = Triple::new(subject_id, predicate_id, object_id).into();
+        debug!("Created new triple: {}", triple);
+        triple
+    }
+
+    fn create_edge_from_id(&self,         domain_id: usize,
+        edge_type: ElementType,
+        range_id: usize,property_id: Option<usize>) -> ArcEdge {
+            let edge = Edge::new(domain_id, edge_type, range_id, property_id).into();
+              debug!("Created new edge: {}", edge);
+        edge
+        }
 
     fn check_all_unknowns(
         &self,
@@ -1393,18 +1230,21 @@ impl GraphDisplayDataSolutionSerializer {
 
             let current = pending;
 
-            for (term, triples) in current {
-                if !data_buffer.label_buffer.contains_key(&term) {
-                    self.extract_label(data_buffer, None, &term);
+            for (term_id, triples) in current {
+                let term = data_buffer.term_index.get(&term_id).ok_or_else(|| {
+                    SerializationErrorKind::TermIndexError(format!(
+                        "Failed to find term {} in the term index",
+                        term_id
+                    ))
+                })?;
+
+                if !data_buffer.label_buffer.contains_key(&term_id) {
+                    self.extract_label(data_buffer, None, &term, &term_id);
                 }
 
-                if self.is_external(data_buffer, &term) {
+                if self.is_external(data_buffer, &term_id) {
                     // Dummy triple, only subject matters.
-                    let external_triple = Triple::new(
-                        term,
-                        Term::BlankNode(self.create_blank_node("_:external_class".to_string())?),
-                        None,
-                    );
+                    let external_triple = Triple::new(term_id, usize::MAX, None);
 
                     self.insert_node(
                         data_buffer,
@@ -1413,17 +1253,13 @@ impl GraphDisplayDataSolutionSerializer {
                     )?;
                 } else if let Some(element_type) = try_resolve_reserved(&term) {
                     // Dummy triple, only subject matters.
-                    let reserved_triple = Triple::new(
-                        term,
-                        Term::BlankNode(self.create_blank_node("_:reserved_class".to_string())?),
-                        None,
-                    );
+                    let reserved_triple = Triple::new(term_id, usize::MAX, None);
 
                     self.insert_node(data_buffer, &reserved_triple, element_type)?;
                 }
 
                 for triple in triples {
-                    match self.write_node_triple(data_buffer, triple.clone()) {
+                    match self.write_node_triple(data_buffer, triple) {
                         Ok(SerializationStatus::Serialized) => {}
                         Ok(SerializationStatus::Deferred) => {}
                         Err(e) => {
@@ -1451,26 +1287,21 @@ impl GraphDisplayDataSolutionSerializer {
     }
 
     /// Serialize a triple to `data_buffer`.
-
     fn write_node_triple(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        triple: Rc<Triple>,
+        triple: Arc<Triple>,
     ) -> Result<SerializationStatus, SerializationError> {
         let predicate_term = data_buffer
             .term_index
-            .get(&triple.element_type)
-            .ok_or_else(|| {
-                SerializationErrorKind::SerializationFailed(
-                    triple.clone(),
-                    "Failed to find predicate in term index".to_string(),
-                )
-            })?;
+            .get(&triple.predicate_id)?;
+
+
         match *predicate_term {
             Term::BlankNode(bnode) => {
                 // The query must never put blank nodes in the ?nodeType variable
                 let msg = format!("Illegal blank node during serialization: '{bnode}'");
-                return Err(SerializationErrorKind::SerializationFailed(triple, msg).into());
+                return Err(SerializationErrorKind::SerializationFailedTriple(triple, msg).into());
             }
             Term::Literal(literal) => match literal.value() {
                 "blanknode" => {
@@ -1508,7 +1339,7 @@ impl GraphDisplayDataSolutionSerializer {
                     rdf::PROPERTY => {
                         match self.insert_edge(
                             data_buffer,
-                            &triple,
+                            triple,
                             ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty)),
                             None,
                         ) {
@@ -1569,7 +1400,7 @@ impl GraphDisplayDataSolutionSerializer {
                         return Ok(SerializationStatus::Serialized);
                     }
                     rdfs::DOMAIN => {
-                        return Err(SerializationErrorKind::SerializationFailed(
+                        return Err(SerializationErrorKind::SerializationFailedTriple(
                             triple,
                             "SPARQL query should not have rdfs:domain triples".to_string(),
                         )
@@ -1589,7 +1420,7 @@ impl GraphDisplayDataSolutionSerializer {
                     }
                     // rdfs::MEMBER => {}
                     rdfs::RANGE => {
-                        return Err(SerializationErrorKind::SerializationFailed(
+                        return Err(SerializationErrorKind::SerializationFailedTriple(
                             triple,
                             "SPARQL query should not have rdfs:range triples".to_string(),
                         )
@@ -1607,10 +1438,25 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // rdfs::SEE_ALSO => {}
                     rdfs::SUB_CLASS_OF => {
-                        if triple.target.as_ref().is_some_and(|target| {
-                            target == &triple.id
-                                && is_synthetic(&triple.id)
-                                && data_buffer.node_element_buffer.get(&triple.id).copied()
+                        // TODO: Some cases of owl:Thing self-subclass triple are not handled here.
+                        // Particularly if we haven't seen subject in the element buffer.
+                        if triple.object_id.as_ref().is_some_and(|target| {
+                            target == &triple.subject_id
+                                && is_synthetic({
+                                    let a = match data_buffer.term_index.get(&triple.subject_id).ok_or_else(
+                                        || {
+                                            SerializationErrorKind::TermIndexError(format!(
+                                                "Failed to find term {} in the term index",
+                                                triple.subject_id
+                                            ))
+                                        },
+                                    ) {
+                                        Ok(a) => a,
+                                        Err(e) => panic!("Refactor this please ({e:#?})"),
+                                    };
+                                    &a
+                                })
+                                && data_buffer.node_element_buffer.get(&triple.subject_id).copied()
                                     == Some(ElementType::Owl(OwlType::Node(OwlNode::Thing)))
                         }) {
                             debug!("Skipping synthetic owl:Thing self-subclass triple");
@@ -1619,12 +1465,12 @@ impl GraphDisplayDataSolutionSerializer {
 
                         match self.insert_edge(
                             data_buffer,
-                            &triple,
+                            triple,
                             ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf)),
                             None,
                         ) {
                             Some(_) => {
-                                if let Some(restriction) = triple.target.as_ref() {
+                                if let Some(restriction) = triple.object_id.as_ref() {
                                     self.try_materialize_restriction(data_buffer, restriction)?;
                                 } else {
                                     self.retry_restrictions(data_buffer)?;
@@ -1647,10 +1493,10 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::ALL_DISJOINT_CLASSES => {},
                     // owl::ALL_DISJOINT_PROPERTIES => {},
                     owl::ALL_VALUES_FROM => {
-                        let state = data_buffer.restriction_mut(&triple.id);
-                        state.filler = triple.target.clone();
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
+                        state.filler = triple.object_id.clone();
                         state.cardinality = Some(("∀".to_string(), None));
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
 
                     // owl::ANNOTATED_PROPERTY => {},
@@ -1676,16 +1522,16 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::BOTTOM_OBJECT_PROPERTY => {},
                     owl::CARDINALITY => {
                         let exact = Self::cardinality_literal(&triple)?;
-                        data_buffer.restriction_mut(&triple.id).cardinality =
+                        data_buffer.restriction_mut(&triple.subject_id).cardinality =
                             Some((exact.clone(), Some(exact)));
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     owl::QUALIFIED_CARDINALITY => {
                         let exact = Self::cardinality_literal(&triple)?;
-                        let state = data_buffer.restriction_mut(&triple.id);
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
                         state.cardinality = Some((exact.clone(), Some(exact)));
                         state.requires_filler = true;
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     owl::CLASS => {
                         self.insert_node(
@@ -1696,10 +1542,10 @@ impl GraphDisplayDataSolutionSerializer {
                         return Ok(SerializationStatus::Serialized);
                     }
                     owl::COMPLEMENT_OF => {
-                        if let Some(target) = triple.target.as_ref()
+                        if let Some(target) = triple.object_id.as_ref()
                             && self.should_skip_structural_operand(
                                 data_buffer,
-                                &triple.id,
+                                &triple.subject_id,
                                 target,
                                 "owl:complementOf",
                             )
@@ -1710,8 +1556,8 @@ impl GraphDisplayDataSolutionSerializer {
                         let edge =
                             self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None);
 
-                        if triple.target.is_some()
-                            && let Some(index) = self.resolve(data_buffer, triple.id.clone())
+                        if triple.object_id.is_some()
+                            && let Some(index) = self.resolve(data_buffer, triple.subject_id.clone())
                             && !Self::has_named_equivalent_aliases(data_buffer, &index)
                         {
                             self.upgrade_node_type(
@@ -1737,7 +1583,7 @@ impl GraphDisplayDataSolutionSerializer {
                             &triple,
                             e,
                         );
-                        self.check_unknown_buffer(data_buffer, &triple.id)?;
+                        self.check_unknown_buffer(data_buffer, &triple.subject_id)?;
                         self.retry_restrictions(data_buffer)?;
                         return Ok(SerializationStatus::Serialized);
                     }
@@ -1745,13 +1591,13 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1 (deprecated in OWL2, replaced by rdfs:datatype)
                     // owl::DATA_RANGE => {}
                     owl::DEPRECATED => {
-                        let Some(resolved_iri) = self.resolve(data_buffer, triple.id.clone())
+                        let Some(resolved_iri) = self.resolve(data_buffer, triple.subject_id.clone())
                         else {
                             debug!(
                                 "Deferring owl:Deprecated for '{}': subject type unresolved",
-                                triple.id
+                                triple.subject_id
                             );
-                            self.add_to_unknown_buffer(data_buffer, triple.id.clone(), triple);
+                            self.add_to_unknown_buffer(data_buffer, triple.subject_id.clone(), triple);
                             return Ok(SerializationStatus::Deferred);
                         };
 
@@ -1804,10 +1650,10 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // owl::DIFFERENT_FROM => {}
                     owl::DISJOINT_UNION_OF => {
-                        if let Some(target) = triple.target.as_ref()
+                        if let Some(target) = triple.object_id.as_ref()
                             && self.should_skip_structural_operand(
                                 data_buffer,
-                                &triple.id,
+                                &triple.subject_id,
                                 target,
                                 "owl:disjointUnionOf",
                             )
@@ -1817,10 +1663,10 @@ impl GraphDisplayDataSolutionSerializer {
 
                         match self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None) {
                             Some(edge) => {
-                                if !Self::has_named_equivalent_aliases(data_buffer, &edge.subject) {
+                                if !Self::has_named_equivalent_aliases(data_buffer, &edge.domain) {
                                     self.upgrade_node_type(
                                         data_buffer,
-                                        &edge.subject,
+                                        &edge.domain,
                                         ElementType::Owl(OwlType::Node(OwlNode::DisjointUnion)),
                                     );
                                 }
@@ -1856,7 +1702,7 @@ impl GraphDisplayDataSolutionSerializer {
                                 let target_element =
                                     data_buffer.node_element_buffer.get(&index_o).copied();
                                 let target_was_anonymous_expr =
-                                    matches!(triple.target.as_ref(), Some(Term::BlankNode(_)));
+                                    matches!(triple.object_id.as_ref(), Some(Term::BlankNode(_)));
 
                                 self.merge_nodes(data_buffer, &index_o, &index_s)?;
 
@@ -1866,7 +1712,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     .ok_or_else(|| {
                                         let msg = "subject not present in node_element_buffer"
                                             .to_string();
-                                        SerializationErrorKind::SerializationFailed(triple, msg)
+                                        SerializationErrorKind::SerializationFailedTriple(triple, msg)
                                     })?;
 
                                 if *index_s_element
@@ -1904,7 +1750,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     }
                                 }
                             }
-                            (Some(_), None) => match triple.target.clone() {
+                            (Some(_), None) => match triple.object_id.clone() {
                                 Some(target) => {
                                     self.add_to_unknown_buffer(data_buffer, target, triple.clone());
                                     return Ok(SerializationStatus::Deferred);
@@ -1923,7 +1769,7 @@ impl GraphDisplayDataSolutionSerializer {
                             (None, None) => {
                                 self.add_to_unknown_buffer(
                                     data_buffer,
-                                    triple.id.clone(),
+                                    triple.subject_id.clone(),
                                     triple.clone(),
                                 );
                                 return Ok(SerializationStatus::Deferred);
@@ -1942,34 +1788,34 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::HAS_KEY => {}
                     owl::HAS_SELF => {
                         let truthy = matches!(
-                            triple.target.as_ref(),
+                            triple.object_id.as_ref(),
                             Some(Term::Literal(lit)) if lit.value() == "true"
                         );
 
                         if truthy {
-                            let state = data_buffer.restriction_mut(&triple.id);
+                            let state = data_buffer.restriction_mut(&triple.subject_id);
                             state.self_restriction = true;
                             state.cardinality = Some(("self".to_string(), None));
                         }
 
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
 
                     owl::HAS_VALUE => {
-                        let state = data_buffer.restriction_mut(&triple.id);
-                        state.filler = triple.target.clone();
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
+                        state.filler = triple.object_id.clone();
                         state.cardinality = Some(("value".to_string(), None));
                         state.render_mode = RestrictionRenderMode::ExistingPropertyEdge;
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
 
                     // owl::IMPORTS => {}
                     // owl::INCOMPATIBLE_WITH => {}
                     owl::INTERSECTION_OF => {
-                        if let Some(target) = triple.target.as_ref()
+                        if let Some(target) = triple.object_id.as_ref()
                             && self.should_skip_structural_operand(
                                 data_buffer,
-                                &triple.id,
+                                &triple.subject_id,
                                 target,
                                 "owl:intersectionOf",
                             )
@@ -1979,10 +1825,10 @@ impl GraphDisplayDataSolutionSerializer {
 
                         match self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None) {
                             Some(edge) => {
-                                if !Self::has_named_equivalent_aliases(data_buffer, &edge.subject) {
+                                if !Self::has_named_equivalent_aliases(data_buffer, &edge.domain) {
                                     self.upgrade_node_type(
                                         data_buffer,
-                                        &edge.subject,
+                                        &edge.domain,
                                         ElementType::Owl(OwlType::Node(OwlNode::IntersectionOf)),
                                     );
                                 }
@@ -2015,35 +1861,35 @@ impl GraphDisplayDataSolutionSerializer {
 
                     owl::MAX_CARDINALITY => {
                         let max = Self::cardinality_literal(&triple)?;
-                        data_buffer.restriction_mut(&triple.id).cardinality =
+                        data_buffer.restriction_mut(&triple.subject_id).cardinality =
                             Some((String::new(), Some(max)));
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
 
                     owl::MAX_QUALIFIED_CARDINALITY => {
-                        let state = data_buffer.restriction_mut(&triple.id);
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
                         state.cardinality =
                             Some((String::new(), Some(Self::cardinality_literal(&triple)?)));
                         state.requires_filler = true;
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     // owl::MEMBERS => {}
                     owl::MIN_CARDINALITY => {
                         let min = Self::cardinality_literal(&triple)?;
-                        data_buffer.restriction_mut(&triple.id).cardinality = Some((min, None));
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        data_buffer.restriction_mut(&triple.subject_id).cardinality = Some((min, None));
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     owl::MIN_QUALIFIED_CARDINALITY => {
-                        let state = data_buffer.restriction_mut(&triple.id);
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
                         state.cardinality = Some((Self::cardinality_literal(&triple)?, None));
                         state.requires_filler = true;
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     owl::NAMED_INDIVIDUAL => {
                         let count = Self::individual_count_literal(&triple)?;
                         *data_buffer
                             .individual_count_buffer
-                            .entry(triple.id.clone())
+                            .entry(triple.subject_id.clone())
                             .or_default() += count;
                         return Ok(SerializationStatus::Serialized);
                     }
@@ -2058,12 +1904,12 @@ impl GraphDisplayDataSolutionSerializer {
                             &triple,
                             e,
                         );
-                        self.check_unknown_buffer(data_buffer, &triple.id)?;
+                        self.check_unknown_buffer(data_buffer, &triple.subject_id)?;
                         self.retry_restrictions(data_buffer)?;
                         return Ok(SerializationStatus::Serialized);
                     }
                     owl::ONE_OF => {
-                        let Some(raw_target) = triple.target.clone() else {
+                        let Some(raw_target) = triple.object_id.clone() else {
                             return Err(SerializationErrorKind::MissingObject(
                                 triple,
                                 "owl:oneOf triple is missing a target".to_string(),
@@ -2072,12 +1918,12 @@ impl GraphDisplayDataSolutionSerializer {
                         };
 
                         let materialized_target =
-                            self.materialize_one_of_target(data_buffer, &triple.id, &raw_target)?;
+                            self.materialize_one_of_target(data_buffer, &triple.subject_id, &raw_target)?;
 
                         let edge_triple = Triple {
-                            id: triple.id.clone(),
-                            element_type: triple.element_type.clone(),
-                            target: Some(materialized_target),
+                            subject_id: triple.subject_id.clone(),
+                            predicate_id: triple.predicate_id.clone(),
+                            object_id: Some(materialized_target),
                         };
 
                         match self.insert_edge(data_buffer, &edge_triple, ElementType::NoDraw, None)
@@ -2090,10 +1936,10 @@ impl GraphDisplayDataSolutionSerializer {
                         if let Some(base) = &data_buffer.document_base {
                             warn!(
                                 "Attempting to override document base '{base}' with new base '{}'. Skipping",
-                                triple.id
+                                triple.subject_id
                             );
                         } else {
-                            let base = trim_tag_circumfix(&triple.id.to_string());
+                            let base = trim_tag_circumfix(&triple.subject_id.to_string());
                             info!("Using document base: '{}'", base);
                             data_buffer.document_base = Some(base);
                         }
@@ -2102,15 +1948,15 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // owl::ONTOLOGY_PROPERTY => {}
                     owl::ON_CLASS | owl::ON_DATARANGE => {
-                        let state = data_buffer.restriction_mut(&triple.id);
-                        state.filler = triple.target.clone();
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
+                        state.filler = triple.object_id.clone();
                         state.requires_filler = true;
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     // owl::ON_DATATYPE => {}
                     // owl::ON_PROPERTIES => {}
                     owl::ON_PROPERTY => {
-                        let Some(target) = triple.target.clone() else {
+                        let Some(target) = triple.object_id.clone() else {
                             return Err(SerializationErrorKind::MissingObject(
                                 triple,
                                 "owl:onProperty triple is missing a target".to_string(),
@@ -2118,8 +1964,8 @@ impl GraphDisplayDataSolutionSerializer {
                             .into());
                         };
 
-                        data_buffer.restriction_mut(&triple.id).on_property = Some(target);
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        data_buffer.restriction_mut(&triple.subject_id).on_property = Some(target);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
 
                     // owl::PRIOR_VERSION => {}
@@ -2140,10 +1986,10 @@ impl GraphDisplayDataSolutionSerializer {
                     //TODO: OWL1
                     // owl::SAME_AS => {}
                     owl::SOME_VALUES_FROM => {
-                        let state = data_buffer.restriction_mut(&triple.id);
-                        state.filler = triple.target.clone();
+                        let state = data_buffer.restriction_mut(&triple.subject_id);
+                        state.filler = triple.object_id.clone();
                         state.cardinality = Some(("∃".to_string(), None));
-                        return self.try_materialize_restriction(data_buffer, &triple.id);
+                        return self.try_materialize_restriction(data_buffer, &triple.subject_id);
                     }
                     // owl::SOURCE_INDIVIDUAL => {}
                     owl::SYMMETRIC_PROPERTY => {
@@ -2173,10 +2019,10 @@ impl GraphDisplayDataSolutionSerializer {
                         ));
                     }
                     owl::UNION_OF => {
-                        if let Some(target) = triple.target.as_ref()
+                        if let Some(target) = triple.object_id.as_ref()
                             && self.should_skip_structural_operand(
                                 data_buffer,
-                                &triple.id,
+                                &triple.subject_id,
                                 target,
                                 "owl:unionOf",
                             )
@@ -2186,10 +2032,10 @@ impl GraphDisplayDataSolutionSerializer {
 
                         match self.insert_edge(data_buffer, &triple, ElementType::NoDraw, None) {
                             Some(edge) => {
-                                if !Self::has_named_equivalent_aliases(data_buffer, &edge.subject) {
+                                if !Self::has_named_equivalent_aliases(data_buffer, &edge.domain) {
                                     self.upgrade_node_type(
                                         data_buffer,
-                                        &edge.subject,
+                                        &edge.domain,
                                         ElementType::Owl(OwlType::Node(OwlNode::UnionOf)),
                                     );
                                 }
@@ -2268,14 +2114,14 @@ impl GraphDisplayDataSolutionSerializer {
                         return Ok(SerializationStatus::Serialized);
                     }
                     _ => {
-                        match triple.target.clone() {
+                        match triple.object_id.clone() {
                             Some(target) => {
                                 let (node_triple, edge_triple): (
                                     Option<Vec<Triple>>,
                                     Option<Triple>,
                                 ) = match (
-                                    self.resolve(data_buffer, triple.id.clone()),
-                                    self.resolve(data_buffer, triple.element_type.clone()),
+                                    self.resolve(data_buffer, triple.subject_id.clone()),
+                                    self.resolve(data_buffer, triple.predicate_id.clone()),
                                     self.resolve(data_buffer, target.clone()),
                                 ) {
                                     (Some(domain), Some(property), Some(range)) => {
@@ -2287,9 +2133,9 @@ impl GraphDisplayDataSolutionSerializer {
                                         (
                                             None,
                                             Some(Triple {
-                                                id: domain,
-                                                element_type: property,
-                                                target: Some(range),
+                                                subject_id: domain,
+                                                predicate_id: property,
+                                                object_id: Some(range),
                                             }),
                                         )
                                     }
@@ -2303,16 +2149,16 @@ impl GraphDisplayDataSolutionSerializer {
                                             (
                                                 None,
                                                 Some(Triple {
-                                                    id: triple.id.clone(),
-                                                    element_type: triple.element_type.clone(),
-                                                    target: Some(thing),
+                                                    subject_id: triple.subject_id.clone(),
+                                                    predicate_id: triple.predicate_id.clone(),
+                                                    object_id: Some(thing),
                                                 }),
                                             )
                                         } else if target == rdfs::LITERAL.into() {
                                             let target_iri =
                                                 synthetic_iri(&property, SYNTH_LITERAL);
                                             info!("Creating literal node: {}", target_iri);
-                                            let node = self.create_triple(
+                                            let node = self.create_triple_from_iri(
                                                 target_iri.clone(),
                                                 rdfs::LITERAL.into(),
                                                 None,
@@ -2321,14 +2167,14 @@ impl GraphDisplayDataSolutionSerializer {
                                             (
                                                 Some(vec![node.clone()]),
                                                 Some(Triple {
-                                                    id: triple.id.clone(),
-                                                    element_type: triple.element_type.clone(),
-                                                    target: Some(node.id),
+                                                    subject_id: triple.subject_id.clone(),
+                                                    predicate_id: triple.predicate_id.clone(),
+                                                    object_id: Some(node.subject_id),
                                                 }),
                                             )
                                         } else {
                                             // Register the property itself as an element so it can be resolved by characteristics
-                                            if triple.element_type == owl::OBJECT_PROPERTY.into() {
+                                            if triple.predicate_id == owl::OBJECT_PROPERTY.into() {
                                                 self.add_to_element_buffer(
                                                     &mut data_buffer.edge_element_buffer,
                                                     &triple,
@@ -2336,9 +2182,9 @@ impl GraphDisplayDataSolutionSerializer {
                                                         OwlEdge::ObjectProperty,
                                                     )),
                                                 );
-                                                self.check_unknown_buffer(data_buffer, &triple.id)?;
+                                                self.check_unknown_buffer(data_buffer, &triple.subject_id)?;
                                                 return Ok(SerializationStatus::Serialized);
-                                            } else if triple.element_type
+                                            } else if triple.predicate_id
                                                 == owl::DATATYPE_PROPERTY.into()
                                             {
                                                 self.add_to_element_buffer(
@@ -2348,7 +2194,7 @@ impl GraphDisplayDataSolutionSerializer {
                                                         OwlEdge::DatatypeProperty,
                                                     )),
                                                 );
-                                                self.check_unknown_buffer(data_buffer, &triple.id)?;
+                                                self.check_unknown_buffer(data_buffer, &triple.subject_id)?;
                                                 return Ok(SerializationStatus::Serialized);
                                             }
 
@@ -2363,7 +2209,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     (None, Some(property), Some(range)) => {
                                         trace!("Missing domain: {}", triple);
 
-                                        if triple.id == owl::THING.into() {
+                                        if triple.subject_id == owl::THING.into() {
                                             let thing_anchor = range.clone();
 
                                             let thing = self.get_or_create_anchor_thing(
@@ -2374,14 +2220,14 @@ impl GraphDisplayDataSolutionSerializer {
                                             (
                                                 None,
                                                 Some(Triple {
-                                                    id: thing,
-                                                    element_type: property,
-                                                    target: Some(range),
+                                                    subject_id: thing,
+                                                    predicate_id: property,
+                                                    object_id: Some(range),
                                                 }),
                                             )
-                                        } else if triple.id == rdfs::LITERAL.into() {
+                                        } else if triple.subject_id == rdfs::LITERAL.into() {
                                             let target_iri = synthetic_iri(&range, SYNTH_LITERAL);
-                                            let node = self.create_triple(
+                                            let node = self.create_triple_from_iri(
                                                 target_iri,
                                                 rdfs::LITERAL.into(),
                                                 None,
@@ -2390,9 +2236,9 @@ impl GraphDisplayDataSolutionSerializer {
                                             (
                                                 Some(vec![node.clone()]),
                                                 Some(Triple {
-                                                    id: node.id,
-                                                    element_type: property,
-                                                    target: triple.target.clone(),
+                                                    subject_id: node.subject_id,
+                                                    predicate_id: property,
+                                                    object_id: triple.object_id.clone(),
                                                 }),
                                             )
                                         } else {
@@ -2408,9 +2254,9 @@ impl GraphDisplayDataSolutionSerializer {
                                         trace!("Missing domain and range: {}", triple);
 
                                         let is_full_query_fallback =
-                                            Self::is_query_fallback_endpoint(&triple.id)
+                                            Self::is_query_fallback_endpoint(&triple.subject_id)
                                                 && triple
-                                                    .target
+                                                    .object_id
                                                     .as_ref()
                                                     .is_some_and(Self::is_query_fallback_endpoint);
 
@@ -2421,7 +2267,7 @@ impl GraphDisplayDataSolutionSerializer {
                                             );
                                             self.add_to_unknown_buffer(
                                                 data_buffer,
-                                                triple.id.clone(),
+                                                triple.subject_id.clone(),
                                                 triple.clone(),
                                             );
                                             return Ok(SerializationStatus::Deferred);
@@ -2437,7 +2283,7 @@ impl GraphDisplayDataSolutionSerializer {
                                             ))) => {
                                                 let local_literal_iri =
                                                     synthetic_iri(&property, SYNTH_LOCAL_LITERAL);
-                                                let literal_triple = self.create_triple(
+                                                let literal_triple = self.create_triple_from_iri(
                                                     local_literal_iri.clone(),
                                                     rdfs::LITERAL.into(),
                                                     None,
@@ -2449,7 +2295,7 @@ impl GraphDisplayDataSolutionSerializer {
 
                                                 let local_thing_iri =
                                                     synthetic_iri(&property, SYNTH_LOCAL_THING);
-                                                let thing_triple = self.create_triple(
+                                                let thing_triple = self.create_triple_from_iri(
                                                     local_thing_iri.clone(),
                                                     owl::THING.into(),
                                                     None,
@@ -2462,9 +2308,9 @@ impl GraphDisplayDataSolutionSerializer {
                                                         thing_triple.clone(),
                                                     ]),
                                                     Some(Triple {
-                                                        id: thing_triple.id.clone(),
-                                                        element_type: property.clone(),
-                                                        target: Some(literal_triple.id),
+                                                        subject_id: thing_triple.subject_id.clone(),
+                                                        predicate_id: property.clone(),
+                                                        object_id: Some(literal_triple.subject_id),
                                                     }),
                                                 )
                                             }
@@ -2480,9 +2326,9 @@ impl GraphDisplayDataSolutionSerializer {
                                                 (
                                                     None,
                                                     Some(Triple {
-                                                        id: thing.clone(),
-                                                        element_type: property.clone(),
-                                                        target: Some(thing),
+                                                        subject_id: thing.clone(),
+                                                        predicate_id: property.clone(),
+                                                        object_id: Some(thing),
                                                     }),
                                                 )
                                             }
@@ -2498,7 +2344,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     (Some(_), None, Some(_)) => {
                                         self.add_to_unknown_buffer(
                                             data_buffer,
-                                            triple.element_type.clone(),
+                                            triple.predicate_id.clone(),
                                             triple.clone(),
                                         );
                                         return Ok(SerializationStatus::Deferred);
@@ -2506,7 +2352,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     _ => {
                                         self.add_to_unknown_buffer(
                                             data_buffer,
-                                            triple.id.clone(),
+                                            triple.subject_id.clone(),
                                             triple.clone(),
                                         );
                                         return Ok(SerializationStatus::Deferred);
@@ -2515,13 +2361,13 @@ impl GraphDisplayDataSolutionSerializer {
                                 match node_triple {
                                     Some(node_triples) => {
                                         for node_triple in node_triples {
-                                            if node_triple.element_type == owl::THING.into() {
+                                            if node_triple.predicate_id == owl::THING.into() {
                                                 self.insert_node(
                                                     data_buffer,
                                                     &node_triple,
                                                     ElementType::Owl(OwlType::Node(OwlNode::Thing)),
                                                 )?;
-                                            } else if node_triple.element_type
+                                            } else if node_triple.predicate_id
                                                 == rdfs::LITERAL.into()
                                             {
                                                 self.insert_node(
@@ -2543,39 +2389,39 @@ impl GraphDisplayDataSolutionSerializer {
                                     Some(edge_triple) => {
                                         // Dummy variable
                                         // TODO: Refactor clones away in all of serializer
-                                        let element_type = edge_triple.element_type.clone();
+                                        let element_type = edge_triple.predicate_id.clone();
                                         let dummy = || edge_triple.clone();
 
                                         let property= data_buffer
                                         .edge_element_buffer
                                         .get(&element_type).ok_or_else(|| {
                                             let msg = "Edge triple not present in edge_element_buffer".to_string();
-                                            SerializationErrorKind::SerializationFailed(dummy(), msg)})?;
+                                            SerializationErrorKind::SerializationFailedTriple(dummy(), msg)})?;
                                         let edge = self.insert_edge(
                                             data_buffer,
                                             &edge_triple,
                                             *property,
                                             data_buffer
                                                 .label_buffer
-                                                .get(&edge_triple.element_type)
+                                                .get(&edge_triple.predicate_id)
                                                 .cloned(),
                                         );
                                         if let Some(edge) = edge {
                                             // Clone the property IRI before it gets consumed below
-                                            let prop_iri = edge_triple.element_type.clone();
+                                            let prop_iri = edge_triple.predicate_id.clone();
 
                                             data_buffer.add_property_edge(
-                                                edge_triple.element_type.clone(),
+                                                edge_triple.predicate_id.clone(),
                                                 edge,
                                             );
                                             data_buffer.add_property_domain(
-                                                edge_triple.element_type.clone(),
-                                                edge_triple.id.clone(),
+                                                edge_triple.predicate_id.clone(),
+                                                edge_triple.subject_id.clone(),
                                             );
                                             data_buffer.add_property_range(
-                                                edge_triple.element_type.clone(),
-                                                edge_triple.target.clone().ok_or_else(|| {
-                                                    SerializationErrorKind::SerializationFailed(
+                                                edge_triple.predicate_id.clone(),
+                                                edge_triple.object_id.clone().ok_or_else(|| {
+                                                    SerializationErrorKind::SerializationFailedTriple(
                                                         dummy(),
                                                         "target should be a string".to_string(),
                                                     )
@@ -2587,7 +2433,7 @@ impl GraphDisplayDataSolutionSerializer {
                                         }
                                     }
                                     None => {
-                                        return Err(SerializationErrorKind::SerializationFailed(
+                                        return Err(SerializationErrorKind::SerializationFailedTriple(
                                             triple,
                                             "Error creating edge".to_string(),
                                         )
@@ -2596,7 +2442,7 @@ impl GraphDisplayDataSolutionSerializer {
                                 }
                             }
                             None => {
-                                return Err(SerializationErrorKind::SerializationFailed(
+                                return Err(SerializationErrorKind::SerializationFailedTriple(
                                     triple,
                                     "Object property triples should have a target".to_string(),
                                 )
@@ -2643,8 +2489,8 @@ impl GraphDisplayDataSolutionSerializer {
         }
 
         let thing_iri = synthetic_iri(domain, SYNTH_THING);
-        let thing_triple = self.create_triple(thing_iri, owl::THING.into(), None)?;
-        let thing_id = thing_triple.id.clone();
+        let thing_triple = self.create_triple_from_iri(thing_iri, owl::THING.into(), None)?;
+        let thing_id = thing_triple.subject_id.clone();
 
         self.insert_node_without_retry(
             data_buffer,
@@ -2666,15 +2512,25 @@ impl GraphDisplayDataSolutionSerializer {
     fn get_or_create_anchor_thing(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        anchor: &Term,
-    ) -> Result<Term, SerializationError> {
-        if let Some(existing) = data_buffer.anchor_thing_map.get(anchor) {
-            return Ok(existing.clone());
+        anchor_id: &usize,
+    ) -> Result<usize, SerializationError> {
+        if let Some(existing) = data_buffer.anchor_thing_map.get(anchor_id) {
+            return Ok(*existing);
         }
 
-        let thing_iri = synthetic_iri(anchor, SYNTH_THING);
-        let thing_triple = self.create_triple(thing_iri, owl::THING.into(), None)?;
-        let thing_id = thing_triple.id.clone();
+        let anchor_term = data_buffer.term_index.get(anchor_id).ok_or_else(|| {
+            SerializationErrorKind::TermIndexError(format!(
+                "Failed to find anchor term '{anchor_id}' in the term index"
+            ))
+        })?;
+        let thing_iri = synthetic_iri(&anchor_term, SYNTH_THING);
+        let thing_triple = self.create_triple_from_iri(
+            &mut data_buffer.term_index,
+            &thing_iri,
+            &owl::THING.as_str().to_string(),
+            None,
+        )?;
+        let thing_id = thing_triple.subject_id;
 
         self.insert_node_without_retry(
             data_buffer,
@@ -2684,11 +2540,9 @@ impl GraphDisplayDataSolutionSerializer {
 
         data_buffer
             .label_buffer
-            .insert(thing_id.clone(), "Thing".to_string());
+            .insert(thing_id, "Thing".to_string());
 
-        data_buffer
-            .anchor_thing_map
-            .insert(anchor.clone(), thing_id.clone());
+        data_buffer.anchor_thing_map.insert(*anchor_id, thing_id);
 
         Ok(thing_id)
     }
@@ -2703,7 +2557,7 @@ impl GraphDisplayDataSolutionSerializer {
         triple: Triple,
         characteristic: Characteristic,
     ) -> SerializationStatus {
-        let property_iri = triple.id.clone();
+        let property_iri = triple.subject_id.clone();
 
         let Some(resolved_iri) = self.resolve(data_buffer, property_iri.clone()) else {
             debug!(
@@ -2722,14 +2576,14 @@ impl GraphDisplayDataSolutionSerializer {
             );
 
             let target_edges: Vec<Edge> =
-                if edge.element_type == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)) {
+                if edge.edge_type == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)) {
                     data_buffer
                         .edge_buffer
                         .iter()
                         .filter(|candidate| {
-                            candidate.element_type
+                            candidate.edge_type
                                 == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf))
-                                && candidate.property.as_ref() == Some(&resolved_iri)
+                                && candidate.property_id.as_ref() == Some(&resolved_iri)
                         })
                         .cloned()
                         .collect()
@@ -2801,9 +2655,9 @@ impl GraphDisplayDataSolutionSerializer {
         reason = "fixed when serializer is refactored to use pointers instead of values"
     )]
     fn cardinality_literal(triple: &Triple) -> Result<String, SerializationError> {
-        match triple.target.as_ref() {
+        match triple.object_id.as_ref() {
             Some(Term::Literal(literal)) => Ok(literal.value().to_string()),
-            Some(other) => Err(SerializationErrorKind::SerializationFailed(
+            Some(other) => Err(SerializationErrorKind::SerializationFailedTriple(
                 triple.clone(),
                 format!("Expected cardinality literal, got '{other}'"),
             )
@@ -2821,9 +2675,9 @@ impl GraphDisplayDataSolutionSerializer {
         reason = "fixed when serializer is refactored to use pointers instead of values"
     )]
     fn individual_count_literal(triple: &Triple) -> Result<u32, SerializationError> {
-        match triple.target.as_ref() {
+        match triple.object_id.as_ref() {
             Some(Term::Literal(literal)) => literal.value().parse::<u32>().map_err(|e| {
-                SerializationErrorKind::SerializationFailed(
+                SerializationErrorKind::SerializationFailedTriple(
                     triple.clone(),
                     format!(
                         "Expected individual count literal, got '{}': {}",
@@ -2833,7 +2687,7 @@ impl GraphDisplayDataSolutionSerializer {
                 )
                 .into()
             }),
-            Some(other) => Err(SerializationErrorKind::SerializationFailed(
+            Some(other) => Err(SerializationErrorKind::SerializationFailedTriple(
                 triple.clone(),
                 format!("Expected individual count literal, got '{other}'"),
             )
@@ -2847,47 +2701,46 @@ impl GraphDisplayDataSolutionSerializer {
     }
 
     fn is_restriction_owner_edge(edge: &Edge) -> bool {
-        edge.element_type == ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
-            || edge.element_type == ElementType::NoDraw
+        edge.edge_type == ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
+            || edge.edge_type == ElementType::NoDraw
     }
 
-    fn is_consumed_restriction(data_buffer: &SerializationDataBuffer, restriction: &Term) -> bool {
-        data_buffer.edge_redirection.contains_key(restriction)
-            && !data_buffer.node_element_buffer.contains_key(restriction)
-            && !data_buffer.restriction_buffer.contains_key(restriction)
+    fn is_consumed_restriction(
+        data_buffer: &SerializationDataBuffer,
+        restriction_id: &usize,
+    ) -> bool {
+        data_buffer.edge_redirection.contains_key(restriction_id)
+            && !data_buffer.node_element_buffer.contains_key(restriction_id)
+            && !data_buffer.restriction_buffer.contains_key(restriction_id)
     }
 
     fn restriction_owner(
         &self,
         data_buffer: &SerializationDataBuffer,
-        restriction: &Term,
-    ) -> Option<Term> {
+        restriction_id: &usize,
+    ) -> Option<usize> {
         data_buffer
             .edges_include_map
-            .get(restriction)
+            .get(restriction_id)
             .and_then(|edges| {
                 edges.iter().find_map(|edge| {
-                    (edge.object == *restriction && Self::is_restriction_owner_edge(edge))
-                        .then(|| edge.subject.clone())
+                    (edge.object == *restriction_id && Self::is_restriction_owner_edge(edge))
+                        .then(|| edge.domain_id)
                 })
             })
     }
 
-    #[expect(
-        clippy::result_large_err,
-        reason = "fixed when serializer is refactored to use pointers instead of values"
-    )]
     fn default_restriction_target(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        owner: &Term,
-        property_iri: &Term,
-    ) -> Result<Term, SerializationError> {
-        match data_buffer.edge_element_buffer.get(property_iri).copied() {
+        owner_id: &usize,
+        property_id: &usize,
+    ) -> Result<usize, SerializationError> {
+        match data_buffer.edge_element_buffer.get(property_id) {
             Some(ElementType::Owl(OwlType::Edge(OwlEdge::DatatypeProperty))) => {
-                let literal_iri = synthetic_iri(property_iri, "_literal");
-                let literal_triple = self.create_triple(literal_iri, rdfs::LITERAL.into(), None)?;
-                let literal_id = literal_triple.id.clone();
+                let literal_iri = synthetic_iri(property_id, "_literal");
+                let literal_triple = self.create_triple_from_iri(literal_iri, rdfs::LITERAL.into(), None)?;
+                let literal_id = literal_triple.subject_id.clone();
 
                 if !data_buffer.node_element_buffer.contains_key(&literal_id) {
                     self.insert_node_without_retry(
@@ -2903,7 +2756,7 @@ impl GraphDisplayDataSolutionSerializer {
 
                 Ok(literal_id)
             }
-            _ => self.get_or_create_domain_thing(data_buffer, owner),
+            _ => self.get_or_create_domain_thing(data_buffer, owner_id),
         }
     }
 
@@ -2952,17 +2805,17 @@ impl GraphDisplayDataSolutionSerializer {
     fn materialize_literal_value_target(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        restriction: &Term,
-        literal: &rdf_fusion::model::Literal,
-    ) -> Result<Term, SerializationError> {
-        let literal_iri = synthetic_iri(restriction, "_value");
-        let literal_triple = self.create_triple(literal_iri, rdfs::LITERAL.into(), None)?;
-        let literal_id = literal_triple.id.clone();
+        restriction_id: &usize,
+        literal: &Literal,
+    ) -> Result<usize, SerializationError> {
+        let literal_iri = synthetic_iri(restriction_id, "_value");
+        let literal_triple = self.create_triple_from_iri(literal_iri, rdfs::LITERAL.into(), None)?;
+        let literal_id = literal_triple.subject_id.clone();
 
         if !data_buffer.node_element_buffer.contains_key(&literal_id) {
             self.insert_node_without_retry(
                 data_buffer,
-                &literal_triple,
+                literal_triple,
                 ElementType::Rdfs(RdfsType::Node(RdfsNode::Literal)),
             )?;
         }
@@ -2977,22 +2830,22 @@ impl GraphDisplayDataSolutionSerializer {
     fn insert_restriction_edge(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        subject: Term,
-        property_iri: Term,
-        object: Term,
+        subject_id: usize,
+        property_id: usize,
+        object_id: usize,
         label: String,
         cardinality: Option<(String, Option<String>)>,
-    ) -> Edge {
+    ) -> Rc<Edge> {
         let edge = Edge {
-            subject: subject.clone(),
-            element_type: ElementType::Owl(OwlType::Edge(OwlEdge::ValuesFrom)),
-            object: object.clone(),
-            property: Some(property_iri.clone()),
-        };
+            domain_id: subject_id,
+            edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::ValuesFrom)),
+            range_id: object_id,
+            property_id: Some(property_id),
+        }.into();
 
         data_buffer.edge_buffer.insert(edge.clone());
-        self.insert_edge_include(data_buffer, &subject, edge.clone());
-        self.insert_edge_include(data_buffer, &object, edge.clone());
+        self.insert_edge_include(data_buffer, subject_id, edge.clone());
+        self.insert_edge_include(data_buffer, object_id, edge.clone());
 
         data_buffer.edge_label_buffer.insert(edge.clone(), label);
 
@@ -3005,43 +2858,38 @@ impl GraphDisplayDataSolutionSerializer {
         edge
     }
 
-    #[expect(
-        clippy::result_large_err,
-        reason = "fixed when serializer is refactored to use pointers instead of values"
-    )]
     fn try_materialize_restriction(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        restriction: &Term,
+        restriction_id: &usize,
     ) -> Result<SerializationStatus, SerializationError> {
-        let Some(state) = data_buffer.restriction_buffer.get(restriction).cloned() else {
+        let Some(state) = data_buffer.restriction_buffer.get(restriction_id) else {
             return Ok(SerializationStatus::Deferred);
         };
 
-        let Some(raw_property) = state.on_property else {
+        let Some(raw_property_id) = state.on_property else {
             return Ok(SerializationStatus::Deferred);
         };
-        let Some(property_iri) = self.resolve(data_buffer, raw_property.clone()) else {
+        let Some(property_id) = self.resolve(data_buffer, raw_property_id) else {
             return Ok(SerializationStatus::Deferred);
         };
-        let Some(raw_subject) = self.restriction_owner(data_buffer, restriction) else {
+        let Some(raw_subject_id) = self.restriction_owner(data_buffer, restriction_id) else {
             return Ok(SerializationStatus::Deferred);
         };
-        let subject = self
-            .resolve(data_buffer, raw_subject.clone())
-            .unwrap_or_else(|| self.follow_redirection(data_buffer, &raw_subject));
+        let subject_id = self
+            .resolve(data_buffer, raw_subject_id)
+            .unwrap_or_else(|| self.follow_redirection(data_buffer, raw_subject_id));
 
         let restriction_label = data_buffer
             .label_buffer
-            .get(&raw_property)
-            .cloned()
-            .or_else(|| data_buffer.label_buffer.get(&property_iri).cloned())
+            .get(&raw_property_id)
+            .or_else(|| data_buffer.label_buffer.get(&property_id))
             .or_else(|| {
                 data_buffer
                     .property_edge_map
-                    .get(&property_iri)
-                    .and_then(|edge| data_buffer.edge_label_buffer.get(edge).cloned())
-            })
+                    .get(&property_id)
+                    .and_then(|edge| data_buffer.edge_label_buffer.get(edge))
+            }).cloned()
             .unwrap_or_else(|| OwlEdge::ValuesFrom.to_string());
 
         if state.requires_filler && !state.self_restriction && state.filler.is_none() {
@@ -3049,33 +2897,38 @@ impl GraphDisplayDataSolutionSerializer {
         }
 
         if state.render_mode == RestrictionRenderMode::ExistingPropertyEdge {
-            let Some(existing_edge) = data_buffer.property_edge_map.get(&property_iri).cloned()
-            else {
+            let Some(existing_edge) = data_buffer.property_edge_map.get(&property_id) else {
                 return Ok(SerializationStatus::Deferred);
             };
 
-            let object = if let Some(filler) = state.filler.as_ref() {
-                match filler {
+            let object = if let Some(filler_id) = state.filler.as_ref() {
+                let filler_term = data_buffer.term_index.get(filler_id).ok_or_else(|| {
+                    SerializationErrorKind::TermIndexError(format!(
+                        "Failed to find filler term {} in the term index",
+                        filler_id
+                    ))
+                })?;
+                match &*filler_term {
                     Term::Literal(literal) => {
                         data_buffer
                             .label_buffer
-                            .insert(existing_edge.object.clone(), literal.value().to_string());
-                        existing_edge.object.clone()
+                            .insert(existing_edge.range, literal.value().to_string());
+                        existing_edge.range
                     }
-                    other => match self.resolve(data_buffer, other.clone()) {
+                    _ => match self.resolve(data_buffer, *filler_id) {
                         Some(resolved) => resolved,
                         None => return Ok(SerializationStatus::Deferred),
                     },
                 }
             } else {
-                existing_edge.object.clone()
+                existing_edge.range
             };
 
             let edge = self
-                .rewrite_property_edge(data_buffer, &property_iri, subject.clone(), object)
+                .rewrite_property_edge(data_buffer, &property_id, subject_id, object)
                 .ok_or_else(|| {
-                    SerializationErrorKind::SerializationFailed(
-                        Triple::new(subject.clone(), property_iri.clone(), None),
+                    SerializationErrorKind::SerializationFailedTriple(
+                        Triple::new(subject_id, property_id, None).into(),
                         "Failed to rewrite canonical property edge for hasValue restriction"
                             .to_string(),
                     )
@@ -3083,7 +2936,7 @@ impl GraphDisplayDataSolutionSerializer {
 
             data_buffer
                 .edge_label_buffer
-                .insert(edge.clone(), restriction_label);
+                .insert(edge.clone(), restriction_label.clone());
 
             if let Some(cardinality) = state.cardinality {
                 data_buffer
@@ -3091,54 +2944,55 @@ impl GraphDisplayDataSolutionSerializer {
                     .insert(edge, cardinality);
             }
 
-            self.remove_restriction_stub(data_buffer, restriction);
-            self.remove_restriction_node(data_buffer, restriction);
+            self.remove_restriction_stub(data_buffer, restriction_id);
+            self.remove_restriction_node(data_buffer, restriction_id);
 
-            if subject != *restriction {
-                self.redirect_iri(data_buffer, restriction, &subject)?;
+            if subject_id != *restriction_id {
+                self.redirect_iri(data_buffer, *restriction_id, subject_id)?;
             }
 
             return Ok(SerializationStatus::Serialized);
         }
 
-        let object = if state.self_restriction {
-            subject.clone()
-        } else if let Some(filler) = state.filler {
-            match filler {
+        let object_id = if state.self_restriction {
+            subject_id
+        } else if let Some(filler_id) = state.filler {
+            let filler_term = data_buffer.term_index.get(&filler_id).ok_or_else(|| {SerializationErrorKind::TermIndexError(format!("Failed to get term {filler_id} in the term index"))})?;
+            match *filler_term {
                 Term::Literal(literal) => {
-                    self.materialize_literal_value_target(data_buffer, restriction, &literal)?
+                    self.materialize_literal_value_target(data_buffer, restriction_id, &literal)?
                 }
-                other => match self.resolve(data_buffer, other.clone()) {
+                other => match self.resolve(data_buffer, filler_id) {
                     Some(resolved) => resolved,
                     None => {
-                        self.materialize_named_value_target(data_buffer, &property_iri, &other)?
+                        self.materialize_named_value_target(data_buffer, &property_id, &filler_id)?
                     }
                 },
             }
         } else {
-            self.default_restriction_target(data_buffer, &subject, &property_iri)?
+            self.default_restriction_target(data_buffer, &subject_id, &property_id)?
         };
 
-        self.remove_property_fallback_edge(data_buffer, &property_iri);
+        self.remove_property_fallback_edge(data_buffer, &property_id);
 
         let edge = self.insert_restriction_edge(
             data_buffer,
-            subject.clone(),
-            property_iri.clone(),
-            object,
+            subject_id,
+            property_id,
+            object_id,
             restriction_label,
             state.cardinality,
         );
 
         data_buffer
             .property_edge_map
-            .insert(property_iri.clone(), edge);
+            .insert(property_id.clone(), edge);
 
-        self.remove_restriction_stub(data_buffer, restriction);
-        self.remove_restriction_node(data_buffer, restriction);
+        self.remove_restriction_stub(data_buffer, restriction_id);
+        self.remove_restriction_node(data_buffer, restriction_id);
 
-        if subject != *restriction {
-            self.redirect_iri(data_buffer, restriction, &subject)?;
+        if subject_id != *restriction_id {
+            self.redirect_iri(data_buffer, *restriction_id, subject_id)?;
         }
 
         Ok(SerializationStatus::Serialized)
@@ -3147,13 +3001,13 @@ impl GraphDisplayDataSolutionSerializer {
     fn remove_restriction_stub(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        restriction: &Term,
+        restriction_id: &usize,
     ) {
-        if let Some(edges) = data_buffer.edges_include_map.get(restriction).cloned() {
+        if let Some(edges) = data_buffer.edges_include_map.get(restriction_id).cloned() {
             for edge in edges {
-                if edge.object == *restriction && Self::is_restriction_owner_edge(&edge) {
-                    self.remove_edge_include(data_buffer, &edge.subject, &edge);
-                    self.remove_edge_include(data_buffer, &edge.object, &edge);
+                if edge.object == *restriction_id && Self::is_restriction_owner_edge(&edge) {
+                    self.remove_edge_include(data_buffer, &edge.domain_id, &edge);
+                    self.remove_edge_include(data_buffer, &edge.range_id, &edge);
                     data_buffer.edge_buffer.remove(&edge);
                     data_buffer.edge_label_buffer.remove(&edge);
                     data_buffer.edge_cardinality_buffer.remove(&edge);
@@ -3163,28 +3017,30 @@ impl GraphDisplayDataSolutionSerializer {
         }
     }
 
-    #[expect(
-        clippy::result_large_err,
-        reason = "fixed when serializer is refactored to use pointers instead of values"
-    )]
     fn materialize_named_value_target(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        property_iri: &Term,
-        target: &Term,
-    ) -> Result<Term, SerializationError> {
-        match data_buffer.edge_element_buffer.get(property_iri).copied() {
+        property_id: &usize,
+        target_id: &usize,
+    ) -> Result<usize, SerializationError> {
+        match data_buffer.edge_element_buffer.get(property_id) {
             Some(ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)))
             | Some(ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty)))
             | Some(ElementType::Owl(OwlType::Edge(OwlEdge::DeprecatedProperty)))
             | Some(ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))) => {
-                if !data_buffer.label_buffer.contains_key(target) {
-                    self.extract_label(data_buffer, None, target);
+                if !data_buffer.label_buffer.contains_key(target_id) {
+                    let target_term = data_buffer.term_index.get(target_id).ok_or_else(|| {
+                        SerializationErrorKind::TermIndexError(format!(
+                            "Failed to get term {target_id} from the term index"
+                        ))
+                    })?;
+                    self.extract_label(data_buffer, None, &target_term, target_id);
                 }
 
-                let resource_triple = Triple::new(target.clone(), rdfs::RESOURCE.into(), None);
+                let resource_triple = self.create_triple_from_iri(target_id, subject_iri, predicate_iri, object_iri)
+                let resource_triple = Triple::new(target_id, rdfs::RESOURCE.into(), None);
 
-                if !data_buffer.node_element_buffer.contains_key(target) {
+                if !data_buffer.node_element_buffer.contains_key(target_id) {
                     self.insert_node_without_retry(
                         data_buffer,
                         &resource_triple,
@@ -3192,12 +3048,12 @@ impl GraphDisplayDataSolutionSerializer {
                     )?;
                 }
 
-                Ok(target.clone())
+                Ok(target_id.clone())
             }
-            _ => Err(SerializationErrorKind::SerializationFailed(
-                Triple::new(target.clone(), property_iri.clone(), None),
+            _ => Err(SerializationErrorKind::SerializationFailedTriple(
+                Triple::new(target_id.clone(), property_id.clone(), None),
                 format!(
-                    "Cannot materialize named value target '{target}' for non-object restriction"
+                    "Cannot materialize named value target '{target_id}' for non-object restriction"
                 ),
             )
             .into()),
@@ -3228,19 +3084,19 @@ impl GraphDisplayDataSolutionSerializer {
     fn remove_restriction_node(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        restriction: &Term,
+        restriction_id: &usize,
     ) {
-        data_buffer.node_element_buffer.remove(restriction);
-        data_buffer.label_buffer.remove(restriction);
-        data_buffer.node_characteristics.remove(restriction);
-        data_buffer.edges_include_map.remove(restriction);
-        data_buffer.restriction_buffer.remove(restriction);
-        data_buffer.individual_count_buffer.remove(restriction);
+        data_buffer.node_element_buffer.remove(restriction_id);
+        data_buffer.label_buffer.remove(restriction_id);
+        data_buffer.node_characteristics.remove(restriction_id);
+        data_buffer.edges_include_map.remove(restriction_id);
+        data_buffer.restriction_buffer.remove(restriction_id);
+        data_buffer.individual_count_buffer.remove(restriction_id);
     }
 
     fn is_synthetic_property_fallback(edge: &Edge) -> bool {
         let is_property_edge = matches!(
-            edge.element_type,
+            edge.edge_type,
             ElementType::Owl(OwlType::Edge(
                 OwlEdge::ObjectProperty
                     | OwlEdge::DatatypeProperty
@@ -3253,8 +3109,8 @@ impl GraphDisplayDataSolutionSerializer {
             return false;
         }
 
-        let subject = trim_tag_circumfix(&edge.subject.to_string());
-        let object = trim_tag_circumfix(&edge.object.to_string());
+        let subject = trim_tag_circumfix(&edge.domain_id.to_string());
+        let object = trim_tag_circumfix(&edge.range_id.to_string());
 
         let synthetic_subject =
             subject.ends_with(SYNTH_THING) || subject.ends_with(SYNTH_LOCAL_THING);
@@ -3266,40 +3122,48 @@ impl GraphDisplayDataSolutionSerializer {
         synthetic_subject && synthetic_object
     }
 
-    fn remove_orphan_synthetic_node(&self, data_buffer: &mut SerializationDataBuffer, iri: &Term) {
-        let clean = trim_tag_circumfix(&iri.to_string());
-        let looks_synthetic = clean.ends_with(SYNTH_THING)
-            || clean.ends_with(SYNTH_LOCAL_THING)
-            || clean.ends_with(SYNTH_LITERAL)
-            || clean.ends_with(SYNTH_LOCAL_LITERAL);
+    fn remove_orphan_synthetic_node(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        term_id: &usize,
+    ) -> Result<(), SerializationError> {
+        let term = data_buffer.term_index.get(term_id).ok_or_else(|| {
+            SerializationErrorKind::TermIndexError(format!(
+                "Failed to find term {} in the term index",
+                term_id
+            ))
+        })?;
 
-        if !looks_synthetic {
-            return;
+        if !is_synthetic(&term) {
+            return Ok(());
         }
 
         let still_used = data_buffer
             .edges_include_map
-            .get(iri)
+            .get(term_id)
             .is_some_and(|edges| !edges.is_empty());
 
         if still_used {
-            return;
+            return Ok(());
         }
 
-        data_buffer.edges_include_map.remove(iri);
-        data_buffer.node_element_buffer.remove(iri);
-        data_buffer.label_buffer.remove(iri);
-        data_buffer.node_characteristics.remove(iri);
-        data_buffer.anchor_thing_map.retain(|_, value| value != iri);
-        data_buffer.individual_count_buffer.remove(iri);
+        data_buffer.edges_include_map.remove(term_id);
+        data_buffer.node_element_buffer.remove(term_id);
+        data_buffer.label_buffer.remove(term_id);
+        data_buffer.node_characteristics.remove(term_id);
+        data_buffer
+            .anchor_thing_map
+            .retain(|_, value| value != term_id);
+        data_buffer.individual_count_buffer.remove(term_id);
+        Ok(())
     }
 
     fn remove_property_fallback_edge(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        property_iri: &Term,
+        property_id: &usize,
     ) {
-        let Some(edge) = data_buffer.property_edge_map.get(property_iri).cloned() else {
+        let Some(edge) = data_buffer.property_edge_map.get(property_id).cloned() else {
             return;
         };
 
@@ -3307,50 +3171,51 @@ impl GraphDisplayDataSolutionSerializer {
             return;
         }
 
-        self.remove_edge_include(data_buffer, &edge.subject, &edge);
-        self.remove_edge_include(data_buffer, &edge.object, &edge);
+        self.remove_edge_include(data_buffer, &edge.domain_id, &edge);
+        self.remove_edge_include(data_buffer, &edge.range_id, &edge);
 
         data_buffer.edge_buffer.remove(&edge);
         data_buffer.edge_label_buffer.remove(&edge);
         data_buffer.edge_cardinality_buffer.remove(&edge);
         data_buffer.edge_characteristics.remove(&edge);
 
-        data_buffer.property_edge_map.remove(property_iri);
-        data_buffer.property_domain_map.remove(property_iri);
-        data_buffer.property_range_map.remove(property_iri);
+        data_buffer.property_edge_map.remove(property_id);
+        data_buffer.property_domain_map.remove(property_id);
+        data_buffer.property_range_map.remove(property_id);
 
-        self.remove_orphan_synthetic_node(data_buffer, &edge.subject);
-        self.remove_orphan_synthetic_node(data_buffer, &edge.object);
+        self.remove_orphan_synthetic_node(data_buffer, &edge.domain_id);
+        self.remove_orphan_synthetic_node(data_buffer, &edge.range_id);
     }
 
     fn rewrite_property_edge(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        property_iri: &Term,
-        new_subject: Term,
-        new_object: Term,
-    ) -> Option<Edge> {
-        let old_edge = data_buffer.property_edge_map.get(property_iri).cloned()?;
+        property_id: &usize,
+        new_subject_id: usize,
+        new_object_id: usize,
+    ) -> Option<Rc<Edge>> {
+        let old_edge = data_buffer.property_edge_map.get(property_id)?;
 
-        if old_edge.subject == new_subject && old_edge.object == new_object {
-            return Some(old_edge);
+        if old_edge.domain == new_subject_id && old_edge.range == new_object_id {
+            return Some(*old_edge);
         }
 
+        // TODO: Check if can be replaced with mutation on old_edge
         let mut new_edge = old_edge.clone();
-        new_edge.subject = new_subject.clone();
-        new_edge.object = new_object.clone();
+        new_edge.domain = new_subject_id;
+        new_edge.range = new_object_id;
 
-        let label = data_buffer.edge_label_buffer.remove(&old_edge);
-        let characteristics = data_buffer.edge_characteristics.remove(&old_edge);
-        let cardinality = data_buffer.edge_cardinality_buffer.remove(&old_edge);
+        let label = data_buffer.edge_label_buffer.remove(old_edge);
+        let characteristics = data_buffer.edge_characteristics.remove(old_edge);
+        let cardinality = data_buffer.edge_cardinality_buffer.remove(old_edge);
 
-        self.remove_edge_include(data_buffer, &old_edge.subject, &old_edge);
-        self.remove_edge_include(data_buffer, &old_edge.object, &old_edge);
-        data_buffer.edge_buffer.remove(&old_edge);
+        self.remove_edge_include(data_buffer, &old_edge.domain, &old_edge);
+        self.remove_edge_include(data_buffer, &old_edge.range_id, &old_edge);
+        data_buffer.edge_buffer.remove(old_edge);
 
         data_buffer.edge_buffer.insert(new_edge.clone());
-        self.insert_edge_include(data_buffer, &new_edge.subject, new_edge.clone());
-        self.insert_edge_include(data_buffer, &new_edge.object, new_edge.clone());
+        self.insert_edge_include(data_buffer, &new_edge.domain, new_edge.clone());
+        self.insert_edge_include(data_buffer, &new_edge.range, new_edge.clone());
 
         if let Some(label) = label {
             data_buffer
@@ -3370,17 +3235,17 @@ impl GraphDisplayDataSolutionSerializer {
 
         data_buffer
             .property_edge_map
-            .insert(property_iri.clone(), new_edge.clone());
+            .insert(property_id.clone(), new_edge.clone());
 
         data_buffer
             .property_domain_map
-            .insert(property_iri.clone(), HashSet::from([new_subject.clone()]));
+            .insert(property_id.clone(), HashSet::from([new_subject_id.clone()]));
         data_buffer
             .property_range_map
-            .insert(property_iri.clone(), HashSet::from([new_object.clone()]));
+            .insert(property_id.clone(), HashSet::from([new_object_id.clone()]));
 
-        self.remove_orphan_synthetic_node(data_buffer, &old_edge.subject);
-        self.remove_orphan_synthetic_node(data_buffer, &old_edge.object);
+        self.remove_orphan_synthetic_node(data_buffer, &old_edge.domain_id);
+        self.remove_orphan_synthetic_node(data_buffer, &old_edge.range_id);
 
         Some(new_edge)
     }
@@ -3425,83 +3290,83 @@ mod test {
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_com.clone(),
-                element_type: owl_ontology.clone(),
-                target: None,
+                subject_id: example_com.clone(),
+                predicate_id: owl_ontology.clone(),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_parent.clone(),
-                element_type: owl_class.clone(),
-                target: None,
+                subject_id: example_parent.clone(),
+                predicate_id: owl_class.clone(),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_mother.clone(),
-                element_type: owl_class.clone(),
-                target: None,
+                subject_id: example_mother.clone(),
+                predicate_id: owl_class.clone(),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_guardian.clone(),
-                element_type: owl_class.clone(),
-                target: None,
+                subject_id: example_guardian.clone(),
+                predicate_id: owl_class.clone(),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_warden.clone(),
-                element_type: owl_class.clone(),
-                target: None,
+                subject_id: example_warden.clone(),
+                predicate_id: owl_class.clone(),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_warden1.clone(),
-                element_type: owl_class.clone(),
-                target: None,
+                subject_id: example_warden1.clone(),
+                predicate_id: owl_class.clone(),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_warden.clone(),
-                element_type: rdfs_subclass_of.clone(),
-                target: Some(example_guardian.clone()),
+                subject_id: example_warden.clone(),
+                predicate_id: rdfs_subclass_of.clone(),
+                object_id: Some(example_guardian.clone()),
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_mother.clone(),
-                element_type: rdfs_subclass_of.clone(),
-                target: Some(example_parent.clone()),
+                subject_id: example_mother.clone(),
+                predicate_id: rdfs_subclass_of.clone(),
+                object_id: Some(example_parent.clone()),
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: blanknode1.clone(),
-                element_type: Term::Literal(Literal::new_simple_literal("blanknode".to_string())),
-                target: None,
+                subject_id: blanknode1.clone(),
+                predicate_id: Term::Literal(Literal::new_simple_literal("blanknode".to_string())),
+                object_id: None,
             },
         );
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: example_warden1.clone(),
-                element_type: Term::NamedNode(
+                subject_id: example_warden1.clone(),
+                predicate_id: Term::NamedNode(
                     NamedNode::new("http://www.w3.org/2002/07/owl#unionOf").unwrap(),
                 ),
-                target: Some(example_warden.clone()),
+                object_id: Some(example_warden.clone()),
             },
         );
 
@@ -3509,11 +3374,11 @@ mod test {
         println!("--------------------------------");
 
         let triple = Triple {
-            id: example_guardian.clone(),
-            element_type: Term::NamedNode(
+            subject_id: example_guardian.clone(),
+            predicate_id: Term::NamedNode(
                 NamedNode::new("http://www.w3.org/2002/07/owl#equivalentClass").unwrap(),
             ),
-            target: Some(example_warden.clone()),
+            object_id: Some(example_warden.clone()),
         };
         serializer.write_node_triple(&mut data_buffer, triple);
         for (k, v) in data_buffer.node_element_buffer.iter() {
@@ -3543,10 +3408,10 @@ mod test {
         assert!(data_buffer.edges_include_map.contains_key(&example_warden1));
 
         assert!(data_buffer.edge_buffer.contains(&Edge {
-            subject: example_warden1,
-            element_type: ElementType::NoDraw,
-            object: example_guardian.clone(),
-            property: None
+            domain_id: example_warden1,
+            edge_type: ElementType::NoDraw,
+            range_id: example_guardian.clone(),
+            property_id: None
         }));
         assert!(data_buffer.edge_redirection.contains_key(&example_warden));
         assert_eq!(
@@ -3560,11 +3425,11 @@ mod test {
         serializer.write_node_triple(
             &mut data_buffer,
             Triple {
-                id: Term::NamedNode(NamedNode::new("http://example.com#Guardian").unwrap()),
-                element_type: Term::NamedNode(
+                subject_id: Term::NamedNode(NamedNode::new("http://example.com#Guardian").unwrap()),
+                predicate_id: Term::NamedNode(
                     NamedNode::new("http://www.w3.org/2002/07/owl#equivalentClass").unwrap(),
                 ),
-                target: Some(blanknode1.clone()),
+                object_id: Some(blanknode1.clone()),
             },
         );
         let s = serializer.resolve(&data_buffer, blanknode1.clone());
@@ -3589,7 +3454,7 @@ mod test {
         for edge in data_buffer.edge_buffer.iter() {
             println!(
                 "{} -> {:?} -> {}",
-                edge.subject, edge.element_type, edge.object
+                edge.domain, edge.edge_type, edge.range
             );
         }
     }

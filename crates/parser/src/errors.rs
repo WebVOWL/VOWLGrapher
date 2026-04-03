@@ -23,19 +23,19 @@ pub enum VOWLRStoreErrorKind {
     /// Example: server only supports `.owl` and is given `.png`
     InvalidFileType(String),
     /// An error raised by Horned-OWL during parsing (of OWL files).
-    HornedError(HornedError),
+    HornedError(Box<HornedError>),
     /// Generic IO error.
-    IOError(io::Error),
+    IOError(Box<io::Error>),
     /// An error raised while trying to parse an invalid IRI.
-    IriParseError(IriParseError),
+    IriParseError(Box<IriParseError>),
     /// An error raised while loading a file into a Store (database).
-    LoaderError(LoaderError),
+    LoaderError(Box<LoaderError>),
     /// A SPARQL evaluation error.
-    QueryEvaluationError(QueryEvaluationError),
+    QueryEvaluationError(Box<QueryEvaluationError>),
     /// A Tokio task failed to execute to completion.
-    JoinError(JoinError),
+    JoinError(Box<JoinError>),
     /// An error related to (database) storage operations (reads, writes...).
-    StorageError(StorageError),
+    StorageError(Box<StorageError>),
 }
 
 /// Encapsulates the error with metadata.
@@ -57,7 +57,7 @@ impl From<VOWLRStoreError> for io::Error {
 impl From<String> for VOWLRStoreError {
     #[track_caller]
     fn from(error: String) -> Self {
-        VOWLRStoreError {
+        Self {
             inner: VOWLRStoreErrorKind::InvalidFileType(error),
             location: Location::caller(),
             timestamp: get_timestamp(),
@@ -68,8 +68,8 @@ impl From<String> for VOWLRStoreError {
 impl From<HornedError> for VOWLRStoreError {
     #[track_caller]
     fn from(error: HornedError) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::HornedError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::HornedError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -79,8 +79,8 @@ impl From<HornedError> for VOWLRStoreError {
 impl From<IriParseError> for VOWLRStoreError {
     #[track_caller]
     fn from(error: IriParseError) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::IriParseError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::IriParseError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -90,8 +90,8 @@ impl From<IriParseError> for VOWLRStoreError {
 impl From<LoaderError> for VOWLRStoreError {
     #[track_caller]
     fn from(error: LoaderError) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::LoaderError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::LoaderError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -100,7 +100,7 @@ impl From<LoaderError> for VOWLRStoreError {
 impl From<VOWLRStoreErrorKind> for VOWLRStoreError {
     #[track_caller]
     fn from(error: VOWLRStoreErrorKind) -> Self {
-        VOWLRStoreError {
+        Self {
             inner: error,
             location: Location::caller(),
             timestamp: get_timestamp(),
@@ -111,8 +111,8 @@ impl From<VOWLRStoreErrorKind> for VOWLRStoreError {
 impl From<io::Error> for VOWLRStoreError {
     #[track_caller]
     fn from(error: io::Error) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::IOError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::IOError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -121,8 +121,8 @@ impl From<io::Error> for VOWLRStoreError {
 impl From<QueryEvaluationError> for VOWLRStoreError {
     #[track_caller]
     fn from(error: QueryEvaluationError) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::QueryEvaluationError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::QueryEvaluationError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -131,8 +131,8 @@ impl From<QueryEvaluationError> for VOWLRStoreError {
 impl From<JoinError> for VOWLRStoreError {
     #[track_caller]
     fn from(error: JoinError) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::JoinError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::JoinError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -142,8 +142,8 @@ impl From<JoinError> for VOWLRStoreError {
 impl From<StorageError> for VOWLRStoreError {
     #[track_caller]
     fn from(error: StorageError) -> Self {
-        VOWLRStoreError {
-            inner: VOWLRStoreErrorKind::StorageError(error),
+        Self {
+            inner: VOWLRStoreErrorKind::StorageError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }

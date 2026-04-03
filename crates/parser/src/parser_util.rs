@@ -33,10 +33,6 @@ pub enum ParserInput {
 }
 
 impl ParserInput {
-    #[expect(
-        clippy::result_large_err,
-        reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
-    )]
     /// Reads the entire file at `path` and returns the contents as a byte vector.
     pub fn from_path(path: &Path) -> Result<Self, VOWLRStoreError> {
         std::fs::read(path)
@@ -189,10 +185,6 @@ pub async fn parse_stream_to(
 }
 
 /// Returns the parser compatible with the file at the path.
-#[expect(
-    clippy::result_large_err,
-    reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
-)]
 pub fn parser_from_path(
     path: &Path,
     lenient: bool,
@@ -204,10 +196,6 @@ pub fn parser_from_path(
 }
 
 /// Returns the parser compatible with the reader, reading from the path.
-#[expect(
-    clippy::result_large_err,
-    reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
-)]
 pub fn parser_from_reader(
     mut reader: impl BufRead,
     path: &Path,

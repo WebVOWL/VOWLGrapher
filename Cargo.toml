@@ -217,6 +217,12 @@
     overflow-checks=false
     panic="abort"
 
+# This profile is mostly used for profiling performance regressions.
+[profile.profiling]
+    debug=true
+    inherits="release"
+    lto=false
+
 # Defines a size-optimized profile for the WASM bundle in release mode
 [profile.wasm-release]
     inherits="release"

@@ -27,7 +27,7 @@ impl QueryAssembler {
         format!(
             r#"
             {}
-            SELECT DISTINCT ?id ?nodeType ?target ?label
+            SELECT ?id ?nodeType ?target ?label
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
                     {}

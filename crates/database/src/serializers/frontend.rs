@@ -2210,9 +2210,9 @@ impl GraphDisplayDataSolutionSerializer {
                                         let msg = "subject not present in node_element_buffer"
                                             .to_string();
                                         return Err(
-                                        SerializationErrorKind::SerializationFailedTriple(
+                                            SerializationErrorKind::SerializationFailedTriple(
                                                 data_buffer.term_index.display_triple(&triple)?,
-                                            msg,
+                                                msg,
                                             ),
                                         )?;
                                     }
@@ -2536,6 +2536,8 @@ impl GraphDisplayDataSolutionSerializer {
                     }
                     owl::ONTOLOGY => {
                         let mut document_base = data_buffer.document_base.write()?;
+                        let base_term = data_buffer.term_index.get(&triple.subject_term_id)?;
+                        let base = trim_tag_circumfix(&base_term.to_string());
                         if let Some(base) = &*document_base {
                             let msg = format!(
                                 "Attempting to override document base '{base}' with new base '{}'. Skipping",
@@ -2548,7 +2550,6 @@ impl GraphDisplayDataSolutionSerializer {
                                 .write()?
                                 .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
                         } else {
-                            let base = trim_tag_circumfix(&triple.subject_term_id.to_string());
                             info!("Using document base: '{}'", base);
                             *document_base = Some(base.into());
                         }
@@ -3100,7 +3101,7 @@ impl GraphDisplayDataSolutionSerializer {
                                             {
                                                 Some(prop) => prop,
                                                 None => {
-                                            let msg = "Edge triple not present in edge_element_buffer".to_string();
+                                                    let msg = "Edge triple not present in edge_element_buffer".to_string();
                                                     let display_edge = data_buffer
                                                         .term_index
                                                         .display_triple(&edge_triple)?;
@@ -3144,7 +3145,7 @@ impl GraphDisplayDataSolutionSerializer {
                                                         Some(id) => id,
                                                         None => {
                                                             let msg =
-                                                            "Failed to update range for edge"
+                                                                "Failed to update range for edge"
                                                                     .to_string();
                                                             let display_edge = data_buffer
                                                                 .term_index
@@ -3789,8 +3790,8 @@ impl GraphDisplayDataSolutionSerializer {
                         let display_triple = data_buffer.term_index.display_triple(&triple)?;
                         return Err(SerializationErrorKind::SerializationFailedTriple(
                             display_triple,
-                        "Failed to rewrite canonical property edge for hasValue restriction"
-                            .to_string(),
+                            "Failed to rewrite canonical property edge for hasValue restriction"
+                                .to_string(),
                         ))?;
                     }
                 }
@@ -3966,11 +3967,11 @@ impl GraphDisplayDataSolutionSerializer {
                 let display_triple = data_buffer.term_index.display_triple(&triple)?;
                 Err(SerializationErrorKind::SerializationFailedTriple(
                     display_triple,
-                format!(
+                    format!(
                         "Cannot materialize named value target '{}' for non-object restriction",
                         data_buffer.term_index.get(target_term_id)?
-                ),
-            )
+                    ),
+                )
                 .into())
             }
         }

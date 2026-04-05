@@ -51,8 +51,8 @@ impl TermIndex {
     ///
     /// # Errors
     /// Returns an error if the underlying lock is poisoned when accessed.
-    pub fn remove(&mut self, id: &usize) -> Result<Option<Arc<Term>>, SerializationError> {
-        if let Some(term) = self.int_index.write()?.remove(id) {
+    pub fn remove(&mut self, term_id: &usize) -> Result<Option<Arc<Term>>, SerializationError> {
+        if let Some(term) = self.int_index.write()?.remove(term_id) {
             self.str_index.write()?.remove(&term);
             return Ok(Some(term));
         }
@@ -72,7 +72,7 @@ impl TermIndex {
             .get(id)
             .ok_or_else(|| {
                 SerializationErrorKind::TermIndexError(format!(
-                    "Failed to find term with '{id}' in the term index"
+                    "Failed to find term with id '{id}' in the term index"
                 ))
             })?
             .clone();

@@ -279,18 +279,6 @@ impl GraphDisplayDataSolutionSerializer {
         query_time: Option<Instant>,
         count: u64,
     ) -> Result<Option<VOWLRError>, SerializationError> {
-        let finish_time = Instant::now()
-            .checked_duration_since(start_time)
-            .unwrap_or_default()
-            .as_secs_f32();
-        let query_finish_time = if let Some(qtime) = query_time {
-            qtime
-                .checked_duration_since(start_time)
-                .unwrap_or_default()
-                .as_secs_f32()
-        } else {
-            0.0
-        };
         debug!("{}", data_buffer);
         let serializer_errors = if !data_buffer.failed_buffer.read()?.is_empty() {
             let mut failed_buffer = data_buffer.failed_buffer.write()?;
@@ -309,6 +297,32 @@ impl GraphDisplayDataSolutionSerializer {
         let (converted, convert_errors) = data_buffer.convert_into()?;
         *data = converted;
         debug!("{}", data);
+
+        let all_errors = match (serializer_errors, convert_errors) {
+            (Some(mut e), Some(mut ce)) => {
+                let ue = take(&mut e.records)
+                    .into_iter()
+                    .chain(take(&mut ce.records))
+                    .collect::<Vec<_>>();
+                Some(<Vec<ErrorRecord> as Into<VOWLRError>>::into(ue))
+            }
+            (Some(e), None) => Some(e),
+            (None, Some(ce)) => Some(ce),
+            (None, None) => None,
+        };
+
+        let finish_time = Instant::now()
+            .checked_duration_since(start_time)
+            .unwrap_or_default()
+            .as_secs_f32();
+        let query_finish_time = if let Some(qtime) = query_time {
+            qtime
+                .checked_duration_since(start_time)
+                .unwrap_or_default()
+                .as_secs_f32()
+        } else {
+            0.0
+        };
         info!(
             "Serialization completed\n \
             \tQuery execution time: {:.5} s\n \
@@ -330,18 +344,6 @@ impl GraphDisplayDataSolutionSerializer {
                 + data_buffer.node_characteristics.read()?.len(),
         );
 
-        let all_errors = match (serializer_errors, convert_errors) {
-            (Some(mut e), Some(mut ce)) => {
-                let ue = take(&mut e.records)
-                    .into_iter()
-                    .chain(take(&mut ce.records))
-                    .collect::<Vec<_>>();
-                Some(<Vec<ErrorRecord> as Into<VOWLRError>>::into(ue))
-            }
-            (Some(e), None) => Some(e),
-            (None, Some(ce)) => Some(ce),
-            (None, None) => None,
-        };
         Ok(all_errors)
     }
 

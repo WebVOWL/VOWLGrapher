@@ -279,6 +279,17 @@ impl GraphDisplayDataSolutionSerializer {
         query_time: Option<Instant>,
         count: u64,
     ) -> Result<Option<VOWLRError>, SerializationError> {
+        let (element_count, edge_count, label_count, cardinality_count, characteristics_count) = {
+            (
+                data_buffer.node_element_buffer.read()?.len(),
+                data_buffer.edge_buffer.read()?.len(),
+                data_buffer.label_buffer.read()?.len(),
+                data_buffer.edge_cardinality_buffer.read()?.len(),
+                data_buffer.edge_characteristics.read()?.len()
+                    + data_buffer.node_characteristics.read()?.len(),
+            )
+        };
+
         debug!("{}", data_buffer);
         let serializer_errors = if !data_buffer.failed_buffer.read()?.is_empty() {
             let mut failed_buffer = data_buffer.failed_buffer.write()?;
@@ -336,12 +347,11 @@ impl GraphDisplayDataSolutionSerializer {
         ",
             query_finish_time,
             finish_time - query_finish_time,
-            data_buffer.node_element_buffer.read()?.len(),
-            data_buffer.edge_buffer.read()?.len(),
-            data_buffer.label_buffer.read()?.len(),
-            data_buffer.edge_cardinality_buffer.read()?.len(),
-            data_buffer.edge_characteristics.read()?.len()
-                + data_buffer.node_characteristics.read()?.len(),
+            element_count,
+            edge_count,
+            label_count,
+            cardinality_count,
+            characteristics_count
         );
 
         Ok(all_errors)

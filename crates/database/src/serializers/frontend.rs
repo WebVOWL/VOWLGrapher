@@ -637,16 +637,6 @@ impl GraphDisplayDataSolutionSerializer {
         triple: ArcTriple,
         node_type: ElementType,
     ) -> Result<(), SerializationError> {
-        self.insert_node_impl(data_buffer, triple, node_type, true)
-    }
-
-    fn insert_node_impl(
-        &self,
-        data_buffer: &mut SerializationDataBuffer,
-        triple: ArcTriple,
-        node_type: ElementType,
-        retry_restrictions: bool,
-    ) -> Result<(), SerializationError> {
         if data_buffer
             .edge_redirection
             .read()?
@@ -676,20 +666,7 @@ impl GraphDisplayDataSolutionSerializer {
         )?;
         self.check_unknown_buffer(data_buffer, &triple.subject_term_id)?;
 
-        if retry_restrictions {
-            self.retry_restrictions(data_buffer)?;
-        }
-
         Ok(())
-    }
-
-    fn insert_node_without_retry(
-        &self,
-        data_buffer: &mut SerializationDataBuffer,
-        triple: ArcTriple,
-        node_type: ElementType,
-    ) -> Result<(), SerializationError> {
-        self.insert_node_impl(data_buffer, triple, node_type, false)
     }
 
     /// Inserts an edge triple into the serialization buffer,
@@ -837,7 +814,6 @@ impl GraphDisplayDataSolutionSerializer {
         self.update_edges(data_buffer, old_term_id, new_term_id)?;
         self.merge_individual_counts(data_buffer, &old_term_id, new_term_id)?;
         self.redirect_iri(data_buffer, old_term_id, new_term_id)?;
-        self.retry_restrictions(data_buffer)?;
         Ok(())
     }
 
@@ -1690,6 +1666,7 @@ impl GraphDisplayDataSolutionSerializer {
                 pass, pending_before
             );
 
+            self.retry_restrictions(data_buffer)?;
             let current = pending;
 
             for (term_id, triples) in current {
@@ -1933,8 +1910,6 @@ impl GraphDisplayDataSolutionSerializer {
                                         data_buffer,
                                         restriction_term_id,
                                     )?;
-                                } else {
-                                    self.retry_restrictions(data_buffer)?;
                                 }
                                 return Ok(SerializationStatus::Serialized);
                             }
@@ -2076,7 +2051,6 @@ impl GraphDisplayDataSolutionSerializer {
                             e,
                         )?;
                         self.check_unknown_buffer(data_buffer, &triple.subject_term_id)?;
-                        self.retry_restrictions(data_buffer)?;
                         return Ok(SerializationStatus::Serialized);
                     }
 
@@ -2512,7 +2486,6 @@ impl GraphDisplayDataSolutionSerializer {
                             ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
                         )?;
                         self.check_unknown_buffer(data_buffer, &triple.subject_term_id)?;
-                        self.retry_restrictions(data_buffer)?;
                         return Ok(SerializationStatus::Serialized);
                     }
                     owl::ONE_OF => {
@@ -3242,7 +3215,7 @@ impl GraphDisplayDataSolutionSerializer {
         )?;
         let thing_element = ElementType::Owl(OwlType::Node(OwlNode::Thing));
 
-        self.insert_node_without_retry(data_buffer, thing_triple.clone(), thing_element)?;
+        self.insert_node(data_buffer, thing_triple.clone(), thing_element)?;
 
         {
             data_buffer
@@ -3280,7 +3253,7 @@ impl GraphDisplayDataSolutionSerializer {
         )?;
         let thing_element = ElementType::Owl(OwlType::Node(OwlNode::Thing));
 
-        self.insert_node_without_retry(data_buffer, thing_triple.clone(), thing_element)?;
+        self.insert_node(data_buffer, thing_triple.clone(), thing_element)?;
         {
             data_buffer
                 .label_buffer
@@ -3541,11 +3514,7 @@ impl GraphDisplayDataSolutionSerializer {
                         .contains_key(&literal_triple.subject_term_id)
                 };
                 if !node_exists {
-                    self.insert_node_without_retry(
-                        data_buffer,
-                        literal_triple.clone(),
-                        element_type,
-                    )?;
+                    self.insert_node(data_buffer, literal_triple.clone(), element_type)?;
                 }
 
                 {
@@ -3601,7 +3570,7 @@ impl GraphDisplayDataSolutionSerializer {
                         None,
                     )?;
 
-                    self.insert_node_without_retry(
+                    self.insert_node(
                         data_buffer,
                         resource_triple,
                         ElementType::Rdfs(RdfsType::Node(RdfsNode::Resource)),
@@ -3645,7 +3614,7 @@ impl GraphDisplayDataSolutionSerializer {
                 None,
             )?;
 
-            self.insert_node_without_retry(
+            self.insert_node(
                 data_buffer,
                 literal_triple,
                 ElementType::Rdfs(RdfsType::Node(RdfsNode::Literal)),
@@ -3961,7 +3930,7 @@ impl GraphDisplayDataSolutionSerializer {
                         None,
                     )?;
 
-                    self.insert_node_without_retry(
+                    self.insert_node(
                         data_buffer,
                         resource_triple,
                         ElementType::Rdfs(RdfsType::Node(RdfsNode::Resource)),
@@ -3990,7 +3959,6 @@ impl GraphDisplayDataSolutionSerializer {
         }
     }
 
-    // TODO: Don't call this on every insert. Call in unknown checks
     fn retry_restrictions(
         &self,
         data_buffer: &mut SerializationDataBuffer,

@@ -32,7 +32,7 @@ pub struct Triple {
     /// The subject.
     subject_term_id: usize,
     /// The predicate.
-    predicate_term_id: usize,
+    predicate_term_id: Option<usize>,
     /// The object.
     object_term_id: Option<usize>,
 }
@@ -41,7 +41,14 @@ impl Display for Triple {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Triple{{ ")?;
         write!(f, "{} - ", self.subject_term_id)?;
-        write!(f, "{} - ", self.predicate_term_id)?;
+        write!(
+            f,
+            "{}",
+            self.predicate_term_id
+                .as_ref()
+                .map(|t| t.to_string())
+                .unwrap_or_default(),
+        )?;
         write!(
             f,
             "{}",
@@ -57,7 +64,7 @@ impl Display for Triple {
 impl Triple {
     pub fn new(
         subject_term_id: usize,
-        predicate_term_id: usize,
+        predicate_term_id: Option<usize>,
         object_term_id: Option<usize>,
     ) -> Self {
         Self {
@@ -255,6 +262,19 @@ pub struct SerializationDataBuffer {
 impl SerializationDataBuffer {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Unpack the predicate term id of the triple.
+    ///
+    /// Returns an error if the term id is None.
+    pub fn get_predicate(&self, triple: &ArcTriple) -> Result<usize, SerializationError> {
+        match triple.predicate_term_id {
+            Some(predicate_term_id) => Ok(predicate_term_id),
+            None => Err(SerializationErrorKind::MissingPredicate(
+                self.term_index.display_triple(triple)?,
+                "Cannot serialize a triple with a missing predicate".to_string(),
+            ))?,
+        }
     }
 
     /// Converts [`self`] into [`GraphDisplayData`].

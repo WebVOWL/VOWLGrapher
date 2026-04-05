@@ -11,6 +11,6 @@ To build this crate in standard release mode, open a terminal and run: `cargo bu
 
 Note that it does take a while to compile it.
 
-To start the binary with profiling enabled, run: `RUST_BACKTRACE=1 ./target/x86_64-unknown-linux-gnu/profiling/perfdebugger <path/to/ontology>`
+To start the binary with profiling enabled, run: `RUST_BACKTRACE=1 RUST_LOG=info ./target/x86_64-unknown-linux-gnu/profiling/perfdebugger <path/to/ontology>`
 
-To start the binary in release mode, run: `RUST_BACKTRACE=1 ./target/x86_64-unknown-linux-gnu/release/perfdebugger <path/to/ontology>`
+To start the binary in release mode, run: `RUST_BACKTRACE=1 RUST_LOG=info ./target/x86_64-unknown-linux-gnu/release/perfdebugger <path/to/ontology>`

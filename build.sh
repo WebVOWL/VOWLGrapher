@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 modes=(
+    "trace"
     "dev"
     "release"
     "binary"
 )
 commands=(
+    "MIMALLOC_VERBOSE=1 RUST_BACKTRACE=1 RUST_LOG=trace,datafusion=off,datafusion_physical_plan=off,datafusion_optimizer=off,sqlparser=off cargo leptos watch -v"
     "MIMALLOC_VERBOSE=1 RUST_BACKTRACE=1 RUST_LOG=debug,datafusion=off,datafusion_physical_plan=off,datafusion_optimizer=off,sqlparser=off cargo leptos watch -v" # --wasm-debug
     "RUST_LOG=info cargo leptos watch --release --precompress -v"
     "cargo leptos build --release --precompress -vv"
     )
 help=(
+    "Builds VOWL-R in trace development mode and runs it on a local server"
     "Builds VOWL-R in development mode and runs it on a local server"
     "Builds VOWL-R in production mode and runs it on a local server"
     "Builds VOWL-R in production mode, ready for deployment"
@@ -20,8 +23,8 @@ valid=0
 for ((i=0; i < ${#modes[@]}; i++)); do
     if [[ $1 = ${modes[i]} ]]; then
         # Execute the command associated with the chosen mode
-        bash -c "${commands[i]}"
-        valid=1
+        code= eval "${commands[i]}"
+        exit $code
     fi
 done
 

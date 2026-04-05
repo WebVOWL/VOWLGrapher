@@ -21,6 +21,7 @@ fn par_serialize(c: &mut Criterion) {
     group.bench_function("Insert", |b| {
         b.to_async(tokio::runtime::Runtime::new().expect("runtime should work"))
             .iter(async || {
+                // TODO: Make the store use the parallel version
                 let _ = store
                     .query(DEFAULT_QUERY.to_string())
                     .await

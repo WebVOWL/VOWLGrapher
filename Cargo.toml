@@ -248,7 +248,7 @@
             # Monomorphization of functions to increase performance significantly (~2x)
             # at the cost of file size.
             # https://github.com/WebAssembly/binaryen/wiki/Optimizer-Cookbook#monomorphization
-            "-O3",
+            # "-O3",
             "--monomorphize",
             "--pass-arg=monomorphize-min-benefit@50",
             # -O4 optimizes very aggressively for performance at the cost of compile time.

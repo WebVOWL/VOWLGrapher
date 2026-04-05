@@ -26,7 +26,13 @@
     tabled={version="0.20", optional=true}
     time={version="0.3.47", features=["formatting", "macros"]}
     uuid={version="1.22.0", features=["v4"], optional=true}
+    web-sys={workspace=true, features=[
+        "Window",
+        "Performance",
+        "PerformanceTiming",
+    ], optional=true}
 
 [features]
     server=["dep:tabled"]
     ssr=["dep:leptos_actix", "dep:actix-session", "dep:uuid"]
+    wasm=["time/wasm-bindgen", "dep:web-sys"]

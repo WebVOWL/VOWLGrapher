@@ -65,6 +65,7 @@
         smallvec={version="1.15.1", features=["union"]}
         strum={version="0.27", features=["derive"]}
         tokio="1.48.0"
+        web-sys="0.3.77"
 
 
 [dependencies]
@@ -121,7 +122,7 @@
         version="0.16.3"
 
     [dependencies.web-sys]
-        version="0.3.77"
+        workspace=true
         # https://docs.rs/web-sys/latest/web_sys/#modules
         features=[
             "Document",
@@ -176,7 +177,7 @@
         "dep:wasm-bindgen",
         "dep:wasm-bindgen-futures",
         "dep:wasm-bindgen-rayon",
-        # "dep:grapher",
+        "vowlr-util/wasm",
     ]
 
 

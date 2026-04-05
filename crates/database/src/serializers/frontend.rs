@@ -33,6 +33,7 @@ use grapher::prelude::{
 };
 use log::{debug, error, info, trace, warn};
 use oxrdf::Literal;
+use rayon::ThreadPoolBuilder;
 use rdf_fusion::{
     execution::results::{QuerySolution, QuerySolutionStream},
     model::{BlankNode, NamedNode, Term},
@@ -69,14 +70,14 @@ impl GraphDisplayDataSolutionSerializer {
         mut solution_stream: QuerySolutionStream,
     ) -> Result<Option<VOWLRError>, VOWLRError> {
         let thread_count = available_parallelism()
-            .unwrap_or(NonZero::new(4).unwrap())
+            .unwrap_or(NonZero::new(1).unwrap())
             .into();
 
         info!("Serializing query solution stream using {thread_count} threads...");
 
         // TODO: Make a global threadpool instead of making a new one for each call to this method.
         // Should prolly work together with PR #223.
-        let pool = rayon::ThreadPoolBuilder::new()
+        let pool = ThreadPoolBuilder::new()
             .num_threads(thread_count)
             .build()
             .unwrap();

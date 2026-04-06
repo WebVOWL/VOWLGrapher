@@ -7,13 +7,15 @@ mod properties;
 mod special_operators;
 
 use crate::components::user_input::internal_sparql::GraphDataContext;
-use crate::components::user_input::internal_sparql::load_graph;
+
+use crate::errors::ClientErrorKind;
+use crate::errors::ErrorLogContext;
 
 use super::WorkbenchMenuItems;
+use grapher::prelude::EVENT_DISPATCHER;
 use grapher::prelude::ElementType;
-use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
-
-use vowlgrapher_sparql_queries::prelude::QueryAssembler;
+use grapher::prelude::SimulatorEvent;
+use leptos::prelude::*;
 
 use classes::{is_owl_class, is_rdf_class};
 use filtergroup::FilterGroup;
@@ -40,12 +42,11 @@ pub fn FilterMenu() -> impl IntoView {
 
     Effect::new(move || {
         if *last_checked.read() > 0 {
-            let query = QueryAssembler::assemble_filtered_query(&element_checks.read_untracked());
-            leptos::logging::log!("{}", query);
-
-            spawn_local_scoped_with_cancellation(async move {
-                load_graph(query, false).await;
-            });
+            let msg = SimulatorEvent::HideEntities(element_checks.get());
+            if let Err(e) = EVENT_DISPATCHER.sim_write_chan.send(msg) {
+                let error_context = expect_context::<ErrorLogContext>();
+                error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
+            }
         }
     });
 

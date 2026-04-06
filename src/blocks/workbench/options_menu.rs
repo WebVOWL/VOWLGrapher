@@ -47,9 +47,9 @@ pub fn SimulatorSettings() -> impl IntoView {
                     <Slider
                         label="Node Distance"
                         value=repel_force
-                        min=10e6.to_string()
-                        max=10e8.to_string()
-                        step=10e3.to_string()
+                        min=(-10e8).to_string()
+                        max=(-10e6).to_string()
+                        step=(-10e3).to_string()
                     ></Slider>
                 </ToolTip<f64>>
 
@@ -57,9 +57,9 @@ pub fn SimulatorSettings() -> impl IntoView {
                     <Slider
                         label="Edge Stiffness"
                         value=spring_stiffness
-                        min="100.0"
-                        max="600.0"
-                        step="100.0"
+                        min="50.0"
+                        max="200.0"
+                        step="10.0"
                     ></Slider>
                 </ToolTip<f64>>
 
@@ -67,7 +67,7 @@ pub fn SimulatorSettings() -> impl IntoView {
                     label="Edge Length"
                     value=spring_neutral_length
                     min="20.0"
-                    max="120.0"
+                    max="200.0"
                     step="10.0"
                 ></Slider>
 

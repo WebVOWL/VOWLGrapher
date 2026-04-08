@@ -42,8 +42,7 @@ pub fn SimulatorSettings() -> impl IntoView {
         <fieldset>
             <legend>"Graph Simulation"</legend>
             <div class="flex flex-col content-around m-4 size-fit">
-                {// <ToolTip<f64> content=repel_force position=ToolTipPosition::Top>
-                   }   <Slider
+  <Slider
                         label="Node Distance"
                         value=repel_force
                         min=(-10e8).to_string()

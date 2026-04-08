@@ -51,8 +51,7 @@ pub fn SimulatorSettings() -> impl IntoView {
                     ></Slider>
                 {// </ToolTip<f64>>
 
-                // <ToolTip<f64> content=spring_stiffness position=ToolTipPosition::Top>
-                   }   <Slider
+ <Slider
                         label="Edge Stiffness"
                         value=spring_stiffness
                         min="50.0"

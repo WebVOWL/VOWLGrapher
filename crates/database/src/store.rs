@@ -67,7 +67,16 @@ impl VOWLRStore {
     pub async fn query(
         &self,
         query: String,
+        graph_name: Option<String>,
     ) -> Result<(GraphDisplayData, Option<VOWLRError>), VOWLRError> {
+        debug!("Querying with graph_name: {:#?}", graph_name);
+        let user_query = if let Some(name) = graph_name {
+            let graph_iri = self.get_graph_iri(&name);
+            query.replace("{GRAPH_IRI}", &graph_iri)
+        } else {
+            query.replace("GRAPH <{{GRAPH_IRI}}>", "")
+        };
+
         let solution_serializer = GraphDisplayDataSolutionSerializer::new();
         let query_stream = self
             .session
@@ -103,8 +112,7 @@ impl VOWLRStore {
     ///
     /// Files are automatically parsed.
     pub async fn insert_file(&self, fs: &Path, lenient: bool) -> Result<(), VOWLRStoreError> {
-        let filename = fs.file_name().unwrap_or_default().to_string_lossy();
-        let graph_iri = self.get_graph_iri(&filename);
+        let graph_iri = self.get_graph_iri(&fs.to_string_lossy());
 
         let parser = parser_from_path(fs, lenient, &graph_iri)?;
         info!("Loading graph '{}' into database...", graph_iri);

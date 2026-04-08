@@ -6,6 +6,8 @@ use std::path::Path;
 #[cfg(feature = "server")]
 use vowlr_database::prelude::VOWLRStore;
 use vowlr_util::prelude::VOWLRError;
+#[cfg(feature = "ssr")]
+use vowlr_util::prelude::manage_user_id;
 
 #[derive(
     Debug,
@@ -101,7 +103,7 @@ impl TryFrom<String> for StoredOntology {
 #[server(input = Rkyv, output = Rkyv)]
 pub async fn load_stored_ontology(ontology: StoredOntology) -> Result<(), VOWLRError> {
     let path = Path::new(ontology.path());
-    let store = VOWLRStore::default();
+    let store = VOWLRStore::new_for_user(manage_user_id().await?);
 
     store.insert_file(path, false).await?;
     Ok(())

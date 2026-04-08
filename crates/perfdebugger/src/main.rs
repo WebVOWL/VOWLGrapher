@@ -22,7 +22,7 @@ async fn main() {
             .await
             .expect("Error inserting file");
 
-        let (data, _) = store.query(DEFAULT_QUERY.to_string()).await.unwrap();
+        let (data, _) = store.query(DEFAULT_QUERY.to_string(), None).await.unwrap();
 
         EVENT_DISPATCHER
             .rend_write_chan

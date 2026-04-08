@@ -26,7 +26,7 @@ pub fn FilterMenu() -> impl IntoView {
     let GraphDataContext {
         element_counts,
         element_checks,
-        active_graph_name,
+        ..
     } = expect_context::<GraphDataContext>();
 
     // Accordion State

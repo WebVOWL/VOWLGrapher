@@ -16,13 +16,17 @@
     workspace=true
 
 [dependencies]
+    actix-session={workspace=true, optional=true}
     leptos.workspace=true
+    leptos_actix={workspace=true, optional=true}
     log.workspace=true
     rkyv.workspace=true
     serde.workspace=true
     strum.workspace=true
     tabled={version="0.20", optional=true}
     time={version="0.3.47", features=["formatting", "macros"]}
+    uuid={version="1.22.0", features=["v4"], optional=true}
 
 [features]
     server=["dep:tabled"]
+    ssr=["dep:leptos_actix", "dep:actix-session", "dep:uuid"]

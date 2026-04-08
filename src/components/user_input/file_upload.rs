@@ -14,6 +14,8 @@ use std::path::Path;
 use std::rc::Rc;
 #[cfg(feature = "server")]
 use vowlr_database::prelude::VOWLRStore;
+#[cfg(feature = "ssr")]
+use vowlr_util::prelude::manage_user_id;
 use vowlr_util::prelude::{DataType, VOWLRError};
 use web_sys::{FileList, FormData};
 
@@ -116,8 +118,7 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWL
     let user_id = manage_user_id().await?;
     trace!("User {user_id} is uploading a local file");
 
-    let mut session = VOWLRStore::default();
-    session.user_id = Some(user_id);
+    let mut session = VOWLRStore::new_for_user(user_id);
 
     let mut data = data
         .into_inner()
@@ -190,8 +191,7 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError>
         }
     }
 
-    let mut session = VOWLRStore::default();
-    session.user_id = Some(user_id);
+    let mut session = VOWLRStore::new_for_user(user_id);
 
     let progress_key = url.clone();
     progress::reset(&progress_key);

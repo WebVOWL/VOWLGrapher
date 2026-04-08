@@ -1,5 +1,6 @@
 use super::WorkbenchMenuItems;
 use crate::components::progress_bar::LoadingCircle;
+use crate::components::user_input::internal_sparql::GraphDataContext;
 use crate::components::user_input::internal_sparql::load_graph;
 use crate::components::user_input::stored_ontology::StoredOntology;
 use crate::components::user_input::stored_ontology::load_stored_ontology;
@@ -20,11 +21,15 @@ const MAX_FILE_SIZE_BYTES: f64 = 50.0 * 1024.0 * 1024.0;
 #[component]
 pub fn SelectStaticInput() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
+    let GraphDataContext {
+        active_graph_name, ..
+    } = expect_context::<GraphDataContext>();
 
     let selected_ontology: RwSignal<Option<StoredOntology>> = RwSignal::new(None);
 
     let stored_res = LocalResource::new(move || async move {
         if let Some(stored) = selected_ontology.get() {
+            active_graph_name.set(stored.path().to_string());
             match load_stored_ontology(stored).await {
                 Ok(()) => {
                     load_graph(DEFAULT_QUERY.to_string(), true).await;
@@ -98,6 +103,9 @@ pub fn SelectStaticInput() -> impl IntoView {
 #[component]
 pub fn UploadInput() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
+    let GraphDataContext {
+        active_graph_name, ..
+    } = expect_context::<GraphDataContext>();
     let upload = FileUpload::new();
     let local_loading_done = upload.local_action.value();
     let remote_loading_done = upload.remote_action.value();
@@ -107,11 +115,11 @@ pub fn UploadInput() -> impl IntoView {
     let tracker_url = upload.tracker.clone();
     let tracker_file = upload.tracker.clone();
     let file_name = upload.tracker.filename;
+    let url_name = upload.tracker.url_name;
 
     Effect::new(move || {
         if let Some(value) = local_loading_done.get() {
-            let current_file = file_name.get_untracked();
-            active_graph_name.set(current_file.clone());
+            active_graph_name.set(file_name.get_untracked());
 
             match value {
                 Ok(_) => {
@@ -128,8 +136,7 @@ pub fn UploadInput() -> impl IntoView {
 
     Effect::new(move || {
         if let Some(value) = remote_loading_done.get() {
-            let current_file = file_name.get_untracked();
-            active_graph_name.set(current_file.clone());
+            active_graph_name.set(url_name.get_untracked());
 
             match value {
                 Ok(_) => {

@@ -7781,13 +7781,16 @@ dependencies = [
 name = "vowlr-util"
 version = "0.1.0-alpha"
 dependencies = [
+ "actix-session",
  "leptos",
+ "leptos_actix",
  "log",
  "rkyv",
  "serde",
  "strum 0.27.2",
  "tabled",
  "time",
+ "uuid",
 ]
 
 [[package]]

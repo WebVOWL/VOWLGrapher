@@ -6,13 +6,15 @@ use leptos::prelude::*;
 use leptos::server_fn::codec::{ByteStream, Streaming};
 #[cfg(feature = "server")]
 use vowlr_database::prelude::VOWLRStore;
+#[cfg(feature = "ssr")]
+use vowlr_util::prelude::manage_user_id;
 use vowlr_util::prelude::{DataType, VOWLRError};
 use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url, js_sys, wasm_bindgen::JsCast};
 
 #[server(output = Streaming)]
 /// Export a graph from the database
 pub async fn export_graph(resource_type: DataType) -> Result<ByteStream<VOWLRError>, VOWLRError> {
-    let store = VOWLRStore::default();
+    let store = VOWLRStore::new_for_user(manage_user_id().await?);
     let stream = store.serialize_stream(resource_type).await?;
     Ok(ByteStream::new(stream.map(|chunk| {
         chunk

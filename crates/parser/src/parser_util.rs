@@ -9,6 +9,7 @@ use horned_owl::{
 };
 use log::info;
 use rdf_fusion::{
+    error::LoaderError,
     execution::results::QuadStream,
     io::{JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer},
     model::NamedNodeRef,
@@ -187,18 +188,20 @@ pub async fn parse_stream_to(
 /// Returns the parser compatible with the file at the path.
 pub fn parser_from_path(
     path: &Path,
+    format: DataType,
     lenient: bool,
     graph_iri: &str,
 ) -> Result<PreparedParser, VOWLRStoreError> {
     let reader = std::fs::File::open(path)?;
     let reader = BufReader::new(reader);
-    parser_from_reader(reader, path, lenient, graph_iri)
+    parser_from_reader(reader, path, format, lenient, graph_iri)
 }
 
 /// Returns the parser compatible with the reader, reading from the path.
 pub fn parser_from_reader(
     mut reader: impl BufRead,
     path: &Path,
+    format: DataType,
     lenient: bool,
     graph_iri: &str,
 ) -> Result<PreparedParser, VOWLRStoreError> {
@@ -206,14 +209,6 @@ pub fn parser_from_reader(
         let graph_node = NamedNodeRef::new(graph_iri).expect("Failed to parse graph IRI in parser");
         let parser = RdfParser::from_format(fmt).with_default_graph(graph_node);
         if lenient { parser.lenient() } else { parser }
-    };
-
-    let Some(format) = path_type(path) else {
-        return Err(VOWLRStoreErrorKind::InvalidFileType(format!(
-            "Unsupported format: {:?}",
-            path.file_name().unwrap_or_default()
-        ))
-        .into());
     };
 
     let prepared = match format {
@@ -338,6 +333,11 @@ pub fn parser_from_reader(
             let format = format_from_resource_type(&f).ok_or_else(|| {
                 VOWLRStoreErrorKind::InvalidFileType(format!("could not convert {f:?} to format"))
             })?;
+            // Not optimal should be changed.
+            let parser = make_parser(format);
+            for quad_result in parser.for_reader(input.as_slice()) {
+                quad_result.map_err(LoaderError::from)?;
+            }
             Ok(PreparedParser {
                 parser: make_parser(format),
                 input,
@@ -414,8 +414,9 @@ mod test {
                 warn!("skipping {:?}", resource.as_ref());
                 continue;
             }
+            let dt = path_type(resource.as_ref()).unwrap();
             let parser =
-                parser_from_path(resource.as_ref(), false, "urn:vowlr:test_graph").unwrap();
+                parser_from_path(resource.as_ref(), dt, false, "urn:vowlr:test_graph").unwrap();
             let _ = session
                 .load_from_reader(parser.parser, parser.input.as_slice())
                 .await;

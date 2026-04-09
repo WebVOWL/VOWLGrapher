@@ -492,7 +492,7 @@ impl Display for SerializationDataBuffer {
             writeln!(f, "\t\t{} : {}", term, element)?;
         }
         writeln!(f, "\tedge_redirection:")?;
-        for (term_id, subject) in self
+        for (term_id, subject_term_id) in self
             .edge_redirection
             .read()
             .unwrap_or_else(|e| e.into_inner())
@@ -502,7 +502,11 @@ impl Display for SerializationDataBuffer {
                 .term_index
                 .get(term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "\t\t{} -> {}", term, subject)?;
+            let subject_term = self
+                .term_index
+                .get(subject_term_id)
+                .map_or_else(|e| e.to_string(), |term| term.to_string());
+            writeln!(f, "\t\t{} -> {}", term, subject_term)?;
         }
         writeln!(f, "\tedges_include_map: ")?;
         for (term_id, edges) in self
@@ -592,7 +596,13 @@ impl Display for SerializationDataBuffer {
                 .term_index
                 .get(term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "{} : {} individuals", term, individual_count)?;
+            writeln!(
+                f,
+                "\t\t{} : {} individual{}",
+                term,
+                individual_count,
+                if *individual_count != 1 { "s" } else { "" }
+            )?;
         }
 
         writeln!(f, "\tunknown_buffer:")?;

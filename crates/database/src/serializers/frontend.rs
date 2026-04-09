@@ -1710,7 +1710,7 @@ impl GraphDisplayDataSolutionSerializer {
             };
             let pending_after: usize = pending.values().map(|set| set.len()).sum();
 
-            if pending_after >= pending_before {
+            if pending_after >= pending_before || pending_after == 0 {
                 info!(
                     "Unknown resolution reached fixpoint after pass {} ({} triples still pending)",
                     pass, pending_after
@@ -3680,22 +3680,42 @@ impl GraphDisplayDataSolutionSerializer {
                 .cloned()
         };
         let Some(state_lock) = maybe_state_lock else {
+            debug!(
+                "Deferring restriction for term '{}': restriction metadata not available",
+                data_buffer.term_index.get(restriction_term_id)?
+            );
             return Ok(SerializationStatus::Deferred);
         };
 
         let state = state_lock.read()?;
 
         let Some(raw_property_term_id) = state.on_property else {
+            debug!(
+                "Deferring restriction for term '{}': restriction property not available",
+                data_buffer.term_index.get(restriction_term_id)?
+            );
             return Ok(SerializationStatus::Deferred);
         };
         let Some(property_term_id) = self.resolve(data_buffer, raw_property_term_id)? else {
+            debug!(
+                "Deferring restriction for term '{}': cannot resolve restriction property",
+                data_buffer.term_index.get(restriction_term_id)?
+            );
             return Ok(SerializationStatus::Deferred);
         };
         let Some(raw_subject_term_id) = self.restriction_owner(data_buffer, restriction_term_id)?
         else {
+            debug!(
+                "Deferring restriction for term '{}': cannot determine restriction owner",
+                data_buffer.term_index.get(restriction_term_id)?
+            );
             return Ok(SerializationStatus::Deferred);
         };
         if state.requires_filler && !state.self_restriction && state.filler.is_none() {
+            debug!(
+                "Deferring restriction for term '{}': filler is required, but not available",
+                data_buffer.term_index.get(restriction_term_id)?
+            );
             return Ok(SerializationStatus::Deferred);
         }
 
@@ -3730,6 +3750,10 @@ impl GraphDisplayDataSolutionSerializer {
                 .get(&property_term_id)
                 .cloned()
             else {
+                debug!(
+                    "Deferring restriction for term '{}': edge not yet created",
+                    data_buffer.term_index.get(restriction_term_id)?
+                );
                 return Ok(SerializationStatus::Deferred);
             };
 
@@ -3745,7 +3769,13 @@ impl GraphDisplayDataSolutionSerializer {
                     }
                     _ => match self.resolve(data_buffer, *filler_id)? {
                         Some(resolved) => resolved,
-                        None => return Ok(SerializationStatus::Deferred),
+                        None => {
+                            debug!(
+                                "Deferring restriction for term '{}': cannot resolve filler",
+                                data_buffer.term_index.get(restriction_term_id)?
+                            );
+                            return Ok(SerializationStatus::Deferred);
+                        }
                     },
                 }
             } else {
@@ -3798,6 +3828,10 @@ impl GraphDisplayDataSolutionSerializer {
                 self.redirect_iri(data_buffer, *restriction_term_id, subject_term_id)?;
             }
 
+            trace!(
+                "Succesfully materialized restriction '{}'",
+                data_buffer.term_index.get(restriction_term_id)?
+            );
             return Ok(SerializationStatus::Serialized);
         }
 

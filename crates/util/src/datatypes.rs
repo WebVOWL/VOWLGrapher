@@ -12,6 +12,9 @@ use std::path::Path;
     Copy,
     Clone,
     strum::Display,
+    strum::EnumIter,
+    PartialEq,
+    
 )]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum DataType {

@@ -14,6 +14,10 @@ use std::path::Path;
 use std::rc::Rc;
 #[cfg(feature = "server")]
 use vowlr_database::prelude::VOWLRStore;
+#[cfg(feature = "server")]
+use vowlr_parser::errors::VOWLRStoreError;
+#[cfg(feature = "server")]
+use vowlr_parser::errors::VOWLRStoreErrorKind;
 #[cfg(feature = "ssr")]
 use vowlr_util::prelude::manage_user_id;
 use vowlr_util::prelude::{DataType, VOWLRError};
@@ -90,7 +94,9 @@ pub async fn ontology_progress(filename: String) -> Result<TextStream, ServerFnE
 #[server(
     input = MultipartFormData,
 )]
-pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWLRError> {
+pub async fn handle_local(
+    data: MultipartData,
+) -> Result<(DataType, usize, Option<VOWLRError>), VOWLRError> {
     let user_id = manage_user_id().await?;
     trace!("User {user_id} is uploading a local file");
 
@@ -101,8 +107,9 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWL
         .ok_or_else(|| ServerFnError::new("data must be server-side"))?;
     let mut count = 0;
     let mut dtype = DataType::UNKNOWN;
+    let mut name = String::new();
     while let Ok(Some(mut field)) = data.next_field().await {
-        let name = field.file_name().unwrap_or_default().to_string();
+        name = field.file_name().unwrap_or_default().to_string();
 
         if name.is_empty() {
             return Err(ServerFnError::new("Received empty file string").into());
@@ -135,15 +142,27 @@ pub async fn handle_local(data: MultipartData) -> Result<(DataType, usize), VOWL
         if !name.is_empty() {
             progress::remove(&name);
         }
-        session.complete_upload(&name).await?;
     }
 
-    Ok((dtype, count))
+    let parsed_dtype = session.complete_upload(&name).await?;
+    let warning = if parsed_dtype != dtype
+        && parsed_dtype != DataType::UNKNOWN
+        && dtype != DataType::UNKNOWN
+    {
+        Some(<VOWLRStoreError as Into<VOWLRError>>::into(VOWLRStoreErrorKind::IncorrectFileExtension(format!(
+            "The uploaded file had an incorrect file extension. It was parsed as {parsed_dtype} instead of {dtype}."
+        )).into()))
+    } else {
+        None
+    };
+    Ok((parsed_dtype, count, warning))
 }
 
 /// Remote reads url and calls for the datatype label and returns (label, data content)
 #[server]
-pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError> {
+pub async fn handle_remote(
+    url: String,
+) -> Result<(DataType, usize, Option<VOWLRError>), VOWLRError> {
     let user_id = manage_user_id().await?;
     trace!("User {user_id} is uploading a remote file");
 
@@ -185,10 +204,19 @@ pub async fn handle_remote(url: String) -> Result<(DataType, usize), VOWLRError>
         session.upload_chunk(&chunk).await?;
         progress::add_chunk(&progress_key, chunk.len()).await;
     }
-
     progress::remove(&progress_key);
-    session.complete_upload(&url).await?;
-    Ok((dtype, total))
+    let parsed_dtype = session.complete_upload(&url).await?;
+    let warning = if parsed_dtype != dtype
+        && parsed_dtype != DataType::UNKNOWN
+        && dtype != DataType::UNKNOWN
+    {
+        Some(<VOWLRStoreError as Into<VOWLRError>>::into(VOWLRStoreErrorKind::IncorrectFileExtension(format!(
+            "The uploaded file had an incorrect file extension. It was parsed as {parsed_dtype} instead of {dtype}."
+        )).into()))
+    } else {
+        None
+    };
+    Ok((parsed_dtype, total, warning))
 }
 
 /// Sparql reads (endpoint + query) and calls for the datatype label and returns (label, data content)
@@ -197,7 +225,7 @@ pub async fn handle_sparql(
     endpoint: String,
     query: String,
     format: Option<String>,
-) -> Result<(DataType, usize), VOWLRError> {
+) -> Result<(DataType, usize, Option<VOWLRError>), VOWLRError> {
     let user_id = manage_user_id().await?;
     trace!("User {user_id} is quering SPARQL");
 
@@ -244,7 +272,7 @@ pub async fn handle_sparql(
     } else {
         DataType::SPARQLJSON
     };
-    Ok((dtype, total))
+    Ok((dtype, total, None))
 }
 
 pub struct UploadProgress {
@@ -407,11 +435,15 @@ impl Default for UploadProgress {
 #[derive(Clone)]
 pub struct FileUpload {
     pub mode: RwSignal<String>,
-    pub local_action: Action<FormData, Result<(DataType, usize), VOWLRError>>,
-    pub remote_action: Action<String, Result<(DataType, usize), VOWLRError>>,
     #[expect(clippy::type_complexity)]
-    pub sparql_action:
-        Action<(String, String, Option<String>), Result<(DataType, usize), VOWLRError>>,
+    pub local_action: Action<FormData, Result<(DataType, usize, Option<VOWLRError>), VOWLRError>>,
+    #[expect(clippy::type_complexity)]
+    pub remote_action: Action<String, Result<(DataType, usize, Option<VOWLRError>), VOWLRError>>,
+    #[expect(clippy::type_complexity)]
+    pub sparql_action: Action<
+        (String, String, Option<String>),
+        Result<(DataType, usize, Option<VOWLRError>), VOWLRError>,
+    >,
     pub tracker: Rc<UploadProgress>,
 }
 
@@ -419,18 +451,19 @@ impl FileUpload {
     pub fn new() -> Self {
         let mode = RwSignal::new("local".to_string());
 
-        let local_action =
-            Action::<FormData, Result<(DataType, usize), VOWLRError>>::new_local(|data| {
-                handle_local(data.clone().into())
-            });
+        let local_action = Action::<
+            FormData,
+            Result<(DataType, usize, Option<VOWLRError>), VOWLRError>,
+        >::new_local(|data| handle_local(data.clone().into()));
 
-        let remote_action = Action::<String, Result<(DataType, usize), VOWLRError>>::new(|url| {
-            handle_remote(url.clone())
-        });
+        let remote_action = Action::<
+            String,
+            Result<(DataType, usize, Option<VOWLRError>), VOWLRError>,
+        >::new(|url| handle_remote(url.clone()));
 
         let sparql_action = Action::<
             (String, String, Option<String>),
-            Result<(DataType, usize), VOWLRError>,
+            Result<(DataType, usize, Option<VOWLRError>), VOWLRError>,
         >::new(|(endpoint, query, format)| {
             handle_sparql(endpoint.clone(), query.clone(), format.clone())
         });
@@ -446,7 +479,8 @@ impl FileUpload {
         }
     }
 
-    pub fn get_result(&self) -> Option<Result<(DataType, usize), VOWLRError>> {
+    #[expect(clippy::type_complexity)]
+    pub fn get_result(&self) -> Option<Result<(DataType, usize, Option<VOWLRError>), VOWLRError>> {
         match self.mode.get().as_str() {
             "local" => self.local_action.value().get(),
             "remote" => self.remote_action.value().get(),

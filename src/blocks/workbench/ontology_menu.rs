@@ -122,7 +122,10 @@ pub fn UploadInput() -> impl IntoView {
             active_graph_name.set(file_name.get_untracked());
 
             match value {
-                Ok(_) => {
+                Ok((_, _, warning)) => {
+                    if let Some(e) = warning {
+                        error_context.extend(e.records);
+                    }
                     spawn_local_scoped_with_cancellation(async move {
                         load_graph(DEFAULT_QUERY.to_string(), true).await;
                     });
@@ -139,7 +142,10 @@ pub fn UploadInput() -> impl IntoView {
             active_graph_name.set(url_name.get_untracked());
 
             match value {
-                Ok(_) => {
+                Ok((_, _, warning)) => {
+                    if let Some(e) = warning {
+                        error_context.extend(e.records);
+                    }
                     spawn_local_scoped_with_cancellation(async move {
                         load_graph(DEFAULT_QUERY.to_string(), true).await;
                     });

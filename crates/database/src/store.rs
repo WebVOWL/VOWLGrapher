@@ -6,10 +6,11 @@ use rdf_fusion::store::Store;
 use std::path::Path;
 use std::time::Duration;
 use std::{fs::File, time::Instant};
+use strum::IntoEnumIterator;
 
 use vowlr_parser::{
-    errors::VOWLRStoreError,
-    parser_util::{parse_stream_to, parser_from_path},
+    errors::{VOWLRStoreError, VOWLRStoreErrorKind},
+    parser_util::{PreparedParser, parse_stream_to, parser_from_path, path_type},
 };
 use vowlr_util::prelude::{DataType, VOWLRError};
 
@@ -116,8 +117,9 @@ impl VOWLRStore {
     /// Files are automatically parsed.
     pub async fn insert_file(&self, fs: &Path, lenient: bool) -> Result<(), VOWLRStoreError> {
         let graph_iri = self.get_graph_iri(&fs.to_string_lossy());
-
-        let parser = parser_from_path(fs, lenient, &graph_iri)?;
+        let format = path_type(fs)
+            .ok_or_else(|| VOWLRStoreErrorKind::InvalidFileType("Unknown file extension".into()))?;
+        let parser = parser_from_path(fs, format, lenient, &graph_iri)?;
         info!("Loading graph '{}' into database...", graph_iri);
         let start_time = Instant::now();
 
@@ -133,6 +135,58 @@ impl VOWLRStore {
                 .as_secs_f32()
         );
         Ok(())
+    }
+
+    async fn load_file(
+        &self,
+        path: &Path,
+        lenient: bool,
+        graph_iri: &str,
+    ) -> Result<(PreparedParser, DataType), VOWLRStoreError> {
+        let dtype = path.into();
+        match dtype {
+            DataType::UNKNOWN => self.try_load_fallback(path, lenient, None, graph_iri).await,
+            _ => {
+                let result =
+                    std::panic::catch_unwind(|| parser_from_path(path, dtype, lenient, graph_iri));
+                match result {
+                    Ok(Ok(parser)) => Ok((parser, dtype)),
+                    _ => {
+                        self.try_load_fallback(path, lenient, Some(dtype), graph_iri)
+                            .await
+                    }
+                }
+            }
+        }
+    }
+
+    async fn try_load_fallback(
+        &self,
+        path: &Path,
+        lenient: bool,
+        skip_format: Option<DataType>,
+        graph_iri: &str,
+    ) -> Result<(PreparedParser, DataType), VOWLRStoreError> {
+        for format in DataType::iter().filter(|f| *f != DataType::UNKNOWN) {
+            if Some(format) == skip_format {
+                continue;
+            }
+
+            let result =
+                std::panic::catch_unwind(|| parser_from_path(path, format, lenient, graph_iri));
+            if let Ok(Ok(result)) = result {
+                info!("Parsed file as {:?}", format);
+                return Ok((result, format));
+            }
+        }
+
+        Err(VOWLRStoreErrorKind::InvalidFileType(format!(
+            "Could not parse file with the following formats: {:?}",
+            DataType::iter()
+                .filter(|f| *f != DataType::UNKNOWN)
+                .collect::<Vec<_>>()
+        ))
+        .into())
     }
 
     /// Serializes the store into a file, located at the path.
@@ -190,31 +244,33 @@ impl VOWLRStore {
     /// Inserts a file into the store.
     ///
     /// Files are automatically parsed.
-    pub async fn complete_upload(&mut self, filename: &str) -> Result<(), VOWLRStoreError> {
+    pub async fn complete_upload(&mut self, filename: &str) -> Result<DataType, VOWLRStoreError> {
         let graph_iri = self.get_graph_iri(filename);
-        if let Some(file) = &mut self.upload_handle {
+        let path = if let Some(file) = &mut self.upload_handle {
             std::io::Write::flush(file)?;
-            let path = file.path();
-
-            let parser = parser_from_path(path, false, &graph_iri)?;
-
-            info!("Loading input into database for graph {}...", graph_iri);
-            let start_time = Instant::now();
-
-            self.session
-                .load_from_reader(parser.parser, parser.input.as_slice())
-                .await?;
-            info!(
-                "Loaded {} quads in {} s",
-                self.session.len().await?,
-                Instant::now()
-                    .checked_duration_since(start_time)
-                    .unwrap_or(Duration::new(0, 0))
-                    .as_secs_f32()
+            file.path().to_path_buf()
+        } else {
+            return Err(
+                VOWLRStoreErrorKind::InvalidFileType("No upload handle found".to_string()).into(),
             );
-        }
+        };
+        let (parser, loaded_format) = self.load_file(&path, false, &graph_iri).await?;
+        info!("Loading input into database for graph {}...", graph_iri);
+        let start_time = Instant::now();
+
+        self.session
+            .load_from_reader(parser.parser, parser.input.as_slice())
+            .await?;
+        info!(
+            "Loaded {} quads in {} s",
+            self.session.len().await?,
+            Instant::now()
+                .checked_duration_since(start_time)
+                .unwrap_or(Duration::new(0, 0))
+                .as_secs_f32()
+        );
         self.upload_handle = None;
-        Ok(())
+        Ok(loaded_format)
     }
 }
 

@@ -15,6 +15,7 @@ use crate::{
     errors::{SerializationError, SerializationErrorKind},
     serializers::{
         index::TermIndex,
+        metadata::GraphMetadata,
         util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES},
     },
 };
@@ -22,6 +23,7 @@ use log::debug;
 
 pub mod frontend;
 pub mod index;
+pub mod metadata;
 pub mod util;
 
 type ArcTerm = Arc<Term>;
@@ -237,10 +239,7 @@ pub struct SerializationDataBuffer {
     anchor_thing_map: Arc<RwLock<HashMap<usize, usize>>>,
     /// Partially assembled restriction metadata keyed by the restriction node.
     restriction_buffer: Arc<RwLock<HashMap<usize, ArcLockRestrictionState>>>,
-    #[expect(
-        clippy::type_complexity,
-        reason = "Fixed when cardinality is refactored to enum"
-    )]
+    #[expect(clippy::type_complexity)]
     /// Final display cardinalities keyed by the concrete edge that will be emitted.
     edge_cardinality_buffer: Arc<RwLock<HashMap<ArcEdge, (String, Option<String>)>>>,
     /// Stores the edges of a property, keyed by the property's corresponding id.
@@ -283,6 +282,8 @@ pub struct SerializationDataBuffer {
     ///
     /// For instance: `http://purl.obolibrary.org/obo/envo.owl`
     document_base: Arc<RwLock<Option<Arc<String>>>>,
+    /// Data not visualized in the graph.
+    metadata: GraphMetadata,
 }
 impl SerializationDataBuffer {
     pub fn new() -> Self {

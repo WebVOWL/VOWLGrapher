@@ -14,8 +14,9 @@ use crate::{
         ArcEdge, ArcTerm, ArcTriple, RestrictionState,
         index::TermIndex,
         util::{
-            PROPERTY_EDGE_TYPES, can_upgrade_node_type, is_query_fallback_endpoint, is_reserved,
-            is_restriction_owner_edge, is_structural_set_node, is_synthetic, merge_optional_labels,
+            PROPERTY_EDGE_TYPES, can_upgrade_node_type, is_ontology, is_query_fallback_endpoint,
+            is_reserved, is_restriction_owner_edge, is_structural_set_node, is_synthetic,
+            merge_optional_labels,
             synthetic::{
                 SYNTH_LITERAL, SYNTH_LITERAL_VALUE, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING,
                 SYNTH_THING,
@@ -2031,8 +2032,23 @@ impl GraphDisplayDataSolutionSerializer {
                         return Ok(SerializationStatus::Serialized);
                     }
 
-                    //TODO: OWL1
-                    // rdfs::COMMENT => {}
+                    rdfs::COMMENT => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            data_buffer
+                                .metadata
+                                .comments
+                                .write()?
+                                .insert(triple.subject_term_id, object_term_id);
+                            return Ok(SerializationStatus::Serialized);
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "Comments triple is missing the comment object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
 
                     // rdfs::CONTAINER => {}
                     // rdfs::CONTAINER_MEMBERSHIP_PROPERTY => {}
@@ -2052,9 +2068,34 @@ impl GraphDisplayDataSolutionSerializer {
                         .into());
                     }
 
-                    // rdfs::IS_DEFINED_BY => {}
+                    rdfs::IS_DEFINED_BY => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            data_buffer
+                                .metadata
+                                .is_defined_by
+                                .write()?
+                                .insert(triple.subject_term_id, object_term_id);
+                            return Ok(SerializationStatus::Serialized);
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "'Is defined by' triple is missing the 'defined by' object"
+                                    .to_string(),
+                            )
+                            .into());
+                        }
+                    },
 
-                    // rdfs::LABEL => {}
+                    // Is handled by [`Self::extract_label`]
+                    rdfs::LABEL => {
+                        return Err(SerializationErrorKind::SerializationFailedTriple(
+                            data_buffer.term_index.display_triple(&triple)?,
+                            "SPARQL query should not have rdfs:label triples".to_string(),
+                        )
+                        .into());
+                    }
+
                     rdfs::LITERAL => {
                         self.insert_node(
                             data_buffer,
@@ -2079,9 +2120,25 @@ impl GraphDisplayDataSolutionSerializer {
                         )?;
                         return Ok(SerializationStatus::Serialized);
                     }
-
-                    //TODO: OWL1
-                    // rdfs::SEE_ALSO => {}
+                    rdfs::SEE_ALSO => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            data_buffer
+                                .metadata
+                                .see_also
+                                .write()?
+                                .entry(triple.subject_term_id)
+                                .or_default()
+                                .insert(object_term_id);
+                            return Ok(SerializationStatus::Serialized);
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "'See also' triple is missing the 'see also' object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
                     rdfs::SUB_CLASS_OF => {
                         // TODO: Some cases of owl:Thing self-subclass triple are not handled here.
                         // Particularly if we haven't seen subject in the element buffer.
@@ -2163,7 +2220,45 @@ impl GraphDisplayDataSolutionSerializer {
                     }
 
                     // owl::AXIOM => {},
-                    // owl::BACKWARD_COMPATIBLE_WITH => {},
+                    owl::BACKWARD_COMPATIBLE_WITH => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            let current_term_id =
+                                { *data_buffer.metadata.backward_compatible_with.read()? };
+                            if let Some(term_id) = current_term_id {
+                                let msg = format!(
+                                    "Attempting to override existing backwardCompatibleWith annotation '{}' with new annotation '{}'. Skipping",
+                                    data_buffer.term_index.get(&term_id)?,
+                                    data_buffer.term_index.get(&object_term_id)?
+                                );
+                                warn!("{msg}");
+                                return Err(SerializationErrorKind::SerializationWarningTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            } else if is_ontology(
+                                &data_buffer.term_index.get(&triple.subject_term_id)?,
+                            ) {
+                                *data_buffer.metadata.backward_compatible_with.write()? =
+                                    Some(object_term_id);
+                                return Ok(SerializationStatus::Serialized);
+                            } else {
+                                let msg = "The usage of backwardCompatibleWith annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
+                                return Err(SerializationErrorKind::SerializationFailedTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            }
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "backwardCompatibleWith triple has no object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
                     // owl::BOTTOM_DATA_PROPERTY => {},
                     // owl::BOTTOM_OBJECT_PROPERTY => {},
                     owl::CARDINALITY => {
@@ -2540,7 +2635,46 @@ impl GraphDisplayDataSolutionSerializer {
                     }
 
                     // owl::IMPORTS => {}
-                    // owl::INCOMPATIBLE_WITH => {}
+                    owl::INCOMPATIBLE_WITH => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            let current_term_id =
+                                { *data_buffer.metadata.incompatible_with.read()? };
+                            if let Some(term_id) = current_term_id {
+                                let msg = format!(
+                                    "Attempting to override existing incompatibleWith annotation '{}' with new annotation '{}'. Skipping",
+                                    data_buffer.term_index.get(&term_id)?,
+                                    data_buffer.term_index.get(&object_term_id)?
+                                );
+                                warn!("{msg}");
+                                return Err(SerializationErrorKind::SerializationWarningTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            } else if is_ontology(
+                                &data_buffer.term_index.get(&triple.subject_term_id)?,
+                            ) {
+                                *data_buffer.metadata.incompatible_with.write()? =
+                                    Some(object_term_id);
+                                return Ok(SerializationStatus::Serialized);
+                            } else {
+                                let msg = "The usage of incompatibleWith annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
+                                return Err(SerializationErrorKind::SerializationFailedTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            }
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "incompatibleWith triple has no object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
+
                     owl::INTERSECTION_OF => {
                         if let Some(target) = triple.object_term_id
                             && Self::should_skip_structural_operand(
@@ -2805,7 +2939,44 @@ impl GraphDisplayDataSolutionSerializer {
                             .try_materialize_restriction(data_buffer, triple.subject_term_id);
                     }
 
-                    // owl::PRIOR_VERSION => {}
+                    owl::PRIOR_VERSION => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            let current_term_id = { *data_buffer.metadata.prior_version.read()? };
+                            if let Some(term_id) = current_term_id {
+                                let msg = format!(
+                                    "Attempting to override existing priorVersion annotation '{}' with new annotation '{}'. Skipping",
+                                    data_buffer.term_index.get(&term_id)?,
+                                    data_buffer.term_index.get(&object_term_id)?
+                                );
+                                warn!("{msg}");
+                                return Err(SerializationErrorKind::SerializationWarningTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            } else if is_ontology(
+                                &data_buffer.term_index.get(&triple.subject_term_id)?,
+                            ) {
+                                *data_buffer.metadata.prior_version.write()? = Some(object_term_id);
+                                return Ok(SerializationStatus::Serialized);
+                            } else {
+                                let msg = "The usage of priorVersion annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
+                                return Err(SerializationErrorKind::SerializationFailedTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            }
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "priorVersion triple has no object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
+
                     // owl::PROPERTY_CHAIN_AXIOM => {}
                     // owl::PROPERTY_DISJOINT_WITH => {}
                     // owl::QUALIFIED_CARDINALITY => {}
@@ -2896,8 +3067,51 @@ impl GraphDisplayDataSolutionSerializer {
                             }
                         }
                     }
-                    // owl::VERSION_INFO => {}
-                    // owl::VERSION_IRI => {}
+                    owl::VERSION_INFO => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            data_buffer
+                                .metadata
+                                .version_info
+                                .write()?
+                                .insert(triple.subject_term_id, object_term_id);
+                            return Ok(SerializationStatus::Serialized);
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "versionInfo triple has no object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
+                    owl::VERSION_IRI => match triple.object_term_id {
+                        Some(object_term_id) => {
+                            let current_term_id = { *data_buffer.metadata.version_iri.read()? };
+                            if let Some(term_id) = current_term_id {
+                                let msg = format!(
+                                    "Attempting to override existing versionIRI annotation '{}' with new annotation '{}'. Skipping",
+                                    data_buffer.term_index.get(&term_id)?,
+                                    data_buffer.term_index.get(&object_term_id)?
+                                );
+                                warn!("{msg}");
+                                return Err(SerializationErrorKind::SerializationWarningTriple(
+                                    data_buffer.term_index.display_triple(&triple)?,
+                                    msg,
+                                )
+                                .into());
+                            } else {
+                                *data_buffer.metadata.version_iri.write()? = Some(object_term_id);
+                                return Ok(SerializationStatus::Serialized);
+                            }
+                        }
+                        None => {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "versionIRI triple has no object".to_string(),
+                            )
+                            .into());
+                        }
+                    },
                     // owl::WITH_RESTRICTIONS => {}
                     owl::REAL => {
                         self.insert_node(

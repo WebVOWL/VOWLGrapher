@@ -58,6 +58,16 @@ pub fn is_synthetic(term: &ArcTerm) -> bool {
     false
 }
 
+/// Returns true if the term belongs to the class of ontologies.
+pub fn is_ontology(term: &ArcTerm) -> bool {
+    match term.as_ref().as_ref() {
+        TermRef::NamedNode(named_node_ref) => {
+            matches!(named_node_ref, owl::ONTOLOGY)
+        }
+        _ => false,
+    }
+}
+
 /// Reserved IRIs should not be overridden by e.g. "external class" [`ElementType`].
 pub fn is_reserved(term: &ArcTerm) -> bool {
     match term.as_ref().as_ref() {

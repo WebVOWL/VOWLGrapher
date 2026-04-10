@@ -57,7 +57,13 @@ pub enum SerializationErrorKind {
     /// An error raised when the serializer encountered an unrecoverable problem.
     SerializationFailed(String),
     /// A warning emitted when the serializer encountered a recoverable problem.
+    /// However, the outcome may not be as expected!
     ///
+    /// String #1 is the triple, translated from term ids to terms.
+    ///
+    /// String #2 is the error message.
+    SerializationWarningTriple(String, String),
+    /// A warning emitted when the serializer encountered a recoverable problem.
     /// However, the outcome may not be as expected!
     SerializationWarning(String),
     /// An error raised during `Iri` or `IriRef` validation.
@@ -152,6 +158,9 @@ impl From<SerializationError> for ErrorRecord {
             | SerializationErrorKind::SerializationWarning(e) => (e, ErrorSeverity::Warning),
             SerializationErrorKind::SerializationFailedTriple(triple, e) => {
                 (format!("{e}:\n{triple}"), ErrorSeverity::Critical)
+            }
+            SerializationErrorKind::SerializationWarningTriple(triple, e) => {
+                (format!("{e}:\n{triple}"), ErrorSeverity::Warning)
             }
             SerializationErrorKind::IriParseError(iri, iri_parse_error) => (
                 format!("{iri_parse_error}\nIRI: {iri}"),

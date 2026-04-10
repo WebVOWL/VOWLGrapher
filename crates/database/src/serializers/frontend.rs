@@ -3269,12 +3269,55 @@ impl GraphDisplayDataSolutionSerializer {
         Ok(thing_triple.subject_term_id)
     }
 
+    fn ensure_object_property_registration(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        property_term_id: usize,
+    ) -> Result<(), SerializationError> {
+        let already_registered = {
+            data_buffer
+                .edge_element_buffer
+                .read()?
+                .contains_key(&property_term_id)
+        };
+        if already_registered {
+            return Ok(());
+        }
+
+        let property_iri = data_buffer.term_index.get(&property_term_id)?;
+        if is_reserved(&property_iri) {
+            return Ok(());
+        }
+
+        self.add_term_to_element_buffer(
+            &data_buffer.term_index,
+            &mut data_buffer.edge_element_buffer,
+            property_term_id,
+            ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
+        )?;
+
+        self.check_unknown_buffer(data_buffer, &property_term_id)?;
+        Ok(())
+    }
+
     fn insert_characteristic(
         &self,
         data_buffer: &mut SerializationDataBuffer,
         triple: ArcTriple,
         characteristic: Characteristic,
     ) -> Result<SerializationStatus, SerializationError> {
+        match characteristic {
+            Characteristic::AsymmetricProperty
+            | Characteristic::InverseFunctionalProperty
+            | Characteristic::IrreflexiveProperty
+            | Characteristic::ReflexiveProperty
+            | Characteristic::SymmetricProperty
+            | Characteristic::TransitiveProperty => {
+                self.ensure_object_property_registration(data_buffer, triple.subject_term_id)?;
+            }
+            Characteristic::FunctionalProperty | Characteristic::HasKey => {}
+        }
+
         let Some(resolved_property_term_id) = self.resolve(data_buffer, triple.subject_term_id)?
         else {
             let property_iri = data_buffer.term_index.get(&triple.subject_term_id)?;

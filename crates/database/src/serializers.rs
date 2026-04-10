@@ -228,35 +228,18 @@ pub struct SerializationDataBuffer {
         clippy::type_complexity,
         reason = "Fixed when cardinality is refactored to enum"
     )]
-    /// Track restriction ownership for OWL restriction blank nodes.
-    restriction_owner_map: HashMap<Term, Term>,
     /// Final display cardinalities keyed by the concrete edge that will be emitted.
-    edge_cardinality_buffer: HashMap<Edge, (String, Option<String>)>,
-    /// Stores the edges of a property.
-    ///
-    /// - Key = The property IRI.
-    /// - Value = The edges of the property.
-    property_edge_map: HashMap<Term, Edge>,
-    /// Stores the domains of a property.
-    ///
-    /// - Key = The property IRI.
-    /// - Value = The domains of the property.
-    property_domain_map: HashMap<Term, HashSet<Term>>,
-    /// Stores the ranges of a property.
-    ///
-    /// - Key = The property IRI.
-    /// - Value = The ranges of the property.
-    property_range_map: HashMap<Term, HashSet<Term>>,
-    /// Stores labels of subject/object.
-    ///
-    /// - Key = The IRI the label belongs to.
-    /// - Value = The label.
-    label_buffer: HashMap<Term, String>,
-    /// Stores labels of edges.
-    ///
-    /// - Key = The edge.
-    /// - Value = The label.
-    edge_label_buffer: HashMap<Edge, String>,
+    edge_cardinality_buffer: Arc<RwLock<HashMap<ArcEdge, (String, Option<String>)>>>,
+    /// Stores the edges of a property, keyed by the property's corresponding id.
+    property_edge_map: Arc<RwLock<HashMap<usize, ArcEdge>>>,
+    /// Stores the domains of a property, keyed by the property's corresponding id.
+    property_domain_map: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
+    /// Stores the ranges of a property, keyed by the property's corresponding id.
+    property_range_map: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
+    /// Stores labels of terms, keyed by the term's corresponding id.
+    label_buffer: Arc<RwLock<HashMap<usize, String>>>,
+    /// Stores labels of edges, keyed by the edge it belongs to.
+    edge_label_buffer: Arc<RwLock<HashMap<ArcEdge, String>>>,
     /// Edges in graph, to avoid duplicates
     edge_buffer: Arc<RwLock<HashSet<ArcEdge>>>,
     /// Maps from an edge to its characteristic.

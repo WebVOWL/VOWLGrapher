@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use std::panic::Location;
+use std::{collections::VecDeque, panic::Location};
 use vowlr_util::prelude::{ErrorRecord, ErrorSeverity, ErrorType, VOWLRError, get_timestamp};
 
 #[derive(Debug)]
@@ -55,13 +55,13 @@ impl From<ClientErrorKind> for VOWLRError {
 
 #[derive(Debug, Copy, Clone)]
 pub struct ErrorLogContext {
-    pub records: RwSignal<Vec<ErrorRecord>>,
+    pub records: RwSignal<VecDeque<ErrorRecord>>,
 }
 
 impl ErrorLogContext {
     pub fn new(records: Vec<ErrorRecord>) -> Self {
         Self {
-            records: RwSignal::new(records),
+            records: RwSignal::new(records.into()),
         }
     }
 
@@ -70,7 +70,7 @@ impl ErrorLogContext {
     /// # Panics
     /// Panics if you update the value of the signal of `self` before this function returns.
     pub fn push(&self, record: ErrorRecord) {
-        self.records.update(|records| records.push(record));
+        self.records.update(|records| records.push_front(record));
     }
 
     /// Extends a collection with the contents of an iterator.
@@ -78,18 +78,19 @@ impl ErrorLogContext {
     /// # Panics
     /// Panics if you update the value of the signal of `self` before this function returns.
     pub fn extend(&self, records: Vec<ErrorRecord>) {
-        self.records.update(|records_| records_.extend(records));
+        self.records
+            .update(|records_| records.into_iter().for_each(|rec| records_.push_front(rec)));
     }
 
     /// Clears the collection, removing all values.
     ///
-    /// Note that this method has no effect on the allocated capacity of the vector.
+    /// Note that this method has no effect on the allocated capacity of the collection.
     ///
     /// # Panics
     /// Panics if you update the value of the signal of `self` before this function returns.
     pub fn clear(&self) {
         // self.records.update(|records| records.clear());
-        self.records.update(std::vec::Vec::clear);
+        self.records.update(std::collections::VecDeque::clear);
     }
 
     /// Returns the number of elements in the collection, also referred to as its 'length'
@@ -112,7 +113,7 @@ impl ErrorLogContext {
 impl Default for ErrorLogContext {
     fn default() -> Self {
         Self {
-            records: RwSignal::new(Vec::new()),
+            records: RwSignal::new(VecDeque::new()),
         }
     }
 }

@@ -1,9 +1,11 @@
+use std::collections::VecDeque;
+
 use leptos::prelude::*;
 use vowlr_util::prelude::TableHTML;
 
 /// A table
 #[component]
-pub fn Table<T>(#[prop(into)] items: Signal<Vec<T>>) -> impl IntoView
+pub fn Table<T>(#[prop(into)] items: Signal<VecDeque<T>>) -> impl IntoView
 where
     T: TableHTML + Send + Sync + 'static,
 {

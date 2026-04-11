@@ -153,10 +153,6 @@ pub async fn parse_stream_to(
 }
 
 /// Returns the quads from parsing the file at the path.
-#[expect(
-    clippy::result_large_err,
-    reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
-)]
 pub fn parser_from_path(
     path: &Path,
     format: DataType,
@@ -169,10 +165,6 @@ pub fn parser_from_path(
 }
 
 /// Returns the quads from parsing the reader, reading from the path.
-#[expect(
-    clippy::result_large_err,
-    reason = "fixed if VOWLRStoreErrorKind contains String instead of full error types"
-)]
 pub fn parser_from_reader(
     mut reader: impl BufRead,
     path: &Path,

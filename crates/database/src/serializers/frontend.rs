@@ -1576,16 +1576,29 @@ impl GraphDisplayDataSolutionSerializer {
         Ok(())
     }
 
+    /// Creates a named node from an IRI.
     fn create_named_node(&self, iri: &String) -> Result<NamedNode, SerializationError> {
         Ok(NamedNode::new(iri)
             .map_err(|e| SerializationErrorKind::IriParseError(iri.clone(), Box::new(e)))?)
     }
 
+    /// Creates a blank node from a blank node ID.
     fn create_blank_node(&self, id: &String) -> Result<BlankNode, SerializationError> {
         Ok(BlankNode::new(id)
             .map_err(|e| SerializationErrorKind::BlankNodeParseError(id.clone(), Box::new(e)))?)
     }
 
+    /// Creates a term from a string, automatically handling named/blank nodes.
+    fn create_term(&self, term: &String) -> Result<Term, SerializationError> {
+        match self.create_named_node(term) {
+            Ok(named_node) => Ok(Term::NamedNode(named_node)),
+            Err(_) => Ok(Term::BlankNode(self.create_blank_node(term)?)),
+        }
+    }
+
+    /// Creates a triple of subject-predicate-object terms, automatically handling named/blank nodes.
+    ///
+    /// The new terms are automatically registered in the term index.
     fn create_triple_from_iri(
         &self,
         term_index: &mut TermIndex,
@@ -1594,18 +1607,14 @@ impl GraphDisplayDataSolutionSerializer {
         object_iri: Option<&String>,
     ) -> Result<ArcTriple, SerializationError> {
         let subject_term_id = {
-            let subject_term = match NamedNode::new(subject_iri) {
-                Ok(node) => Term::NamedNode(node),
-                Err(_) => Term::BlankNode(self.create_blank_node(subject_iri)?),
-            };
+            let subject_term = self.create_term(subject_iri)?;
             term_index.insert(subject_term)?
         };
 
-        let predicate_term_id =
-            term_index.insert(Term::NamedNode(self.create_named_node(predicate_iri)?))?;
+        let predicate_term_id = term_index.insert(self.create_term(predicate_iri)?)?;
 
         let object_term_id = match object_iri {
-            Some(iri) => Some(term_index.insert(Term::NamedNode(self.create_named_node(iri)?))?),
+            Some(iri) => Some(term_index.insert(self.create_term(iri)?)?),
             None => None,
         };
 
@@ -1617,6 +1626,7 @@ impl GraphDisplayDataSolutionSerializer {
         )
     }
 
+    /// Creates a triple of subject-predicate-object term IDs.
     fn create_triple_from_id(
         &self,
         term_index: &TermIndex,
@@ -1632,6 +1642,7 @@ impl GraphDisplayDataSolutionSerializer {
         Ok(triple)
     }
 
+    /// Creates an edge from term IDs.
     fn create_edge_from_id(
         &self,
         term_index: &TermIndex,
@@ -3687,7 +3698,7 @@ impl GraphDisplayDataSolutionSerializer {
             );
             data_buffer
                 .term_index
-                .insert(Term::NamedNode(self.create_named_node(&literal_iri)?))?
+                .insert(self.create_term(&literal_iri)?)?
         };
 
         let node_exists = {

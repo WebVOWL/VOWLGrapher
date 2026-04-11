@@ -251,7 +251,7 @@ impl VOWLRStore {
             );
         };
         let (quads, loaded_format) = self.load_file(&path, false, &graph_iri).await?;
-        info!("Loading input into database for graph {}...", graph_iri);
+        info!("Loading graph '{}' into database...", graph_iri);
         let start_time = Instant::now();
 
         self.session.extend(quads).await?;

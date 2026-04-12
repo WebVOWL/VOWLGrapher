@@ -29,6 +29,11 @@ impl From<ClientErrorKind> for ErrorRecord {
             ClientErrorKind::FileUploadError(e) | ClientErrorKind::EventHandlingError(e) => {
                 (e, ErrorType::ClientError, ErrorSeverity::Error)
             }
+            ClientErrorKind::EnvironmentFetchError(msg, e) => (
+                format!("{msg}\n{e}"),
+                ErrorType::UnknownError,
+                ErrorSeverity::Warning,
+            ),
         };
         Self::new(
             get_timestamp(),

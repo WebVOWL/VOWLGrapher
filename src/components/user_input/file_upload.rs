@@ -23,9 +23,9 @@ use vowlr_util::prelude::manage_user_id;
 use vowlr_util::prelude::{DataType, VOWLRError};
 use web_sys::{FileList, FormData};
 
+#[cfg(feature = "server")]
+use crate::env::VOWLGRAPHER_ENVIRONMENT;
 use crate::errors::ClientErrorKind;
-
-const MAX_FILE_SIZE_BYTES: usize = 50 * 1024 * 1024;
 
 #[cfg(feature = "ssr")]
 mod progress {
@@ -127,10 +127,10 @@ pub async fn handle_local(
             let len = chunk.len();
             count += len;
 
-            if count > MAX_FILE_SIZE_BYTES {
+            if count as u64 > VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.0 {
                 return Err(ServerFnError::ServerError(format!(
-                    "File {name} exceeds the maximum allowed size of {}MB.",
-                    MAX_FILE_SIZE_BYTES / 1024 / 1024
+                    "File '{name}' exceeds the maximum allowed size of {}",
+                    VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.display().si()
                 ))
                 .into());
             }
@@ -150,7 +150,7 @@ pub async fn handle_local(
         && dtype != DataType::UNKNOWN
     {
         Some(<VOWLRStoreError as Into<VOWLRError>>::into(VOWLRStoreErrorKind::IncorrectFileExtension(format!(
-            "The uploaded file had an incorrect file extension. It was parsed as {parsed_dtype} instead of {dtype}."
+            "The uploaded file had an incorrect file extension. It was parsed as {parsed_dtype} instead of {dtype}"
         )).into()))
     } else {
         None
@@ -177,10 +177,10 @@ pub async fn handle_remote(
 
     if let Some(content_length) = resp.content_length() {
         let size = usize::try_from(content_length).unwrap_or(usize::MAX);
-        if size > MAX_FILE_SIZE_BYTES {
+        if size as u64 > VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.0 {
             return Err(ServerFnError::ServerError(format!(
-                "Remote file exceeds the maximum allowed size of {}MB.",
-                MAX_FILE_SIZE_BYTES / 1024 / 1024
+                "Remote file exceeds the maximum allowed size of {}",
+                VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.display().si()
             ))
             .into());
         }
@@ -211,7 +211,7 @@ pub async fn handle_remote(
         && dtype != DataType::UNKNOWN
     {
         Some(<VOWLRStoreError as Into<VOWLRError>>::into(VOWLRStoreErrorKind::IncorrectFileExtension(format!(
-            "The uploaded file had an incorrect file extension. It was parsed as {parsed_dtype} instead of {dtype}."
+            "The uploaded file had an incorrect file extension. It was parsed as {parsed_dtype} instead of {dtype}"
         )).into()))
     } else {
         None

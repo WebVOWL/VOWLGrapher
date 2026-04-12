@@ -25,10 +25,34 @@ Or use the [docker compose file](/docker-compose.yml) with command `docker-compo
 0. Clone the project locally, e.g. `git clone https://github.com/WebVOWL/VOWL-R.git`
 1. Install Rust from [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
 2. Install the following:
-   ```bash
-    apt install clang mold make cmake libssl-dev pkg-config
-   ```
-5. Run `cargo install leptosfmt`
-6. Run `cargo install --locked cargo-leptos --version 0.3.2`
+    ```bash
+     apt install clang mold make cmake libssl-dev pkg-config
+    ```
+3. Run `cargo install leptosfmt`
+4. Run `cargo install --locked cargo-leptos --version 0.3.2`
     > If you get a compile error `Can't locate FindBin.pm in @INC` you can either install Perl (e.g. `dnf install perl`) or [download a prebuilt binary](https://github.com/leptos-rs/cargo-leptos/releases/latest)
-7. Use the convenience shell file `build.sh` to build the project with different profiles based on the supplied argument. E.g. to build and run a development server, run `./build.sh dev`
+5. Use the convenience shell file `build.sh` to build the project with different profiles based on the supplied argument. E.g. to build and run a development server, run `./build.sh dev`
+
+## Environment variables
+
+<details>
+<summary>Help defining environment variables</summary>
+Environment variables are defined like this:
+
+```
+<key=value> <key=value> ... <path/to/server/binary>
+```
+
+For instance:
+
+```bash
+VOWLGRAPHER_MAX_INPUT_SIZE_BYTES=50000000 RUST_BACKTRACE=1 RUST_LOG=info ./target/x86_64-unknown-linux-gnu/debug/vowlgrapher
+```
+
+</details>
+
+The following environment variables are available:
+
+|              Variable              | Type  |    Default value    | Description                                                        |
+| :--------------------------------: | :---: | :-----------------: | :----------------------------------------------------------------- |
+| `VOWLGRAPHER_MAX_INPUT_SIZE_BYTES` | Bytes | `52,428,800` (50MB) | The maximum allowed size, in bytes, of any input into VOWLGrapher. |

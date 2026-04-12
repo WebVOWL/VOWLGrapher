@@ -5,6 +5,7 @@ use crate::components::user_input::internal_sparql::load_graph;
 use crate::components::user_input::stored_ontology::StoredOntology;
 use crate::components::user_input::stored_ontology::load_stored_ontology;
 use crate::components::{icon::Icon, user_input::file_upload::FileUpload};
+use crate::env::VOWLGrapherEnviron;
 use crate::errors::ClientErrorKind;
 use crate::errors::ErrorLogContext;
 use leptos::prelude::*;
@@ -15,8 +16,6 @@ use strum::IntoEnumIterator;
 use vowlr_sparql_queries::prelude::DEFAULT_QUERY;
 use web_sys::Event;
 use web_sys::HtmlInputElement;
-
-const MAX_FILE_SIZE_BYTES: f64 = 50.0 * 1024.0 * 1024.0;
 
 #[component]
 pub fn SelectStaticInput() -> impl IntoView {
@@ -158,15 +157,24 @@ pub fn UploadInput() -> impl IntoView {
     });
 
     let upload_files = move |ev: Event| {
+        let VOWLGrapherEnviron {
+            max_input_size_bytes,
+        } = expect_context::<VOWLGrapherEnviron>();
+
         let input: HtmlInputElement = event_target(&ev);
         if let Some(files) = input.files() {
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "decimals don't matter in comparison"
+            )]
             if let Some(file) = files.item(0)
-                && file.size() > MAX_FILE_SIZE_BYTES
+                && file.size() as u64 > max_input_size_bytes.0
             {
                 let err_msg = format!(
-                    "File {} exceeds the maximum allowed size of {}MB.",
+                    "File '{}' exceeds the maximum allowed size of {}",
                     file.name(),
-                    MAX_FILE_SIZE_BYTES / 1024.0 / 1024.0
+                    max_input_size_bytes.display().si()
                 );
                 error_context.push(ClientErrorKind::FileUploadError(err_msg).into());
                 input.set_value("");

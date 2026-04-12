@@ -12,6 +12,12 @@ pub enum ClientErrorKind {
     FileUploadError(String),
     /// An error raised when the event handler fails to send or receive events.
     EventHandlingError(String),
+    /// An error raised when the server's environment wasn't received.
+    ///
+    /// #1 argument is the client error message.
+    ///
+    /// #2 argument is the received error message.
+    EnvironmentFetchError(String, ErrorRecord),
 }
 
 impl From<ClientErrorKind> for ErrorRecord {

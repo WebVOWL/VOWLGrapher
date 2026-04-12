@@ -69,10 +69,12 @@ pub enum ErrorType {
     #[strum(serialize = "GUI")]
     /// Errors related to the frontend GUI.
     Gui,
-    /// Server errors without a type.
+    /// Server errors with unknown a type.
     InternalServerError,
-    /// Client errors without a type.
+    /// Client errors with unknown a type.
     ClientError,
+    /// Errors with unknown origin and type.
+    UnknownError,
 }
 
 #[derive(

@@ -2044,7 +2044,7 @@ impl GraphDisplayDataSolutionSerializer {
                         None => {
                             return Err(SerializationErrorKind::MissingObject(
                                 data_buffer.term_index.display_triple(&triple)?,
-                                "Comments triple is missing the comment object".to_string(),
+                                "Comment triple has no object".to_string(),
                             )
                             .into());
                         }
@@ -2080,8 +2080,7 @@ impl GraphDisplayDataSolutionSerializer {
                         None => {
                             return Err(SerializationErrorKind::MissingObject(
                                 data_buffer.term_index.display_triple(&triple)?,
-                                "'Is defined by' triple is missing the 'defined by' object"
-                                    .to_string(),
+                                "isDefinedBy triple has no object".to_string(),
                             )
                             .into());
                         }
@@ -2134,7 +2133,7 @@ impl GraphDisplayDataSolutionSerializer {
                         None => {
                             return Err(SerializationErrorKind::MissingObject(
                                 data_buffer.term_index.display_triple(&triple)?,
-                                "'See also' triple is missing the 'see also' object".to_string(),
+                                "seeAlso triple has no object".to_string(),
                             )
                             .into());
                         }

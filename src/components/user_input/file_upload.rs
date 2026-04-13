@@ -1,17 +1,22 @@
 #[cfg(feature = "server")]
+use actix_web::web::Data;
+#[cfg(feature = "server")]
 use futures::StreamExt;
 use gloo_timers::callback::Interval;
 use leptos::prelude::*;
 use leptos::server_fn::ServerFnError;
 use leptos::server_fn::codec::{MultipartData, MultipartFormData, StreamingText, TextStream};
 use leptos::task::spawn_local;
-use log::{debug, info, trace};
+use log::{debug, error, info, trace};
 #[cfg(feature = "server")]
 use reqwest::Client;
 use std::cell::RefCell;
 #[cfg(feature = "server")]
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Mutex;
+#[cfg(feature = "server")]
+use vowlgrapher_database::prelude::UserSessionExpiries;
 #[cfg(feature = "server")]
 use vowlgrapher_database::prelude::VOWLGrapherStore;
 #[cfg(feature = "server")]
@@ -25,6 +30,8 @@ use web_sys::{FileList, FormData};
 
 #[cfg(feature = "server")]
 use crate::env::VOWLGRAPHER_ENVIRONMENT;
+#[cfg(feature = "server")]
+use crate::env::environ;
 use crate::errors::ClientErrorKind;
 
 #[cfg(feature = "ssr")]
@@ -158,6 +165,15 @@ pub async fn handle_local(
     } else {
         None
     };
+
+    let session_duration = environ().await?.session_duration;
+    let expiries: Data<Mutex<UserSessionExpiries>> = leptos_actix::extract().await?;
+    match expiries.lock() {
+        Ok(mut exp) => exp.insert_with_duration(&name, session_duration),
+        Err(e) => {
+            error!("expirity mutex is poisoned! no more cleanup jobs will be added. error: {e:?}")
+        }
+    }
 
     Ok((
         parsed_dtype,

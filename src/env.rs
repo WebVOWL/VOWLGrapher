@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use std::str::FromStr;
 #[cfg(feature = "server")]
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use bytesize::ByteSize;
 use leptos::prelude::*;
@@ -60,15 +61,29 @@ pub struct VOWLGrapherEnviron {
     #[rkyv(with = SerilizableByteSize)]
     #[serde(with = "SerilizableByteSize")]
     pub max_input_size_bytes: ByteSize,
+    pub database_cleanup_interval: Duration,
+    pub session_duration: Duration,
 }
 
 impl VOWLGrapherEnviron {
     pub fn new() -> Self {
         let max_input_size_bytes =
             Self::parse_environment("VOWLGRAPHER_MAX_INPUT_SIZE_BYTES", ByteSize::mb(50));
+        let database_cleanup_interval = Self::parse_environment(
+            "VOWLGRAPHER_DATABASE_CLEANUP_INTERVAL",
+            humantime::Duration::from(Duration::from_mins(10)),
+        )
+        .into();
+        let session_duration = Self::parse_environment(
+            "VOWLGRAPHER_SESSION_DURATION",
+            humantime::Duration::from(Duration::from_hours(6)),
+        )
+        .into();
 
         Self {
             max_input_size_bytes,
+            database_cleanup_interval,
+            session_duration,
         }
     }
 

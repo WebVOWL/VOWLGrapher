@@ -1,8 +1,12 @@
 #![allow(non_snake_case)]
 
+use anyhow::anyhow;
+use std::sync::{Arc, Mutex};
+
 use actix_files::Files;
 use actix_session::{SessionMiddleware, storage::CookieSessionStore};
 use actix_web::cookie::Key;
+use actix_web::web::Data;
 use actix_web::{App, HttpServer, middleware, web};
 use env_logger::Env;
 use leptos::prelude::*;
@@ -10,10 +14,12 @@ use leptos_actix::{LeptosRoutes, generate_route_list};
 use leptos_meta::MetaTags;
 use log::info;
 use vowlgrapher::app::App;
+use vowlgrapher::env::environ;
 use vowlgrapher::hydration_scripts::HydrationScripts as Hydro;
+use vowlgrapher_database::prelude::{UserSessionExpiries, cleanup_task};
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
 
     let pkg_name = env!("CARGO_PKG_NAME");
@@ -21,12 +27,16 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting {pkg_name} server [v{pkg_version}]");
 
-    // TODO: properly handle this error
-    #[expect(clippy::expect_used)]
-    let conf = get_configuration(None).expect("could not load config");
+    let conf = get_configuration(None)?;
     let addr = conf.leptos_options.site_addr;
 
     let secret_key = Key::generate();
+
+    let session_expiries = Arc::new(Mutex::new(UserSessionExpiries::default()));
+    let env = environ().await.map_err(|e| anyhow!(e))?;
+
+    let (cleanup_handle, cleanup_cancel) =
+        cleanup_task(session_expiries.clone(), env.database_cleanup_interval);
 
     HttpServer::new(move || {
         // Generate the list of routes in your Leptos App
@@ -38,6 +48,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::PayloadConfig::new(1024 * 1024 * 1024))
             .app_data(web::FormConfig::default().limit(1024 * 1024 * 1024))
+            .app_data(Data::from(Arc::clone(&session_expiries)))
             .leptos_routes(routes, {
                 let leptos_options = leptos_options.clone();
                 move || {
@@ -82,5 +93,10 @@ async fn main() -> std::io::Result<()> {
     })
     .bind(&addr)?
     .run()
-    .await
+    .await?;
+
+    cleanup_cancel.cancel();
+    cleanup_handle.await?;
+
+    Ok(())
 }

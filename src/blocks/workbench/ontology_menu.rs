@@ -162,6 +162,7 @@ pub fn UploadInput() -> impl IntoView {
     let upload_files = move |ev: Event| {
         let VOWLGrapherEnviron {
             max_input_size_bytes,
+            ..
         } = expect_context::<VOWLGrapherEnviron>();
 
         let input: HtmlInputElement = event_target(&ev);

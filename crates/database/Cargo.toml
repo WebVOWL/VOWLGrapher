@@ -36,6 +36,7 @@
     vowlgrapher-parser={path="../parser"}
     vowlgrapher-sparql-queries={path="../sparql_queries"}
     vowlgrapher-util={path="../util"}
+    tokio-util = "0.7.18"
     # strum.workspace=true
 
 [dev-dependencies]

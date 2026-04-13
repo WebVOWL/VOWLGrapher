@@ -763,6 +763,14 @@ impl GraphDisplayDataSolutionSerializer {
         Ok(None)
     }
 
+    fn iri_matches_document_base(base: &str, iri: &str) -> bool {
+        iri == base
+            || (!base.ends_with('/')
+                && !base.ends_with('#')
+                && iri.starts_with(&format!("{base}#")))
+            || ((base.ends_with('/') || base.ends_with('#')) && iri.starts_with(base))
+    }
+
     fn is_external(
         &self,
         data_buffer: &SerializationDataBuffer,
@@ -771,11 +779,14 @@ impl GraphDisplayDataSolutionSerializer {
         if term.is_blank_node() {
             return Ok(false);
         }
+
         let clean_term = trim_tag_circumfix(&term.to_string());
         match &*data_buffer.document_base.read()? {
-            Some(base) => Ok(!(clean_term.contains(base.as_ref())
-                || is_reserved(term)
-                || is_synthetic(term))),
+            Some(base) => Ok(
+                !(Self::iri_matches_document_base(base.as_ref(), &clean_term)
+                    || is_reserved(term)
+                    || is_synthetic(term)),
+            ),
             None => {
                 let has_fired = { *self.document_base_warning_fired.read()? };
                 if !has_fired {
@@ -1392,6 +1403,9 @@ impl GraphDisplayDataSolutionSerializer {
 
             return Ok(SerializationStatus::Serialized);
         };
+
+        self.ensure_object_property_registration(data_buffer, left_property_raw)?;
+        self.ensure_object_property_registration(data_buffer, right_property_raw)?;
 
         let Some(left_property) = self.resolve(data_buffer, left_property_raw)? else {
             self.add_to_unknown_buffer(data_buffer, left_property_raw, triple)?;

@@ -18,6 +18,10 @@ pub mod prelude {
         COLLECTIONS, DOMAIN_RANGES, LABEL, NAMED_INDIVIDUAL_COUNTS, ONTOLOGY, OWL_DEPRECATED,
         XML_BASE,
     };
+    use crate::snippets::metadata::{
+        BACKWARD_COMPATIBLE_WITH, COMMENT, INCOMPATIBLE_WITH, IS_DEFINED_BY, PRIOR_VERSION,
+        SEE_ALSO, VERSION_INFO, VERSION_IRI,
+    };
     use crate::snippets::snippets_from_enum;
 
     /// SPARQL snippets that should generally be included in all queries.
@@ -31,6 +35,18 @@ pub mod prelude {
         LABEL,
     ];
 
+    /// SPARQL snippets fetching data not included in the graph visualization.
+    pub static METADATA_SNIPPETS: [&str; 8] = [
+        COMMENT,
+        IS_DEFINED_BY,
+        SEE_ALSO,
+        VERSION_INFO,
+        VERSION_IRI,
+        PRIOR_VERSION,
+        INCOMPATIBLE_WITH,
+        BACKWARD_COMPATIBLE_WITH,
+    ];
+
     // PERF: this could maybe be a thread_local instead?
     /// The default query contains all classes and properties supported by `VOWLGrapher`.
     pub static DEFAULT_QUERY: LazyLock<String> = LazyLock::new(|| {
@@ -42,6 +58,7 @@ pub mod prelude {
             snippets_from_enum::<RdfsEdge>(),
             snippets_from_enum::<Characteristic>(),
             GENERAL_SNIPPETS.into(),
+            METADATA_SNIPPETS.into(),
         ]
         .concat();
 

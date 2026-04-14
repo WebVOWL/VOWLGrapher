@@ -4,7 +4,7 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX vowlgrapher: <http://www.example.com/iri#>
 PREFIX xml: <http://www.w3.org/XML/1998/namespace>
-            SELECT DISTINCT ?id ?nodeType ?target ?label
+            SELECT ?id ?nodeType ?target ?label
             WHERE {
                  {
                     {
@@ -333,6 +333,38 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                     ""
                 ) AS ?label
             )
+            } UNION {
+            # Find comments for elements.
+            ?id rdfs:comment ?target .
+            BIND(rdfs:comment as ?nodeType)
+            } UNION {
+            # Find isDefinedBy for elements.
+            ?id rdfs:isDefinedBy ?target .
+            BIND(rdfs:isDefinedBy as ?nodeType)
+            } UNION {
+            # Find seeAlso for elements.
+            ?id rdfs:seeAlso ?target .
+            BIND(rdfs:seeAlso as ?nodeType)
+            } UNION {
+            # Find versionInfo for elements.
+            ?id owl:versionInfo ?target .
+            BIND(owl:versionInfo as ?nodeType)
+            } UNION {
+            # Find versionIRI for elements.
+            ?id owl:versionIRI ?target .
+            BIND(owl:versionIRI as ?nodeType)
+            } UNION {
+            # Find priorVersion for elements.
+            ?id owl:priorVersion ?target .
+            BIND(owl:priorVersion as ?nodeType)
+            } UNION {
+            # Find incompatibleWith for elements.
+            ?id owl:incompatibleWith ?target .
+            BIND(owl:incompatibleWith as ?nodeType)
+            } UNION {
+            # Find backwardCompatibleWith for elements.
+            ?id owl:backwardCompatibleWith ?target .
+            BIND(owl:backwardCompatibleWith as ?nodeType)
             }
                     BIND(
                         IF(?nodeType = owl:Ontology, 0,

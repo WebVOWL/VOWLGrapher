@@ -2,6 +2,7 @@ pub mod characteristic;
 pub mod element_type;
 pub mod general;
 pub mod generic;
+pub mod metadata;
 pub mod owl;
 pub mod rdf;
 pub mod rdfs;

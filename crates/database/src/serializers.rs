@@ -435,23 +435,8 @@ impl SerializationDataBuffer {
 
         let mut individual_count_buffer = self.individual_count_buffer.write()?;
         for (term_id, count) in take(&mut *individual_count_buffer).into_iter() {
-            match iricache.get(&term_id) {
-                Some(idx) => {
-                    display_data.individual_counts.insert(*idx, count);
-                }
-                None => {
-                    let msg = match self.term_index.get(&term_id) {
-                        Ok(term) => {
-                            format!("Individual count not found for term '{}' in iricache", term)
-                        }
-                        Err(e) => {
-                            format!("Individual count not found for term '{}' in iricache", e)
-                        }
-                    };
-                    failed.push(<SerializationError as Into<ErrorRecord>>::into(
-                        SerializationErrorKind::MisisngCharacteristic(msg).into(),
-                    ));
-                }
+            if let Some(idx) = iricache.get(&term_id) {
+                display_data.individual_counts.insert(*idx, count);
             }
         }
 

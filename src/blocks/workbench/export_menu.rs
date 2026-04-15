@@ -1,5 +1,6 @@
 use super::WorkbenchMenuItems;
 use crate::components::icon::Icon;
+use crate::components::user_input::internal_sparql::GraphDataContext;
 use crate::errors::{ClientErrorKind, ErrorLogContext};
 use futures::StreamExt;
 use leptos::prelude::*;
@@ -11,14 +12,14 @@ use vowlgrapher_database::prelude::VOWLGrapherStore;
 use vowlgrapher_util::prelude::manage_user_id;
 use vowlgrapher_util::prelude::{DataType, VOWLGrapherError};
 use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url, js_sys, wasm_bindgen::JsCast};
-
 #[server(output = Streaming)]
 /// Export a graph from the database
 pub async fn export_graph(
     resource_type: DataType,
+    graph_name: String,
 ) -> Result<ByteStream<VOWLGrapherError>, VOWLGrapherError> {
     let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
-    let stream = store.serialize_stream(resource_type).await?;
+    let stream = store.serialize_stream(resource_type, &graph_name).await?;
     Ok(ByteStream::new(stream.map(|chunk| {
         chunk
             .map(bytes::Bytes::from)
@@ -29,8 +30,9 @@ pub async fn export_graph(
 pub async fn download_ontology(
     resource_type: DataType,
     progress_message: RwSignal<String>,
+    graph_name: String,
 ) -> Result<(), VOWLGrapherError> {
-    let byte_stream = export_graph(resource_type).await?;
+    let byte_stream = export_graph(resource_type, graph_name).await?;
 
     // Download data from server
     progress_message.set("Downloaded: 0 MB".to_string());
@@ -118,7 +120,10 @@ pub fn ExportMenu() -> impl IntoView {
     let download = Action::new(|input: &(DataType, RwSignal<String>)| {
         let (resource_type, progress_message) = input.to_owned();
         async move {
-            match download_ontology(resource_type, progress_message).await {
+            let graph_name = expect_context::<GraphDataContext>()
+                .active_graph_name
+                .get_untracked();
+            match download_ontology(resource_type, progress_message, graph_name).await {
                 Ok(()) => (),
                 Err(e) => {
                     let error_context = expect_context::<ErrorLogContext>();

@@ -4101,10 +4101,12 @@ impl GraphDisplayDataSolutionSerializer {
                     None => existing_edge,
                 };
 
-                data_buffer
-                    .edge_cardinality_buffer
-                    .write()?
-                    .insert(edge, cardinality);
+                {
+                    data_buffer
+                        .edge_cardinality_buffer
+                        .write()?
+                        .insert(edge, cardinality);
+                }
 
                 self.remove_restriction_stub(data_buffer, restriction_term_id)?;
                 self.remove_restriction_node(data_buffer, restriction_term_id)?;

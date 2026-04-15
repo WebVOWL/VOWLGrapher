@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem::take, sync::Arc};
 
 use crate::errors::{ClientErrorKind, ErrorLogContext};
-use grapher::prelude::{EVENT_DISPATCHER, ElementType, GraphDisplayData, RenderEvent};
+use grapher::prelude::{
+    EVENT_DISPATCHER, ElementType, GraphDisplayData, GraphMetadata, RenderEvent,
+};
 use leptos::{prelude::*, server_fn::codec::Rkyv};
 use log::debug;
 #[cfg(feature = "server")]
@@ -25,24 +27,28 @@ pub async fn load_graph(query: String, clean_load: bool) {
         element_counts,
         element_checks,
         active_graph_name,
+        graph_metadata,
     } = expect_context::<GraphDataContext>();
     let graph_name = active_graph_name.get_untracked();
     debug!("Loading graph with name: {graph_name}");
     match handle_internal_sparql(query, graph_name.clone()).await {
-        Ok((result, non_fatal_error)) => {
+        Ok((mut result, non_fatal_error)) => {
             if clean_load {
-                let new_context = GraphDataContext::new(&result, graph_name);
+                let new_graph_data = take(&mut result.graph_metadata);
+                let new_context = GraphDataContext::new(&result, new_graph_data, graph_name);
                 element_counts
                     .update(|counts| *counts = new_context.element_counts.get_untracked());
                 element_checks
                     .update(|checks| *checks = new_context.element_checks.get_untracked());
                 active_graph_name
                     .update(|name| *name = new_context.active_graph_name.get_untracked());
+                graph_metadata
+                    .update(|metadata| *metadata = new_context.graph_metadata.get_untracked());
             }
 
             if let Err(e) = EVENT_DISPATCHER
                 .rend_write_chan
-                .send(RenderEvent::LoadGraph(result))
+                .send(RenderEvent::LoadGraph(Box::new(result)))
             {
                 error_context.push(ClientErrorKind::EventHandlingError(e.to_string()).into());
             }
@@ -61,10 +67,15 @@ pub struct GraphDataContext {
     pub element_counts: RwSignal<HashMap<ElementType, usize>>,
     pub element_checks: RwSignal<HashMap<ElementType, bool>>,
     pub active_graph_name: RwSignal<String>,
+    pub graph_metadata: RwSignal<Arc<GraphMetadata>>,
 }
 
 impl GraphDataContext {
-    pub fn new(graph_data: &GraphDisplayData, graph_name: String) -> Self {
+    pub fn new(
+        graph_data: &GraphDisplayData,
+        graph_metadata: GraphMetadata,
+        graph_name: String,
+    ) -> Self {
         let mut element_counts: HashMap<ElementType, usize> = HashMap::new();
         let mut element_checks: HashMap<ElementType, bool> = HashMap::new();
         for element in &graph_data.elements {
@@ -77,6 +88,7 @@ impl GraphDataContext {
             element_counts: RwSignal::new(element_counts),
             element_checks: RwSignal::new(element_checks),
             active_graph_name: RwSignal::new(graph_name),
+            graph_metadata: RwSignal::new(graph_metadata.into()),
         }
     }
 }

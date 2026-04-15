@@ -2011,7 +2011,7 @@ impl GraphDisplayDataSolutionSerializer {
                                 .entry(triple.subject_term_id)
                                 .or_default()
                                 .write()?;
-                            state.cardinality = Some((exact.clone(), Some(exact)));
+                            state.cardinality = Some((exact.clone(), None));
                         }
 
                         return self
@@ -2482,7 +2482,7 @@ impl GraphDisplayDataSolutionSerializer {
                                 .entry(triple.subject_term_id)
                                 .or_default()
                                 .write()?;
-                            state.cardinality = Some((min, None));
+                            state.cardinality = Some((min, Some("*".to_string())));
                         }
 
                         return self
@@ -2495,8 +2495,10 @@ impl GraphDisplayDataSolutionSerializer {
                                 .entry(triple.subject_term_id)
                                 .or_default()
                                 .write()?;
-                            state.cardinality =
-                                Some((Self::cardinality_literal(data_buffer, &triple)?, None));
+                            state.cardinality = Some((
+                                Self::cardinality_literal(data_buffer, &triple)?,
+                                Some("*".to_string()),
+                            ));
                             state.requires_filler = true;
                         }
 

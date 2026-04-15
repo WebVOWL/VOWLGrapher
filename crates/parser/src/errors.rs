@@ -8,7 +8,7 @@ use std::{
 use horned_owl::error::HornedError;
 
 use rdf_fusion::{
-    error::LoaderError,
+    error::{LoaderError, SerializerError},
     execution::sparql::error::QueryEvaluationError,
     model::{IriParseError, StorageError},
 };
@@ -42,6 +42,8 @@ pub enum VOWLGrapherStoreErrorKind {
     JoinError(Box<JoinError>),
     /// An error related to (database) storage operations (reads, writes...).
     StorageError(Box<StorageError>),
+    /// Seralizer error
+    SerializerError(Box<SerializerError>),
 }
 
 /// Encapsulates the error with metadata.
@@ -76,6 +78,17 @@ impl From<HornedError> for VOWLGrapherStoreError {
     fn from(error: HornedError) -> Self {
         Self {
             inner: VOWLGrapherStoreErrorKind::HornedError(Box::new(error)),
+            location: Location::caller(),
+            timestamp: get_timestamp(),
+        }
+    }
+}
+
+impl From<SerializerError> for VOWLGrapherStoreError {
+    #[track_caller]
+    fn from(error: SerializerError) -> Self {
+        Self {
+            inner: VOWLGrapherStoreErrorKind::SerializerError(Box::new(error)),
             location: Location::caller(),
             timestamp: get_timestamp(),
         }
@@ -174,6 +187,7 @@ impl std::error::Error for VOWLGrapherStoreError {
             VOWLGrapherStoreErrorKind::QueryEvaluationError(e) => Some(e),
             VOWLGrapherStoreErrorKind::JoinError(e) => Some(e),
             VOWLGrapherStoreErrorKind::StorageError(e) => Some(e),
+            VOWLGrapherStoreErrorKind::SerializerError(e) => Some(e),
         }
     }
 }
@@ -221,6 +235,11 @@ impl From<VOWLGrapherStoreError> for ErrorRecord {
                 storage_error.to_string(),
                 ErrorSeverity::Critical,
                 ErrorType::Database,
+            ),
+            VOWLGrapherStoreErrorKind::SerializerError(serializer_error) => (
+                serializer_error.to_string(),
+                ErrorSeverity::Critical,
+                ErrorType::Parser,
             ),
         };
         ErrorRecord::new(

@@ -214,8 +214,7 @@ impl VOWLGrapherStore {
             let buf = self
                 .session
                 .dump_graph_to_writer(graph_ref, format, Vec::new())
-                .await
-                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                .await?;
             return Ok(futures::stream::once(async move { Ok(buf) }).boxed());
         }
         Err(VOWLGrapherStoreError::from(
@@ -386,8 +385,7 @@ mod test {
         let mut out = vec![];
         let store = VOWLGrapherStore::default();
         store.insert_file(Path::new(&resource), false).await?;
-        let mut results = store.serialize_stream(DataType::OWL, resource).await?;
-        while let Some(result) = futures::StreamExt::next(&mut results).await {
+        while let Some(result) = store.serialize_stream(DataType::OWL, resource).await?.next().await {
             out.extend(result?);
         }
 
@@ -400,8 +398,7 @@ mod test {
         let mut out = vec![];
         let store = VOWLGrapherStore::default();
         store.insert_file(Path::new(&resource), false).await?;
-        let mut results = store.serialize_stream(DataType::OWL, resource).await?;
-        while let Some(result) = futures::StreamExt::next(&mut results).await {
+        while let Some(result) = store.serialize_stream(DataType::OWL, resource).await?.next().await {
             out.extend(result?);
         }
 
@@ -414,11 +411,9 @@ mod test {
         let mut out = vec![];
         let store = VOWLGrapherStore::default();
         store.insert_file(Path::new(&resource), false).await?;
-        let mut results = store.serialize_stream(DataType::OWL, resource).await?;
-        while let Some(result) = futures::StreamExt::next(&mut results).await {
+        while let Some(result) = store.serialize_stream(DataType::OWL, resource).await?.next().await {
             out.extend(result?);
         }
-
         assert_ne!(out.len(), 0, "Expected non-zero quads for: {}", resource);
         store.session.clear().await?;
         Ok(())

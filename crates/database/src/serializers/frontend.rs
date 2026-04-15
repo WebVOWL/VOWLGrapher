@@ -2987,6 +2987,17 @@ impl GraphDisplayDataSolutionSerializer {
                                             data_buffer.term_index.display_triple(&triple)?
                                         );
 
+                                        if self.has_non_fallback_property_edge(
+                                            data_buffer,
+                                            &property_term_id,
+                                        )? {
+                                            debug!(
+                                                "Skipping structural fallback for '{}': property already has a concrete edge",
+                                                data_buffer.term_index.get(&property_term_id)?
+                                            );
+                                            return Ok(SerializationStatus::Serialized);
+                                        }
+
                                         let is_full_query_fallback = {
                                             if let Some(object_term_id) = triple.object_term_id {
                                                 is_query_fallback_endpoint(
@@ -3000,6 +3011,7 @@ impl GraphDisplayDataSolutionSerializer {
                                                 false
                                             }
                                         };
+
                                         if !is_full_query_fallback {
                                             trace!(
                                                 "Deferring property triple with unresolved structural domain/range: {}",
@@ -3181,48 +3193,44 @@ impl GraphDisplayDataSolutionSerializer {
                                         )?;
 
                                         if let Some(edge) = maybe_edge {
-                                            {
+                                            let should_replace = !self
+                                                .has_non_fallback_property_edge(
+                                                    data_buffer,
+                                                    &edge_triple_predicate_term_id,
+                                                )?;
+
+                                            if should_replace {
                                                 data_buffer
                                                     .property_edge_map
                                                     .write()?
                                                     .insert(edge_triple_predicate_term_id, edge);
                                             }
-                                            {
-                                                data_buffer
-                                                    .property_domain_map
-                                                    .write()?
-                                                    .entry(edge_triple_predicate_term_id)
-                                                    .or_default()
-                                                    .insert(edge_triple.subject_term_id);
-                                            }
-                                            {
-                                                let object_term_id = {
-                                                    match edge_triple.object_term_id {
-                                                        Some(id) => id,
-                                                        None => {
-                                                            let msg =
-                                                                "Failed to update range for edge"
-                                                                    .to_string();
-                                                            let display_edge = data_buffer
-                                                                .term_index
-                                                                .display_triple(&edge_triple)?;
-                                                            return Err(SerializationErrorKind::MissingObject(display_edge, msg))?;
-                                                        }
-                                                    }
-                                                };
-                                                data_buffer
-                                                    .property_range_map
-                                                    .write()?
-                                                    .entry(edge_triple_predicate_term_id)
-                                                    .or_default()
-                                                    .insert(object_term_id);
-                                            }
 
-                                            // Re-evaluate any characteristics waiting for this edge to exist
-                                            self.check_unknown_buffer(
-                                                data_buffer,
-                                                &edge_triple_predicate_term_id,
-                                            )?;
+                                            data_buffer
+                                                .property_domain_map
+                                                .write()?
+                                                .entry(edge_triple_predicate_term_id)
+                                                .or_default()
+                                                .insert(edge_triple.subject_term_id);
+
+                                            let object_term_id =
+                                                edge_triple.object_term_id.ok_or_else(|| {
+                                                    SerializationErrorKind::MissingObject(
+                                                        data_buffer
+                                                            .term_index
+                                                            .display_triple(&edge_triple)
+                                                            .unwrap_or_default(),
+                                                        "Failed to update range for edge"
+                                                            .to_string(),
+                                                    )
+                                                })?;
+
+                                            data_buffer
+                                                .property_range_map
+                                                .write()?
+                                                .entry(edge_triple_predicate_term_id)
+                                                .or_default()
+                                                .insert(object_term_id);
                                         }
                                     }
                                     None => {
@@ -4517,6 +4525,29 @@ impl GraphDisplayDataSolutionSerializer {
             data_buffer.individual_count_buffer.write()?.remove(term_id);
         }
         Ok(())
+    }
+
+    fn has_non_fallback_property_edge(
+        &self,
+        data_buffer: &SerializationDataBuffer,
+        property_term_id: &usize,
+    ) -> Result<bool, SerializationError> {
+        let edge = {
+            data_buffer
+                .property_edge_map
+                .read()?
+                .get(property_term_id)
+                .cloned()
+        };
+
+        let Some(edge) = edge else {
+            return Ok(false);
+        };
+
+        Ok(!Self::is_synthetic_property_fallback(
+            &data_buffer.term_index,
+            &edge,
+        )?)
     }
 
     fn remove_property_fallback_edge(

@@ -27,16 +27,16 @@ pub const NAMED_INDIVIDUAL_COUNTS: &str = r#"{
     {
         SELECT ?id (COUNT(DISTINCT ?individual) AS ?target)
         WHERE {
-            ?individual a owl:NamedIndividual .
             ?individual a ?id .
             FILTER(isIRI(?id))
+            FILTER(isIRI(?individual))
             FILTER(?id != owl:NamedIndividual)
         }
         GROUP BY ?id
     }
 
     BIND(owl:NamedIndividual AS ?nodeType)
-}"#;
+    }"#;
 
 /// External classes.
 ///

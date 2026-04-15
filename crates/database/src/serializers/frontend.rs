@@ -2504,11 +2504,11 @@ impl GraphDisplayDataSolutionSerializer {
                     }
                     owl::NAMED_INDIVIDUAL => {
                         let count = Self::individual_count_literal(data_buffer, &triple)?;
-                        *data_buffer
-                            .individual_count_buffer
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default() += count;
+                        self.increment_individual_count(
+                            data_buffer,
+                            triple.subject_term_id,
+                            count,
+                        )?;
                         return Ok(SerializationStatus::Serialized);
                     }
                     // owl::NEGATIVE_PROPERTY_ASSERTION => {}
@@ -2534,11 +2534,26 @@ impl GraphDisplayDataSolutionSerializer {
                             .into());
                         };
 
+                        let should_count_member = matches!(
+                            data_buffer.term_index.get(&raw_target)?.as_ref(),
+                            Term::NamedNode(_) | Term::BlankNode(_)
+                        );
+
                         let materialized_target = self.materialize_one_of_target(
                             data_buffer,
                             &triple.subject_term_id,
                             &raw_target,
                         )?;
+
+                        let member_already_present = if should_count_member {
+                            self.has_enumeration_member_edge(
+                                data_buffer,
+                                triple.subject_term_id,
+                                materialized_target,
+                            )?
+                        } else {
+                            false
+                        };
 
                         let edge_triple = self.create_triple_from_id(
                             &data_buffer.term_index,
@@ -2553,7 +2568,16 @@ impl GraphDisplayDataSolutionSerializer {
                             ElementType::NoDraw,
                             None,
                         )? {
-                            Some(_) => return Ok(SerializationStatus::Serialized),
+                            Some(_) => {
+                                if should_count_member && !member_already_present {
+                                    self.increment_individual_count(
+                                        data_buffer,
+                                        triple.subject_term_id,
+                                        1,
+                                    )?;
+                                }
+                                return Ok(SerializationStatus::Serialized);
+                            }
                             None => return Ok(SerializationStatus::Deferred),
                         }
                     }
@@ -3510,6 +3534,50 @@ impl GraphDisplayDataSolutionSerializer {
             )
             .into()),
         }
+    }
+
+    fn canonical_count_term_id(
+        &self,
+        data_buffer: &SerializationDataBuffer,
+        term_id: usize,
+    ) -> Result<usize, SerializationError> {
+        self.follow_redirection(data_buffer, term_id)
+    }
+
+    fn increment_individual_count(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        term_id: usize,
+        delta: u32,
+    ) -> Result<(), SerializationError> {
+        let canonical_term_id = self.canonical_count_term_id(data_buffer, term_id)?;
+        *data_buffer
+            .individual_count_buffer
+            .write()?
+            .entry(canonical_term_id)
+            .or_default() += delta;
+        Ok(())
+    }
+
+    fn has_enumeration_member_edge(
+        &self,
+        data_buffer: &SerializationDataBuffer,
+        subject_term_id: usize,
+        object_term_id: usize,
+    ) -> Result<bool, SerializationError> {
+        let canonical_subject_term_id =
+            self.canonical_count_term_id(data_buffer, subject_term_id)?;
+        let canonical_object_term_id = self.canonical_count_term_id(data_buffer, object_term_id)?;
+
+        let candidate = self.create_edge_from_id(
+            &data_buffer.term_index,
+            canonical_subject_term_id,
+            ElementType::NoDraw,
+            canonical_object_term_id,
+            None,
+        )?;
+
+        Ok(data_buffer.edge_buffer.read()?.contains(&candidate))
     }
 
     fn individual_count_literal(

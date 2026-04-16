@@ -18,6 +18,7 @@ pub mod blocks;
 pub mod components;
 
 pub mod errors;
+pub mod events;
 pub mod hydration_scripts;
 pub mod pages;
 

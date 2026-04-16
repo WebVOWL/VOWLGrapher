@@ -8248,6 +8248,7 @@ dependencies = [
  "test-generator",
  "tokio",
  "unescape_zero_copy",
+ "uuid",
  "vowlgrapher-parser",
  "vowlgrapher-serializer",
  "vowlgrapher-sparql-queries",

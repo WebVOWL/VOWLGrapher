@@ -75,4 +75,33 @@ impl QueryAssembler {
         }
         Self::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
     }
+
+    pub fn assemble_custom_query(user_query: &str) -> String {
+        let prefixes = DEFAULT_PREFIXES
+            .iter()
+            .map(|item| format!("PREFIX {item}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!(
+            r#"
+            {}
+            CONSTRUCT {{
+                ?id rdf:type ?nodeType .
+                ?id rdfs:label ?label .
+                ?id ?p ?target .
+            }}
+            WHERE {{
+                GRAPH <{{GRAPH_IRI}}> {{
+                    {{  {}  }}
+                    OPTIONAL {{ ?id rdfs:label ?label }}
+                    OPTIONAL {{ ?id ?p ?target . FILTER(?p != rdf:type && ?p != rdfs:label) }}
+                }}
+            }}
+            "#,
+            prefixes,
+            user_query
+        )
+    }
+
 }

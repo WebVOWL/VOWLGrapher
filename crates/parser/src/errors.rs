@@ -28,6 +28,10 @@ pub enum VOWLGrapherStoreErrorKind {
     ///
     /// Example: the file is parsed as `.owl` but has a `.ttl` extension.
     IncorrectFileExtension(String),
+    /// Error on file extension for imported ontology
+    ImportResolutionError(String),
+    /// Error on fetch of imported ontology
+    RemoteFetchError(String),
     /// An error raised by Horned-OWL during parsing (of OWL files).
     HornedError(Box<HornedError>),
     /// Generic IO error.
@@ -183,6 +187,8 @@ impl std::error::Error for VOWLGrapherStoreError {
             VOWLGrapherStoreErrorKind::HornedError(e) => Some(e),
             VOWLGrapherStoreErrorKind::IOError(e) => Some(e),
             VOWLGrapherStoreErrorKind::IriParseError(e) => Some(e),
+            VOWLGrapherStoreErrorKind::ImportResolutionError(_) => None,
+            VOWLGrapherStoreErrorKind::RemoteFetchError(_) => None,
             VOWLGrapherStoreErrorKind::LoaderError(e) => Some(e),
             VOWLGrapherStoreErrorKind::QueryEvaluationError(e) => Some(e),
             VOWLGrapherStoreErrorKind::JoinError(e) => Some(e),
@@ -216,6 +222,12 @@ impl From<VOWLGrapherStoreError> for ErrorRecord {
                 ErrorSeverity::Critical,
                 ErrorType::Parser,
             ),
+            VOWLGrapherStoreErrorKind::ImportResolutionError(e) => {
+                (e, ErrorSeverity::Warning, ErrorType::Parser)
+            }
+            VOWLGrapherStoreErrorKind::RemoteFetchError(e) => {
+                (e, ErrorSeverity::Warning, ErrorType::Parser)
+            }
             VOWLGrapherStoreErrorKind::LoaderError(loader_error) => (
                 loader_error.to_string(),
                 ErrorSeverity::Critical,

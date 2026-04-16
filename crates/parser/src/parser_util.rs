@@ -165,13 +165,12 @@ pub fn parser_from_path(
 ) -> Result<Vec<Quad>, VOWLGrapherStoreError> {
     let reader = std::fs::File::open(path)?;
     let reader = BufReader::new(reader);
-    parser_from_reader(reader, path, format, lenient, graph_iri)
+    parser_from_reader(reader, format, lenient, graph_iri)
 }
 
 /// Returns the quads from parsing the reader, reading from the path.
 pub fn parser_from_reader(
     mut reader: impl BufRead,
-    path: &Path,
     format: DataType,
     lenient: bool,
     graph_iri: &str,
@@ -257,41 +256,10 @@ pub fn parser_from_reader(
 
             collect_quads(make_parser(RdfFormat::RdfXml), &buf)
         }
-        DataType::OWL => {
-            info!("Parsing OWL input...");
-            let start_time = Instant::now();
-
-            let b = horned_owl::model::Build::<RcStr>::new();
-            let iri = horned_owl::resolve::path_to_file_iri(&b, path);
-            let (ontology, _) = rdf::closure_reader::read::<
-                RcStr,
-                RcAnnotatedComponent,
-                ConcreteRDFOntology<RcStr, RcAnnotatedComponent>,
-            >(&iri, ParserConfiguration::default())?;
-
-            info!(
-                "Parsing completed in {} s",
-                Instant::now()
-                    .checked_duration_since(start_time)
-                    .unwrap_or(Duration::new(0, 0))
-                    .as_secs_f32()
-            );
-
-            info!("Writing to RDF...");
-            let start_time = Instant::now();
-
-            let mut buf = Vec::new();
-            rdf::writer::write(&mut buf, &ontology.into())?;
-
-            info!(
-                "Writing completed in {} s",
-                Instant::now()
-                    .checked_duration_since(start_time)
-                    .unwrap_or(Duration::new(0, 0))
-                    .as_secs_f32()
-            );
-
-            collect_quads(make_parser(RdfFormat::RdfXml), &buf)
+        DataType::OWL | DataType::RDF => {
+            let mut input = Vec::new();
+            reader.read_to_end(&mut input)?;
+            collect_quads(make_parser(RdfFormat::RdfXml), &input)
         }
         f @ DataType::TTL
         | f @ DataType::NTriples
@@ -315,6 +283,18 @@ pub fn parser_from_reader(
         .into()),
     }
 }
+
+/// in-memory parsing
+pub fn parser_from_bytes(
+    bytes: &[u8],
+    format: DataType,
+    lenient: bool,
+    graph_iri: &str,
+) -> Result<Vec<Quad>, VOWLGrapherStoreError> {
+    let reader = BufReader::new(Cursor::new(bytes));
+    parser_from_reader(reader, format, lenient, graph_iri)
+}
+
 struct ChannelWriter {
     sender: UnboundedSender<Result<Vec<u8>, io::Error>>,
 }

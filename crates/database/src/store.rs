@@ -6,13 +6,16 @@ use log::{debug, info, warn};
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::model::{NamedNodeRef, Quad};
 use rdf_fusion::store::Store;
+use reqwest::{Client, Url};
+use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 use std::time::Duration;
 use std::time::Instant;
 use strum::IntoEnumIterator;
-use vowlgrapher_parser::{
-    errors::{VOWLGrapherStoreError, VOWLGrapherStoreErrorKind},
-    parser_util::{format_from_resource_type, parse_quads_to_format, parser_from_path, path_type},
+use vowlgrapher_parser::errors::{VOWLGrapherStoreError, VOWLGrapherStoreErrorKind};
+use vowlgrapher_parser::parser_util::{
+    format_from_resource_type, parse_quads_to_format, parser_from_bytes, parser_from_path,
+    path_type,
 };
 use vowlgrapher_util::prelude::{DataType, VOWLGrapherError};
 
@@ -119,7 +122,12 @@ impl VOWLGrapherStore {
         let format = path_type(fs).ok_or_else(|| {
             VOWLGrapherStoreErrorKind::InvalidFileType("Unknown file extension".into())
         })?;
-        let quads = parser_from_path(fs, format, lenient, &graph_iri)?;
+
+        let root_quads = parser_from_path(fs, format, lenient, &graph_iri)?;
+        let quads = self
+            .flatten_import_closure(root_quads, &graph_iri, lenient, ImportBase::from_path(fs))
+            .await?;
+
         info!("Loading graph '{}' into database...", graph_iri);
         let start_time = Instant::now();
         self.session.extend(quads).await?;
@@ -183,6 +191,38 @@ impl VOWLGrapherStore {
                 .filter(|f| *f != DataType::UNKNOWN)
                 .collect::<Vec<_>>()
         ))
+        .into())
+    }
+
+    async fn load_bytes_with_fallback(
+        &self,
+        bytes: &[u8],
+        hinted_format: DataType,
+        lenient: bool,
+        graph_iri: &str,
+    ) -> Result<(Vec<Quad>, DataType), VOWLGrapherStoreError> {
+        let formats: Vec<DataType> = if hinted_format == DataType::UNKNOWN {
+            DataType::iter()
+                .filter(|f| *f != DataType::UNKNOWN)
+                .collect()
+        } else {
+            std::iter::once(hinted_format)
+                .chain(DataType::iter().filter(|f| *f != DataType::UNKNOWN && *f != hinted_format))
+                .collect()
+        };
+
+        for format in formats {
+            let result =
+                std::panic::catch_unwind(|| parser_from_bytes(bytes, format, lenient, graph_iri));
+            if let Ok(Ok(quads)) = result {
+                info!("Parsed import as {:?}", format);
+                return Ok((quads, format));
+            }
+        }
+
+        Err(VOWLGrapherStoreErrorKind::InvalidFileType(
+            "Could not parse imported ontology".to_string(),
+        )
         .into())
     }
 
@@ -270,7 +310,17 @@ impl VOWLGrapherStore {
             )
             .into());
         };
-        let (quads, loaded_format) = self.load_file(&path, false, &graph_iri).await?;
+
+        let (root_quads, loaded_format) = self.load_file(&path, false, &graph_iri).await?;
+        let quads = self
+            .flatten_import_closure(
+                root_quads,
+                &graph_iri,
+                false,
+                ImportBase::from_user_input(filename),
+            )
+            .await?;
+
         info!("Loading graph '{}' into database...", graph_iri);
         let start_time = Instant::now();
 
@@ -283,8 +333,48 @@ impl VOWLGrapherStore {
                 .unwrap_or(Duration::new(0, 0))
                 .as_secs_f32()
         );
+
         self.upload_handle = None;
         Ok(loaded_format)
+    }
+
+    async fn flatten_import_closure(
+        &self,
+        root_quads: Vec<Quad>,
+        graph_iri: &str,
+        lenient: bool,
+        root_base: ImportBase,
+    ) -> Result<Vec<Quad>, VOWLGrapherStoreError> {
+        let client = Client::new();
+        let mut all_quads = root_quads.clone();
+        let mut visited = HashSet::<String>::new();
+        let mut queue = VecDeque::<(String, ImportBase)>::new();
+
+        for import in extract_import_iris(&root_quads).await? {
+            queue.push_back((import, root_base.clone()));
+        }
+
+        while let Some((raw_import, parent_base)) = queue.pop_front() {
+            let resolved = parent_base.resolve(&raw_import)?;
+            let resolved_key = resolved.to_string();
+
+            if !visited.insert(resolved_key.clone()) {
+                continue;
+            }
+
+            let (bytes, hinted_format, next_base) = fetch_import_source(&client, &resolved).await?;
+            let (quads, _) = self
+                .load_bytes_with_fallback(&bytes, hinted_format, lenient, graph_iri)
+                .await?;
+
+            for nested in extract_import_iris(&quads).await? {
+                queue.push_back((nested, next_base.clone()));
+            }
+
+            all_quads.extend(quads);
+        }
+
+        Ok(all_quads)
     }
 }
 
@@ -292,6 +382,113 @@ impl Default for VOWLGrapherStore {
     fn default() -> Self {
         let session = GLOBAL_STORE.get_or_init(Store::default).clone();
         Self::new(session)
+    }
+}
+
+async fn extract_import_iris(quads: &[Quad]) -> Result<Vec<String>, VOWLGrapherStoreError> {
+    let tmp = Store::default();
+    tmp.extend(quads.iter().cloned()).await?;
+
+    let results = tmp
+        .query(
+            r#"
+        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+        SELECT DISTINCT ?import
+        WHERE {
+            GRAPH ?g {
+                ?ontology owl:imports ?import .
+                FILTER(isIRI(?import))
+            }
+        }
+        "#,
+        )
+        .await?;
+
+    let mut imports = Vec::new();
+    if let QueryResults::Solutions(mut solutions) = results {
+        while let Some(solution) = solutions.next().await {
+            let solution = solution?;
+            if let Some(term) = solution.get("import") {
+                imports.push(
+                    term.to_string()
+                        .trim_start_matches('<')
+                        .trim_end_matches('>')
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    Ok(imports)
+}
+
+async fn fetch_import_source(
+    client: &Client,
+    url: &Url,
+) -> Result<(Vec<u8>, DataType, ImportBase), VOWLGrapherStoreError> {
+    let format = DataType::from(Path::new(url.path()));
+
+    match url.scheme() {
+        "file" => {
+            let path = url.to_file_path().map_err(|_| {
+                VOWLGrapherStoreErrorKind::ImportResolutionError(format!(
+                    "Could not convert file URL to path: {url}"
+                ))
+            })?;
+            let bytes = std::fs::read(&path)?;
+            Ok((bytes, format, ImportBase::from_path(&path)))
+        }
+        "http" | "https" => {
+            let response = client.get(url.clone()).send().await.map_err(|e| {
+                VOWLGrapherStoreErrorKind::RemoteFetchError(format!(
+                    "Failed to fetch import {url}: {e}"
+                ))
+            })?;
+
+            let bytes = response.bytes().await.map_err(|e| {
+                VOWLGrapherStoreErrorKind::RemoteFetchError(format!(
+                    "Failed to read import body {url}: {e}"
+                ))
+            })?;
+
+            Ok((bytes.to_vec(), format, ImportBase::Url(url.clone())))
+        }
+        scheme => Err(VOWLGrapherStoreErrorKind::ImportResolutionError(format!(
+            "Unsupported import scheme '{scheme}' for {url}"
+        ))
+        .into()),
+    }
+}
+
+#[derive(Clone, Debug)]
+enum ImportBase {
+    Url(Url),
+    Unknown,
+}
+
+impl ImportBase {
+    fn from_path(path: &Path) -> Self {
+        Url::from_file_path(path)
+            .map(Self::Url)
+            .unwrap_or(Self::Unknown)
+    }
+
+    fn from_user_input(input: &str) -> Self {
+        Url::parse(input).map(Self::Url).unwrap_or(Self::Unknown)
+    }
+
+    fn resolve(&self, import_iri: &str) -> Result<Url, VOWLGrapherStoreError> {
+        match self {
+            Self::Url(base) => base
+                .join(import_iri)
+                .or_else(|_| Url::parse(import_iri))
+                .map_err(|e| {
+                    VOWLGrapherStoreErrorKind::ImportResolutionError(e.to_string()).into()
+                }),
+            Self::Unknown => Url::parse(import_iri).map_err(|e| {
+                VOWLGrapherStoreErrorKind::ImportResolutionError(e.to_string()).into()
+            }),
+        }
     }
 }
 

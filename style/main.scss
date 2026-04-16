@@ -1,4 +1,5 @@
 @use "workbench";
+@import url('http://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 body {
     // background: rgba(201, 196, 196, 1);
@@ -17,4 +18,8 @@ main {
     position: relative;
     height: 100%;
     width: 100%;
+}
+
+.font-jetbrains{
+    font-family: 'JetBrains Mono', monospace;
 }

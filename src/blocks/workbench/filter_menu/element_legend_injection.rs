@@ -101,7 +101,10 @@ impl ElementLegend for OwlEdge {
             Self::DisjointWith => Some("/node_legends/Disjoint.png".to_string()),
             Self::DeprecatedProperty => Some("/node_legends/DeprecatedProperty.png".to_string()),
             Self::ExternalProperty => Some("/node_legends/ExternalProperty.png".to_string()),
-            Self::InverseOf | Self::ObjectProperty | Self::ValuesFrom => None,
+            Self::InverseOf => Some("/node_legends/InverseOf.png".to_string()),
+            Self::ObjectProperty | Self::ValuesFrom => {
+                Some("/node_legends/ObjectProperty.png".to_string())
+            }
         }
     }
 }

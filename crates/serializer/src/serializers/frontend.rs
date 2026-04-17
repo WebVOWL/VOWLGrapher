@@ -5,7 +5,7 @@ use crate::{
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
         buffers::check_all_unknowns, entity_creation::create_triple_from_id, labels::extract_label,
-        write_triple::serialize_triple,
+        serialize_triple::serialize_triple,
     },
 };
 use futures::StreamExt;

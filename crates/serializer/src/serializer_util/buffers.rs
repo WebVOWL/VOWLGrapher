@@ -20,8 +20,8 @@ use crate::{
         is_external,
         labels::extract_label,
         nodes::insert_node,
+        serialize_triple::serialize_triple,
         try_resolve_reserved,
-        write_triple::serialize_triple,
     },
 };
 

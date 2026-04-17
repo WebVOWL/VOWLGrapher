@@ -1682,5 +1682,5 @@ fn _serialize_triple(
             }
         }
     }
-    Ok(SerializationStatus::Serialized)
+    Ok(SerializationStatus::NotSupported)
 }

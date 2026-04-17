@@ -1,8 +1,11 @@
 mod ontology_header;
 
-use crate::components::{
-    accordion::Accordion, buttons::graph_interaction_buttons::GraphInteractionButtons,
-    user_input::internal_sparql::GraphDataContext,
+use crate::{
+    blocks::right_sidebar::ontology_header::{Author, Description, Language, OntologyIri, Version},
+    components::{
+        accordion::Accordion, buttons::graph_interaction_buttons::GraphInteractionButtons,
+        user_input::internal_sparql::GraphDataContext,
+    },
 };
 use leptos::prelude::*;
 

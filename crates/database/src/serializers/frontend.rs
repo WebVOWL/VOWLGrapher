@@ -3382,17 +3382,7 @@ impl GraphDisplayDataSolutionSerializer {
         triple: ArcTriple,
         characteristic: Characteristic,
     ) -> Result<SerializationStatus, SerializationError> {
-        match characteristic {
-            Characteristic::AsymmetricProperty
-            | Characteristic::InverseFunctionalProperty
-            | Characteristic::IrreflexiveProperty
-            | Characteristic::ReflexiveProperty
-            | Characteristic::SymmetricProperty
-            | Characteristic::TransitiveProperty => {
-                self.ensure_object_property_registration(data_buffer, triple.subject_term_id)?;
-            }
-            Characteristic::FunctionalProperty | Characteristic::HasKey => {}
-        }
+        self.ensure_object_property_registration(data_buffer, triple.subject_term_id)?;
 
         let Some(resolved_property_term_id) = self.resolve(data_buffer, triple.subject_term_id)?
         else {

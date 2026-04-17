@@ -4,8 +4,8 @@ pub mod entity_creation;
 pub mod labels;
 pub mod metadata;
 pub mod nodes;
-pub mod restrictions;
 pub mod synthetic;
+pub mod write_triple;
 
 use grapher::prelude::{
     ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsNode, RdfsType,

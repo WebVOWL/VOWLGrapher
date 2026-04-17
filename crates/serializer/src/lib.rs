@@ -5,7 +5,6 @@ mod errors;
 mod serializer_util;
 mod serializers;
 mod vocab;
-mod write_triple;
 
 pub mod prelude {
     //! Export all types of the crate.

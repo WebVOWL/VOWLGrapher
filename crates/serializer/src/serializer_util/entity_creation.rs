@@ -111,7 +111,7 @@ pub fn get_or_create_domain_thing(
     )?;
     let thing_element = ElementType::Owl(OwlType::Node(OwlNode::Thing));
 
-    insert_node(data_buffer, thing_triple.clone(), thing_element)?;
+    insert_node(data_buffer, &thing_triple, thing_element)?;
 
     {
         data_buffer
@@ -148,7 +148,7 @@ pub fn get_or_create_anchor_thing(
     )?;
     let thing_element = ElementType::Owl(OwlType::Node(OwlNode::Thing));
 
-    insert_node(data_buffer, thing_triple.clone(), thing_element)?;
+    insert_node(data_buffer, &thing_triple, thing_element)?;
     {
         data_buffer
             .label_buffer

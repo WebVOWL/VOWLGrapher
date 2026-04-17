@@ -15,11 +15,14 @@ use crate::{
     },
     errors::SerializationError,
     serializer_util::{
-        edges::follow_redirection, entity_creation::create_triple_from_id, is_external,
-        labels::extract_label, nodes::insert_node, restrictions::retry_restrictions,
+        edges::{follow_redirection, restrictions::retry_restrictions},
+        entity_creation::create_triple_from_id,
+        is_external,
+        labels::extract_label,
+        nodes::insert_node,
         try_resolve_reserved,
+        write_triple::serialize_triple,
     },
-    write_triple::serialize_triple,
 };
 
 /// Returns the term if its element type is known.
@@ -209,21 +212,21 @@ pub fn check_all_unknowns(
 
                 insert_node(
                     data_buffer,
-                    external_triple,
+                    &external_triple,
                     ElementType::Owl(OwlType::Node(OwlNode::ExternalClass)),
                 )?;
             } else if let Some(element_type) = try_resolve_reserved(&term) {
                 let reserved_triple =
                     create_triple_from_id(&data_buffer.term_index, term_id, None, None)?;
 
-                insert_node(data_buffer, reserved_triple, element_type)?;
+                insert_node(data_buffer, &reserved_triple, element_type)?;
             } else if term.is_blank_node() {
                 let anonymous_triple =
                     create_triple_from_id(&data_buffer.term_index, term_id, None, None)?;
 
                 insert_node(
                     data_buffer,
-                    anonymous_triple,
+                    &anonymous_triple,
                     ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass)),
                 )?;
             }

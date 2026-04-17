@@ -239,7 +239,7 @@ pub fn default_restriction_target(
                                     None,
                                 )?;
 
-                                insert_node(data_buffer, range_triple, element_type)?;
+                                insert_node(data_buffer, &range_triple, element_type)?;
                                 return Ok(range_term_id);
                             }
 
@@ -255,7 +255,7 @@ pub fn default_restriction_target(
 
                         insert_node(
                             data_buffer,
-                            range_triple,
+                            &range_triple,
                             ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
                         )?;
                     }
@@ -281,7 +281,7 @@ pub fn default_restriction_target(
                     .contains_key(&literal_triple.subject_term_id)
             };
             if !node_exists {
-                insert_node(data_buffer, literal_triple.clone(), element_type)?;
+                insert_node(data_buffer, &literal_triple, element_type)?;
             }
 
             {
@@ -338,7 +338,7 @@ pub fn materialize_one_of_target(
 
                 insert_node(
                     data_buffer,
-                    resource_triple,
+                    &resource_triple,
                     ElementType::Rdfs(RdfsType::Node(RdfsNode::Resource)),
                 )?;
             }
@@ -379,7 +379,7 @@ pub fn materialize_literal_value_target(
 
         insert_node(
             data_buffer,
-            literal_triple,
+            &literal_triple,
             ElementType::Rdfs(RdfsType::Node(RdfsNode::Literal)),
         )?;
     }
@@ -829,7 +829,7 @@ pub fn materialize_named_value_target(
 
                 insert_node(
                     data_buffer,
-                    resource_triple,
+                    &resource_triple,
                     ElementType::Rdfs(RdfsType::Node(RdfsNode::Resource)),
                 )?;
             }

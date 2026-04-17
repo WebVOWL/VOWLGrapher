@@ -19,5 +19,5 @@ pub type ArcLockRestrictionState = Arc<RwLock<RestrictionState>>;
 pub enum SerializationStatus {
     Serialized,
     Deferred,
-    Unknown,
+    NotSupported,
 }

@@ -9,15 +9,17 @@ use crate::{
     serializer_util::{
         buffers::{add_term_to_element_buffer, add_triple_to_element_buffer, check_unknown_buffer},
         can_upgrade_node_type,
-        edges::{canonical_count_term_id, redirect_iri, update_edges},
+        edges::{
+            canonical_count_term_id, redirect_iri, restrictions::merge_restriction_state,
+            update_edges,
+        },
         is_external, is_synthetic,
-        restrictions::merge_restriction_state,
     },
 };
 
 pub fn insert_node(
     data_buffer: &mut SerializationDataBuffer,
-    triple: ArcTriple,
+    triple: &ArcTriple,
     node_type: ElementType,
 ) -> Result<(), SerializationError> {
     if data_buffer

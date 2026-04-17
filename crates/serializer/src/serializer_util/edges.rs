@@ -1,7 +1,7 @@
 //! Functions related to edges and properties.
 
 pub mod characteristics;
-
+pub mod restrictions;
 use std::collections::HashSet;
 
 use grapher::prelude::{ElementType, OwlEdge, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsType};

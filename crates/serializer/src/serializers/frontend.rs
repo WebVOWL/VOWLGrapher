@@ -1,18 +1,12 @@
-use std::{
-    mem::take,
-    num::NonZero,
-    sync::{Arc, RwLock},
-    thread::available_parallelism,
-    time::Instant,
-};
+use std::{mem::take, num::NonZero, thread::available_parallelism, time::Instant};
 
 use crate::{
     datastructures::serialization_data_buffer::SerializationDataBuffer,
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
         buffers::check_all_unknowns, entity_creation::create_triple_from_id, labels::extract_label,
+        write_triple::serialize_triple,
     },
-    write_triple::serialize_triple,
 };
 use futures::StreamExt;
 use grapher::prelude::GraphDisplayData;
@@ -25,9 +19,7 @@ use vowlgrapher_parser::errors::VOWLGrapherStoreError;
 use vowlgrapher_util::prelude::{ErrorRecord, VOWLGrapherError};
 
 #[derive(Default)]
-pub struct GraphDisplayDataSolutionSerializer {
-    document_base_warning_fired: Arc<RwLock<bool>>,
-}
+pub struct GraphDisplayDataSolutionSerializer;
 
 impl GraphDisplayDataSolutionSerializer {
     pub fn new() -> Self {

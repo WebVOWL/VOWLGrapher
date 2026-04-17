@@ -87,6 +87,7 @@ impl VOWLGrapherStore {
     ///
     /// # Errors
     /// Returns an error if the query or serialization encountered a fatal problem.
+    #[expect(clippy::literal_string_with_formatting_args)]
     pub async fn query(
         &self,
         query: String,
@@ -168,31 +169,31 @@ impl VOWLGrapherStore {
         Ok(warnings)
     }
 
-    async fn load_file(
-        &self,
+    fn load_file(
         path: &Path,
         lenient: bool,
         graph_name: &str,
     ) -> Result<(Vec<Quad>, DataType), VOWLGrapherStoreError> {
         let dtype = path.into();
         if dtype == DataType::UNKNOWN {
-            self.try_load_fallback(path, lenient, None, graph_name)
-                .await
+            Self::try_load_fallback(path, lenient, None, graph_name)
         } else {
             let result =
                 std::panic::catch_unwind(|| parser_from_path(path, dtype, lenient, graph_name));
             match result {
                 Ok(Ok(quads)) => Ok((quads, dtype)),
-                _ => {
-                    self.try_load_fallback(path, lenient, Some(dtype), graph_name)
-                        .await
-                }
+                _ => Self::try_load_fallback(path, lenient, Some(dtype), graph_name),
             }
         }
     }
 
-    async fn try_load_fallback(
-        &self,
+    /// Fallback parsers for when the main parser failed.
+    ///
+    /// This iterates over remaining parse formats and tries each until it succeeds or fails.
+    ///
+    /// # Errors
+    /// Returns an error if no format supports the file at the given path.
+    fn try_load_fallback(
         path: &Path,
         lenient: bool,
         skip_format: Option<DataType>,
@@ -206,7 +207,7 @@ impl VOWLGrapherStore {
             let result =
                 std::panic::catch_unwind(|| parser_from_path(path, format, lenient, graph_name));
             if let Ok(Ok(quads)) = result {
-                info!("Parsed file as {:?}", format);
+                info!("Parsed file as {format:?}");
                 return Ok((quads, format));
             }
         }
@@ -253,6 +254,9 @@ impl VOWLGrapherStore {
     }
 
     /// Serializes the store into a stream of the specified resource type.
+    ///
+    /// # Errors
+    /// Returns an error if the store fails to serialize its content.
     pub async fn serialize_stream(
         &self,
         resource_type: DataType,
@@ -267,7 +271,7 @@ impl VOWLGrapherStore {
         let graph_ref = NamedNodeRef::new(&graph_name)?;
 
         if matches!(resource_type, DataType::OWL | DataType::OFN | DataType::OWX) {
-            info!("Exporting graph '{}' as {:?}...", graph_name, resource_type);
+            info!("Exporting graph '{graph_name}' as {resource_type:?}...");
             let quads_stream = self
                 .session
                 .quads_for_pattern(None, None, None, Some(graph_ref.into()))
@@ -276,7 +280,7 @@ impl VOWLGrapherStore {
         }
 
         if let Some(format) = format_from_resource_type(&resource_type) {
-            info!("Exporting graph '{}' as {:?}...", graph_name, format);
+            info!("Exporting graph '{graph_name}' as {format:?}...");
             let buf = self
                 .session
                 .dump_graph_to_writer(graph_ref, format, Vec::new())
@@ -285,22 +289,22 @@ impl VOWLGrapherStore {
         }
         Err(VOWLGrapherStoreError::from(
             VOWLGrapherStoreErrorKind::InvalidFileType(format!(
-                "Unsupported output type: {:?}",
-                resource_type
+                "Unsupported output type: {resource_type:?}"
             )),
         ))
     }
 
     /// Create a temporary file on the server to upload user input into.
     ///
-    /// TODO: Ensure this can handle multiple users.
-    pub async fn start_upload(&mut self, filename: &str) -> Result<(), VOWLGrapherStoreError> {
+    /// # Errors
+    /// Returns an error if the file cannot be created.
+    pub fn start_upload(&mut self, filename: &str) -> Result<(), VOWLGrapherStoreError> {
         let extension = Path::new(filename)
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("owl");
         let file = tempfile::Builder::new()
-            .suffix(&format!(".{}", extension))
+            .suffix(&format!(".{extension}"))
             .tempfile()?;
         self.upload_handle = Some(file);
         Ok(())
@@ -308,20 +312,24 @@ impl VOWLGrapherStore {
 
     /// Insert a chunk of data into the file currently in use.
     ///
-    /// TODO: Ensure this can handle multiple users.
-    pub async fn upload_chunk(&mut self, data: &[u8]) -> Result<(), VOWLGrapherStoreError> {
+    /// # Errors
+    /// Returns an error if the data cannot ve written to the file.
+    pub fn upload_chunk(&mut self, data: &[u8]) -> Result<(), VOWLGrapherStoreError> {
         if let Some(file) = &mut self.upload_handle {
             std::io::Write::write_all(file, data)?;
-            Ok(())
         } else {
             warn!("upload_chunk called without start_upload");
-            Ok(())
         }
+        Ok(())
     }
 
     /// Inserts a file into the store.
     ///
     /// Files are automatically parsed.
+    ///
+    /// # Errors
+    /// Returns an error if the file fails to parse or
+    /// the store fails to load the triples of the file.
     pub async fn complete_upload(
         &mut self,
         filename: &str,
@@ -337,15 +345,13 @@ impl VOWLGrapherStore {
             .into());
         };
 
-        let (root_quads, loaded_format) = self.load_file(&path, false, &graph_name).await?;
-        let (quads, warnings) = self
-            .flatten_import_closure(
-                root_quads,
-                &graph_name,
-                false,
-                ImportBase::from_user_input(filename),
-            )
-            .await?;
+        let (root_quads, loaded_format) = Self::load_file(&path, false, &graph_name)?;
+        let (quads, warnings) = self.flatten_import_closure(
+            root_quads,
+            &graph_name,
+            false,
+            ImportBase::from_user_input(filename),
+        )?;
 
         info!("Loading graph '{graph_name}' into database...");
         let start_time = Instant::now();
@@ -667,12 +673,8 @@ mod test {
         let mut out = vec![];
         let store = VOWLGrapherStore::default();
         store.insert_file(Path::new(&resource), false).await?;
-        while let Some(result) = store
-            .serialize_stream(DataType::OWL, resource)
-            .await?
-            .next()
-            .await
-        {
+        let mut stream = store.serialize_stream(DataType::OWL, resource).await?;
+        while let Some(result) = stream.next().await {
             out.extend(result?);
         }
 
@@ -685,12 +687,8 @@ mod test {
         let mut out = vec![];
         let store = VOWLGrapherStore::default();
         store.insert_file(Path::new(&resource), false).await?;
-        while let Some(result) = store
-            .serialize_stream(DataType::OWL, resource)
-            .await?
-            .next()
-            .await
-        {
+        let mut stream = store.serialize_stream(DataType::OWL, resource).await?;
+        while let Some(result) = stream.next().await {
             out.extend(result?);
         }
 
@@ -703,12 +701,8 @@ mod test {
         let mut out = vec![];
         let store = VOWLGrapherStore::default();
         store.insert_file(Path::new(&resource), false).await?;
-        while let Some(result) = store
-            .serialize_stream(DataType::OWL, resource)
-            .await?
-            .next()
-            .await
-        {
+        let mut stream = store.serialize_stream(DataType::OWL, resource).await?;
+        while let Some(result) = stream.next().await {
             out.extend(result?);
         }
         assert_ne!(out.len(), 0, "Expected non-zero quads for: {resource}");

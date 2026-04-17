@@ -70,6 +70,7 @@ pub const LONG: NamedNodeRef<'_> =
 /// XML Names.
 pub const NAME: NamedNodeRef<'_> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#Name");
+#[expect(clippy::doc_markdown, reason = "NCName is the official name")]
 /// XML NCName.
 pub const NC_NAME: NamedNodeRef<'_> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2001/XMLSchema#NCName");

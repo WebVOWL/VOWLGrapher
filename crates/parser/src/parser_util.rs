@@ -364,7 +364,7 @@ mod test {
         use rdf_fusion::store::Store;
 
         // Initialize logger if it isn't already initialized
-        let _ = env_logger::Builder::from_env(Env::default().default_filter_or("warn")).try_init();
+        env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
 
         let session = Store::default();
         for resource in resources {
@@ -380,7 +380,10 @@ mod test {
             let quads =
                 parser_from_path(resource.as_ref(), dt, false, "urn:vowlgrapher:test_graph")
                     .expect("parsing should succeed");
-            let _ = session.extend(quads).await;
+            session
+                .extend(quads)
+                .await
+                .expect("extending session should succeed");
             assert_ne!(
                 session
                     .len()

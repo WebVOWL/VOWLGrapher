@@ -1,4 +1,4 @@
-//! [OWL2](https://www.w3.org/ TR/owl2-syntax/) vocabulary.
+//! [OWL2](https://www.w3.org/TR/owl2-syntax/) vocabulary.
 use oxrdf::NamedNodeRef;
 
 /// The class of collections of pairwise different individuals.

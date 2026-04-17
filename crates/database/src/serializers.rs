@@ -1,3 +1,4 @@
+#![expect(clippy::struct_field_names)]
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
@@ -47,7 +48,7 @@ impl Display for Triple {
             "{}",
             self.predicate_term_id
                 .as_ref()
-                .map(|t| t.to_string())
+                .map(std::string::ToString::to_string)
                 .unwrap_or_default(),
         )?;
         write!(
@@ -55,7 +56,7 @@ impl Display for Triple {
             "{}",
             self.object_term_id
                 .as_ref()
-                .map(|t| t.to_string())
+                .map(std::string::ToString::to_string)
                 .unwrap_or_default(),
         )?;
         write!(f, "}}")
@@ -63,7 +64,7 @@ impl Display for Triple {
 }
 
 impl Triple {
-    pub fn new(
+    pub const fn new(
         subject_term_id: usize,
         predicate_term_id: Option<usize>,
         object_term_id: Option<usize>,
@@ -93,7 +94,7 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(
+    pub const fn new(
         domain_term_id: usize,
         edge_type: ElementType,
         range_term_id: usize,
@@ -301,6 +302,11 @@ impl SerializationDataBuffer {
         }
     }
 
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "this method clears most buffers and is expected to be called at the end of processing. 
+        Thus, keeping locks longer than necessary doesn't matter"
+    )]
     /// Converts [`self`] into [`GraphDisplayData`].
     ///
     /// Works like [`TryFrom`] except it also returns non-critical errors in [`Result::Ok`].
@@ -318,15 +324,15 @@ impl SerializationDataBuffer {
 
         let mut label_buffer = self.label_buffer.write()?;
         let mut node_element_buffer = self.node_element_buffer.write()?;
-        for (term_id, element) in take(&mut *node_element_buffer).into_iter() {
+        for (term_id, element) in take(&mut *node_element_buffer) {
             let label = label_buffer.remove(&term_id);
             if label.is_none() && !self.term_index.is_blank_node(&term_id)? {
-                let msg = match self.term_index.get(&term_id) {
+                let msg = match self.term_index.get(term_id) {
                     Ok(term) => {
-                        format!("Label not found for term '{}'. Using None", term)
+                        format!("Label not found for term '{term}'. Using None")
                     }
                     Err(e) => {
-                        format!("Label not found for term '{}'. Using None", e)
+                        format!("Label not found for term '{e}'. Using None")
                     }
                 };
                 debug!("{msg}");
@@ -351,22 +357,21 @@ impl SerializationDataBuffer {
                     let edge_idx =
                         if edge.edge_type == ElementType::Owl(OwlType::Edge(OwlEdge::InverseOf)) {
                             let Some(property_id) = edge.property_term_id else {
-                                let msg = format!("Edge is missing merged property id\n{}", edge);
+                                let msg = format!("Edge is missing merged property id\n{edge}");
                                 failed.push(<SerializationError as Into<ErrorRecord>>::into(
                                     SerializationErrorKind::MissingProperty(msg).into(),
                                 ));
                                 continue;
                             };
 
-                            match inverse_edge_indices.get(&property_id) {
-                                Some(existing_idx) => *existing_idx,
-                                None => {
-                                    display_data.elements.push(edge.edge_type);
-                                    display_data.labels.push(maybe_label.clone());
-                                    let new_idx = display_data.elements.len() - 1;
-                                    inverse_edge_indices.insert(property_id, new_idx);
-                                    new_idx
-                                }
+                            if let Some(existing_idx) = inverse_edge_indices.get(&property_id) {
+                                *existing_idx
+                            } else {
+                                display_data.elements.push(edge.edge_type);
+                                display_data.labels.push(maybe_label.clone());
+                                let new_idx = display_data.elements.len() - 1;
+                                inverse_edge_indices.insert(property_id, new_idx);
+                                new_idx
                             }
                         } else {
                             display_data.elements.push(edge.edge_type);
@@ -422,28 +427,25 @@ impl SerializationDataBuffer {
         }
 
         let mut node_characteristics = self.node_characteristics.write()?;
-        for (term_id, characteristics) in take(&mut *node_characteristics).into_iter() {
+        for (term_id, characteristics) in take(&mut *node_characteristics) {
             let idx = iricache.get(&term_id);
-            match idx {
-                Some(idx) => {
-                    display_data.characteristics.insert(*idx, characteristics);
-                }
-                None => {
-                    let msg = match self.term_index.get(&term_id) {
-                        Ok(term) => {
-                            format!("Characteristic not found for term '{}' in iricache", term)
-                        }
-                        Err(e) => {
-                            format!("Characteristic not found for term '{}' in iricache", e)
-                        }
-                    };
-                    debug!("{msg}");
-                }
+            if let Some(idx) = idx {
+                display_data.characteristics.insert(*idx, characteristics);
+            } else {
+                let msg = match self.term_index.get(term_id) {
+                    Ok(term) => {
+                        format!("Characteristic not found for term '{term}' in iricache")
+                    }
+                    Err(e) => {
+                        format!("Characteristic not found for term '{e}' in iricache")
+                    }
+                };
+                debug!("{msg}");
             }
         }
 
         let mut individual_count_buffer = self.individual_count_buffer.write()?;
-        for (term_id, count) in take(&mut *individual_count_buffer).into_iter() {
+        for (term_id, count) in take(&mut *individual_count_buffer) {
             if let Some(idx) = iricache.get(&term_id) {
                 display_data.individual_counts.insert(*idx, count);
             }
@@ -466,7 +468,7 @@ impl Display for SerializationDataBuffer {
             "\tdocument_base: {}",
             self.document_base
                 .read()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone()
                 .unwrap_or_default()
         )?;
@@ -474,64 +476,64 @@ impl Display for SerializationDataBuffer {
         for (term_id, element) in self
             .node_element_buffer
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "\t\t{} : {}", term, element)?;
+            writeln!(f, "\t\t{term} : {element}")?;
         }
         writeln!(f, "\tedge_element_buffer (not used by into()):")?;
         for (term_id, element) in self
             .edge_element_buffer
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "\t\t{} : {}", term, element)?;
+            writeln!(f, "\t\t{term} : {element}")?;
         }
         writeln!(f, "\tedge_redirection:")?;
         for (term_id, subject_term_id) in self
             .edge_redirection
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
             let subject_term = self
                 .term_index
-                .get(subject_term_id)
+                .get(*subject_term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "\t\t{} -> {}", term, subject_term)?;
+            writeln!(f, "\t\t{term} -> {subject_term}")?;
         }
         writeln!(f, "\tedges_include_map: ")?;
         for (term_id, edges) in self
             .edges_include_map
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "\t\t{} : {{", term)?;
-            for edge in edges.iter() {
+            writeln!(f, "\t\t{term} : {{")?;
+            for edge in edges {
                 let display_edge = self
                     .term_index
                     .display_edge(edge)
                     .unwrap_or_else(|e| e.to_string());
 
-                writeln!(f, "\t\t\t{}", display_edge)?;
+                writeln!(f, "\t\t\t{display_edge}")?;
             }
             writeln!(f, "\t\t}}")?;
         }
@@ -539,74 +541,74 @@ impl Display for SerializationDataBuffer {
         for (term_id, label) in self
             .label_buffer
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "\t\t{} : {:?}", term, label)?;
+            writeln!(f, "\t\t{term} : {:?label}")?;
         }
         writeln!(f, "\tedge_buffer:")?;
         for edge in self
             .edge_buffer
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let display_edge = self
                 .term_index
                 .display_edge(edge)
                 .unwrap_or_else(|e| e.to_string());
-            writeln!(f, "\t\t{}", display_edge)?;
+            writeln!(f, "\t\t{display_edge}")?;
         }
 
         writeln!(f, "\tedge_characteristics:")?;
         for (edge, characteristics) in self
             .edge_characteristics
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let display_edge = self
                 .term_index
                 .display_edge(edge)
                 .unwrap_or_else(|e| e.to_string());
-            writeln!(f, "{}\n\t{:?}", display_edge, characteristics)?;
+            writeln!(f, "{display_edge}\n\t{characteristics:?}")?;
         }
 
         writeln!(f, "\tnode_characteristics:")?;
         for (term_id, characteristics) in self
             .node_characteristics
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            writeln!(f, "{}\n\t{:?}", term, characteristics)?;
+            writeln!(f, "{term}\n\t{characteristics:?}")?;
         }
 
         writeln!(f, "\tindividual_count_buffer:")?;
         for (term_id, individual_count) in self
             .individual_count_buffer
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
             writeln!(
                 f,
                 "\t\t{} : {} individual{}",
                 term,
                 individual_count,
-                if *individual_count != 1 { "s" } else { "" }
+                if *individual_count == 1 { "" } else { "s" }
             )?;
         }
 
@@ -614,20 +616,20 @@ impl Display for SerializationDataBuffer {
         for (term_id, triples) in self
             .unknown_buffer
             .read()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
         {
             let term = self
                 .term_index
-                .get(term_id)
+                .get(*term_id)
                 .map_or_else(|e| e.to_string(), |term| term.to_string());
-            write!(f, "\t\t{} : ", term)?;
+            write!(f, "\t\t{term} : ")?;
             for triple in triples {
                 let display_triple = self
                     .term_index
                     .display_triple(triple)
                     .unwrap_or_else(|e| e.to_string());
-                writeln!(f, "{}", display_triple)?;
+                writeln!(f, "{display_triple}")?;
             }
         }
         // Not needed as it's displayed by the serializer
@@ -669,8 +671,8 @@ mod tests {
 
         // Test that they hash to the same value by inserting into a HashSet
         let mut edge_set = HashSet::new();
-        edge_set.insert(edge1.clone());
-        edge_set.insert(edge2.clone());
+        edge_set.insert(edge1);
+        edge_set.insert(edge2);
 
         assert_eq!(
             edge_set.len(),
@@ -707,8 +709,8 @@ mod tests {
 
         // Test that they both appear in the HashSet
         let mut edge_set = HashSet::new();
-        edge_set.insert(edge1.clone());
-        edge_set.insert(edge2.clone());
+        edge_set.insert(edge1);
+        edge_set.insert(edge2);
 
         assert_eq!(
             edge_set.len(),

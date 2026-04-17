@@ -32,19 +32,19 @@ impl TermIndex {
     ///
     /// # Errors
     /// Returns an error if the underlying lock is poisoned when accessed.
-    pub fn insert(&mut self, term: Term) -> Result<usize, SerializationError> {
+    pub fn insert(&self, term: Term) -> Result<usize, SerializationError> {
         let mut str_index = self.str_index.write()?;
-        match str_index.get(&term) {
-            Some(id) => Ok(*id),
-            None => {
-                let arc_term = Arc::new(term);
-                let id = str_index.len();
+        if let Some(id) = str_index.get(&term) {
+            Ok(*id)
+        } else {
+            let arc_term = Arc::new(term);
+            let id = str_index.len();
 
-                str_index.insert(arc_term.clone(), id);
-                self.int_index.write()?.insert(id, arc_term);
+            str_index.insert(arc_term.clone(), id);
+            drop(str_index);
+            self.int_index.write()?.insert(id, arc_term);
 
-                Ok(id)
-            }
+            Ok(id)
         }
     }
 
@@ -54,8 +54,9 @@ impl TermIndex {
     ///
     /// # Errors
     /// Returns an error if the underlying lock is poisoned when accessed.
-    pub fn remove(&mut self, term_id: &usize) -> Result<Option<ArcTerm>, SerializationError> {
-        if let Some(term) = self.int_index.write()?.remove(term_id) {
+    pub fn remove(&self, term_id: usize) -> Result<Option<ArcTerm>, SerializationError> {
+        let value = self.int_index.write()?.remove(&term_id);
+        if let Some(term) = value {
             self.str_index.write()?.remove(&term);
             return Ok(Some(term));
         }
@@ -68,11 +69,11 @@ impl TermIndex {
     /// Returns an error if no term corresponding to the id was found in the index.
     ///
     /// Returns an error if the underlying lock is poisoned when accessed.
-    pub fn get(&self, id: &usize) -> Result<Arc<Term>, SerializationError> {
+    pub fn get(&self, id: usize) -> Result<Arc<Term>, SerializationError> {
         let term = self
             .int_index
             .read()?
-            .get(id)
+            .get(&id)
             .ok_or_else(|| {
                 SerializationErrorKind::TermIndexError(format!(
                     "Failed to find term with id '{id}' in the term index"
@@ -140,14 +141,14 @@ impl TermIndex {
     /// # Errors
     /// Returns an error if the underlying lock is poisoned when accessed.
     pub fn display_triple(&self, triple: &ArcTriple) -> Result<String, SerializationError> {
-        let subject = self.get(&triple.subject_term_id)?.to_string();
+        let subject = self.get(triple.subject_term_id)?.to_string();
         let predicate = if let Some(predicate_term_id) = triple.predicate_term_id {
-            self.get(&predicate_term_id)?.to_string()
+            self.get(predicate_term_id)?.to_string()
         } else {
             String::new()
         };
         let object = if let Some(object_term_id) = triple.object_term_id {
-            self.get(&object_term_id)?.to_string()
+            self.get(object_term_id)?.to_string()
         } else {
             String::new()
         };
@@ -163,8 +164,8 @@ impl TermIndex {
     /// # Errors
     /// Returns an error if the underlying lock is poisoned when accessed.
     pub fn display_edge(&self, edge: &ArcEdge) -> Result<String, SerializationError> {
-        let domain = self.get(&edge.domain_term_id)?;
-        let range = self.get(&edge.range_term_id)?;
+        let domain = self.get(edge.domain_term_id)?;
+        let range = self.get(edge.range_term_id)?;
         // let property = if let Some(property_term_id) = edge.property_term_id {
         //     self.get(&property_term_id)?.to_string()
         // } else {

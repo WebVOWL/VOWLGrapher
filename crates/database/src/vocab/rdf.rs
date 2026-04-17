@@ -69,6 +69,6 @@ pub const PLAIN_LITERAL: NamedNodeRef<'_> =
 /// A class representing a compound literal.
 pub const COMPOUND_LITERAL: NamedNodeRef<'_> =
     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#CompoundLiteral ");
-/// The base direction component of a CompoundLiteral.
+/// The base direction component of a [`COMPOUND_LITERAL`].
 pub const DIRECTION: NamedNodeRef<'_> =
     NamedNodeRef::new_unchecked("http://www.w3.org/1999/02/22-rdf-syntax-ns#direction");

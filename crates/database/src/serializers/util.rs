@@ -58,7 +58,7 @@ pub fn is_synthetic(term: &ArcTerm) -> bool {
     false
 }
 
-/// Reserved IRIs should not be overridden by e.g. "external class" ElementType.
+/// Reserved IRIs should not be overridden by e.g. "external class" [`ElementType`].
 pub fn is_reserved(term: &ArcTerm) -> bool {
     match term.as_ref().as_ref() {
         TermRef::NamedNode(named_node_ref) => {
@@ -138,13 +138,14 @@ pub fn is_reserved(term: &ArcTerm) -> bool {
 /// Returns Some(ElementType) if the `term` is a resolvable, reserved IRI.
 ///
 /// ## Implementation details
-/// This function must contain exactly the same NamedNodeRefs as [`is_reserved`].
+/// This function must contain exactly the same `NamedNodeRef`s as [`is_reserved`].
+#[expect(
+    clippy::match_same_arms,
+    reason = "by keeping them it makes changing it easier in the future"
+)]
 pub fn try_resolve_reserved(term: &ArcTerm) -> Option<ElementType> {
     match term.as_ref().as_ref() {
         TermRef::NamedNode(named_node_ref) => match named_node_ref {
-            rdf::XML_LITERAL | rdf::HTML | rdf::PLAIN_LITERAL => {
-                Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
-            }
             owl::THING => Some(ElementType::Owl(OwlType::Node(OwlNode::Thing))),
             rdfs::DOMAIN
             | rdfs::LITERAL
@@ -166,10 +167,12 @@ pub fn try_resolve_reserved(term: &ArcTerm) -> Option<ElementType> {
             | owl::EQUIVALENT_PROPERTY
             | owl::INTERSECTION_OF
             | owl::UNION_OF => None,
-            owl::REAL | owl::RATIONAL => {
-                Some(ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)))
-            }
-            xsd::ANY_URI
+            rdf::XML_LITERAL
+            | rdf::HTML
+            | rdf::PLAIN_LITERAL
+            | owl::REAL
+            | owl::RATIONAL
+            | xsd::ANY_URI
             | xsd::BASE_64_BINARY
             | xsd::BOOLEAN
             | xsd::BYTE
@@ -217,7 +220,7 @@ pub fn try_resolve_reserved(term: &ArcTerm) -> Option<ElementType> {
 }
 
 /// Removes prefix "<" and suffix ">" from the input to
-/// comply with https://www.ietf.org/rfc/rfc3987.html (p. 12)
+/// comply with <https://www.ietf.org/rfc/rfc3987.html> (p. 12)
 pub fn trim_tag_circumfix(input: &str) -> String {
     input
         .trim_start_matches('<')
@@ -231,7 +234,7 @@ pub fn synthetic_iri(base: &ArcTerm, suffix: &str) -> String {
     format!("{clean}{suffix}")
 }
 
-pub fn is_structural_set_node(element: ElementType) -> bool {
+pub const fn is_structural_set_node(element: ElementType) -> bool {
     matches!(
         element,
         ElementType::Owl(OwlType::Node(
@@ -256,9 +259,9 @@ pub fn can_upgrade_node_type(old: ElementType, new: ElementType) -> bool {
 
 pub fn merge_optional_labels(left: Option<&String>, right: Option<&String>) -> Option<String> {
     match (left, right) {
-        (Some(left), Some(right)) if left == right => Some(left.to_string()),
+        (Some(left), Some(right)) if left == right => Some(left.clone()),
         (Some(left), Some(right)) => Some(format!("{left}\n{right}")),
-        (Some(label), None) | (None, Some(label)) => Some(label.to_string()),
+        (Some(label), None) | (None, Some(label)) => Some(label.clone()),
         (None, None) => None,
     }
 }

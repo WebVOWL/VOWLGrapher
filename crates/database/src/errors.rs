@@ -1,6 +1,7 @@
 use std::{panic::Location, sync::PoisonError};
 
 use oxrdf::{BlankNodeIdParseError, IriParseError};
+use rayon::ThreadPoolBuildError;
 use vowlgrapher_util::prelude::{
     ErrorRecord, ErrorSeverity, ErrorType, VOWLGrapherError, get_timestamp,
 };
@@ -59,9 +60,9 @@ pub enum SerializationErrorKind {
     ///
     /// However, the outcome may not be as expected!
     SerializationWarning(String),
-    /// An error raised during Iri or IriRef validation.
+    /// An error raised during `Iri` or `IriRef` validation.
     IriParseError(String, Box<IriParseError>),
-    /// An error raised during BlankNode IDs validation.
+    /// An error raised during `BlankNode` IDs validation.
     BlankNodeParseError(String, Box<BlankNodeIdParseError>),
     /// An error raised if the query type is not supported.
     ///
@@ -72,11 +73,13 @@ pub enum SerializationErrorKind {
     /// An error raised if a lock becomes poisoned, e.g., if a thread panics
     /// while holding a write lock.
     LockPoisoned(String),
+    /// An error raised if the threadpool fails to build.
+    ThreadPoolFailure(String),
 }
 
 impl From<SerializationErrorKind> for VOWLGrapherError {
     fn from(value: SerializationErrorKind) -> Self {
-        <SerializationError as Into<VOWLGrapherError>>::into(value.into())
+        <SerializationError as Into<Self>>::into(value.into())
     }
 }
 
@@ -118,6 +121,17 @@ impl<T> From<PoisonError<T>> for SerializationError {
     }
 }
 
+impl From<ThreadPoolBuildError> for SerializationError {
+    #[track_caller]
+    fn from(value: ThreadPoolBuildError) -> Self {
+        Self {
+            inner: SerializationErrorKind::ThreadPoolFailure(format!("{value}")),
+            location: Location::caller(),
+            timestamp: get_timestamp(),
+        }
+    }
+}
+
 impl From<SerializationError> for ErrorRecord {
     fn from(value: SerializationError) -> Self {
         let (message, severity) = match value.inner {
@@ -150,9 +164,11 @@ impl From<SerializationError> for ErrorRecord {
             SerializationErrorKind::SerializationFailed(e)
             | SerializationErrorKind::UnsupportedQueryType(e)
             | SerializationErrorKind::TermIndexError(e)
-            | SerializationErrorKind::LockPoisoned(e) => (e, ErrorSeverity::Critical),
+            | SerializationErrorKind::LockPoisoned(e)
+            | SerializationErrorKind::ThreadPoolFailure(e) => (e, ErrorSeverity::Critical),
         };
-        ErrorRecord::new(
+
+        Self::new(
             value.timestamp,
             severity,
             ErrorType::Serializer,
@@ -165,6 +181,6 @@ impl From<SerializationError> for ErrorRecord {
 
 impl From<SerializationError> for VOWLGrapherError {
     fn from(value: SerializationError) -> Self {
-        <ErrorRecord as Into<VOWLGrapherError>>::into(value.into())
+        <ErrorRecord as Into<Self>>::into(value.into())
     }
 }

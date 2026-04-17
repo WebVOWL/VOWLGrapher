@@ -54,6 +54,12 @@ pub enum VOWLGrapherStoreErrorKind {
     SerializerError(Box<SerializerError>),
 }
 
+impl From<VOWLGrapherStoreErrorKind> for VOWLGrapherError {
+    fn from(value: VOWLGrapherStoreErrorKind) -> Self {
+        <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(value.into())
+    }
+}
+
 /// Encapsulates the error with metadata.
 #[derive(Debug)]
 pub struct VOWLGrapherStoreError {

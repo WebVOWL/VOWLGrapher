@@ -2308,44 +2308,52 @@ impl GraphDisplayDataSolutionSerializer {
                     // owl::DISTINCT_MEMBERS => {}
                     owl::EQUIVALENT_CLASS => match self.resolve_so(data_buffer, &triple)? {
                         (Some(resolved_subject_term_id), Some(resolved_object_term_id)) => {
+                            let object_was_anonymous_expr = match triple.object_term_id {
+                                Some(object_term_id) => {
+                                    data_buffer.term_index.is_blank_node(&object_term_id)?
+                                }
+                                None => false,
+                            };
+
+                            let resolved_object_element_before_merge = data_buffer
+                                .node_element_buffer
+                                .read()?
+                                .get(&resolved_object_term_id)
+                                .copied();
+
+                            let object_label_before_merge = data_buffer
+                                .label_buffer
+                                .read()?
+                                .get(&resolved_object_term_id)
+                                .cloned();
+
                             self.merge_nodes(
                                 data_buffer,
                                 resolved_object_term_id,
                                 resolved_subject_term_id,
                             )?;
 
-                            let resolved_subject_element = {
-                                match data_buffer
-                                    .node_element_buffer
-                                    .read()?
-                                    .get(&resolved_subject_term_id)
-                                    .copied()
-                                {
-                                    Some(elem) => elem,
-                                    None => {
-                                        let msg = "subject not present in node_element_buffer"
-                                            .to_string();
-                                        return Err(
-                                            SerializationErrorKind::SerializationFailedTriple(
-                                                data_buffer.term_index.display_triple(&triple)?,
-                                                msg,
-                                            ),
-                                        )?;
-                                    }
+                            let resolved_subject_element = match data_buffer
+                                .node_element_buffer
+                                .read()?
+                                .get(&resolved_subject_term_id)
+                                .copied()
+                            {
+                                Some(elem) => elem,
+                                None => {
+                                    let msg =
+                                        "subject not present in node_element_buffer".to_string();
+                                    return Err(SerializationErrorKind::SerializationFailedTriple(
+                                        data_buffer.term_index.display_triple(&triple)?,
+                                        msg,
+                                    )
+                                    .into());
                                 }
                             };
 
                             if resolved_subject_element
                                 != ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass))
                             {
-                                let object_was_anonymous_expr = {
-                                    match triple.object_term_id {
-                                        Some(object_term_id) => {
-                                            data_buffer.term_index.is_blank_node(&object_term_id)?
-                                        }
-                                        None => false,
-                                    }
-                                };
                                 let keep_structural_type = object_was_anonymous_expr
                                     && !Self::has_named_equivalent_aliases(
                                         data_buffer,
@@ -2353,13 +2361,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     )?;
 
                                 let upgraded_element = if keep_structural_type {
-                                    let resolved_object_element = data_buffer
-                                        .node_element_buffer
-                                        .read()?
-                                        .get(&resolved_object_term_id)
-                                        .copied();
-
-                                    match resolved_object_element {
+                                    match resolved_object_element_before_merge {
                                         Some(object_element)
                                             if is_structural_set_node(object_element) =>
                                         {

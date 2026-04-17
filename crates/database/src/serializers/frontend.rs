@@ -2979,7 +2979,7 @@ impl GraphDisplayDataSolutionSerializer {
                     | xsd::YEAR_MONTH_DURATION => {
                         self.insert_node(
                             data_buffer,
-                            triple,
+                            &triple,
                             ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
                         )?;
                         return Ok(SerializationStatus::Serialized);
@@ -3076,7 +3076,7 @@ impl GraphDisplayDataSolutionSerializer {
                                                 )?;
                                                 self.check_unknown_buffer(
                                                     data_buffer,
-                                                    &triple.subject_term_id,
+                                                    triple.subject_term_id,
                                                 )?;
                                                 return Ok(SerializationStatus::Serialized);
                                             } else if *predicate_term
@@ -3092,7 +3092,7 @@ impl GraphDisplayDataSolutionSerializer {
                                                 )?;
                                                 self.check_unknown_buffer(
                                                     data_buffer,
-                                                    &triple.subject_term_id,
+                                                    triple.subject_term_id,
                                                 )?;
                                                 return Ok(SerializationStatus::Serialized);
                                             }
@@ -3313,13 +3313,13 @@ impl GraphDisplayDataSolutionSerializer {
                                             if *predicate_term == owl::THING.into() {
                                                 self.insert_node(
                                                     data_buffer,
-                                                    node_triple,
+                                                    &node_triple,
                                                     ElementType::Owl(OwlType::Node(OwlNode::Thing)),
                                                 )?;
                                             } else if *predicate_term == rdfs::LITERAL.into() {
                                                 self.insert_node(
                                                     data_buffer,
-                                                    node_triple,
+                                                    &node_triple,
                                                     ElementType::Rdfs(RdfsType::Node(
                                                         RdfsNode::Literal,
                                                     )),
@@ -3473,7 +3473,7 @@ impl GraphDisplayDataSolutionSerializer {
         )?;
         let thing_element = ElementType::Owl(OwlType::Node(OwlNode::Thing));
 
-        self.insert_node(data_buffer, thing_triple.clone(), thing_element)?;
+        self.insert_node(data_buffer, &thing_triple, thing_element)?;
 
         {
             data_buffer
@@ -3511,7 +3511,7 @@ impl GraphDisplayDataSolutionSerializer {
         )?;
         let thing_element = ElementType::Owl(OwlType::Node(OwlNode::Thing));
 
-        self.insert_node(data_buffer, thing_triple.clone(), thing_element)?;
+        self.insert_node(data_buffer, &thing_triple, thing_element)?;
         {
             data_buffer
                 .label_buffer
@@ -3554,7 +3554,7 @@ impl GraphDisplayDataSolutionSerializer {
             ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
         )?;
 
-        self.check_unknown_buffer(data_buffer, &property_term_id)?;
+        self.check_unknown_buffer(data_buffer, property_term_id)?;
         Ok(())
     }
 
@@ -3900,7 +3900,7 @@ impl GraphDisplayDataSolutionSerializer {
                                         None,
                                     )?;
 
-                                    self.insert_node(data_buffer, range_triple, element_type)?;
+                                    self.insert_node(data_buffer, &range_triple, element_type)?;
                                     return Ok(range_term_id);
                                 }
 
@@ -3916,7 +3916,7 @@ impl GraphDisplayDataSolutionSerializer {
 
                             self.insert_node(
                                 data_buffer,
-                                range_triple,
+                                &range_triple,
                                 ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
                             )?;
                         }
@@ -3942,7 +3942,7 @@ impl GraphDisplayDataSolutionSerializer {
                         .contains_key(&literal_triple.subject_term_id)
                 };
                 if !node_exists {
-                    self.insert_node(data_buffer, literal_triple.clone(), element_type)?;
+                    self.insert_node(data_buffer, &literal_triple, element_type)?;
                 }
 
                 {
@@ -4001,7 +4001,7 @@ impl GraphDisplayDataSolutionSerializer {
 
                     self.insert_node(
                         data_buffer,
-                        resource_triple,
+                        &resource_triple,
                         ElementType::Rdfs(RdfsType::Node(RdfsNode::Resource)),
                     )?;
                 }
@@ -4045,7 +4045,7 @@ impl GraphDisplayDataSolutionSerializer {
 
             self.insert_node(
                 data_buffer,
-                literal_triple,
+                &literal_triple,
                 ElementType::Rdfs(RdfsType::Node(RdfsNode::Literal)),
             )?;
         }
@@ -4561,7 +4561,7 @@ impl GraphDisplayDataSolutionSerializer {
 
                     self.insert_node(
                         data_buffer,
-                        resource_triple,
+                        &resource_triple,
                         ElementType::Rdfs(RdfsType::Node(RdfsNode::Resource)),
                     )?;
                 }

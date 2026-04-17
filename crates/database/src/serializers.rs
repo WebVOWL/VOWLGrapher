@@ -260,6 +260,8 @@ pub struct SerializationDataBuffer {
     node_characteristics: Arc<RwLock<HashMap<usize, HashSet<Characteristic>>>>,
     /// Maps from node term's corresponding id to its number of individuals.
     individual_count_buffer: Arc<RwLock<HashMap<usize, u32>>>,
+    /// Maps from a class term id to the set of canonical individual term ids already counted for it.
+    counted_individual_members: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
     /// Stores unresolved triples.
     ///
     /// This is a mapping of a term's corresponding id to the set of triples referencing it.

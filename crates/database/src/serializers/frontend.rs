@@ -832,7 +832,24 @@ impl GraphDisplayDataSolutionSerializer {
         }
         self.update_edges(data_buffer, old_term_id, new_term_id)?;
         self.merge_individual_counts(data_buffer, &old_term_id, new_term_id)?;
+        self.merge_individual_members(data_buffer, &old_term_id, new_term_id)?;
         self.redirect_iri(data_buffer, old_term_id, new_term_id)?;
+        Ok(())
+    }
+
+    fn merge_individual_members(
+        &self,
+        data_buffer: &mut SerializationDataBuffer,
+        old_term_id: &usize,
+        new_term_id: usize,
+    ) -> Result<(), SerializationError> {
+        let mut counted_members = data_buffer.counted_individual_members.write()?;
+        if let Some(old_members) = counted_members.remove(old_term_id) {
+            counted_members
+                .entry(new_term_id)
+                .or_default()
+                .extend(old_members);
+        }
         Ok(())
     }
 
@@ -2598,11 +2615,20 @@ impl GraphDisplayDataSolutionSerializer {
                             .try_materialize_restriction(data_buffer, &triple.subject_term_id);
                     }
                     owl::NAMED_INDIVIDUAL => {
-                        let count = Self::individual_count_literal(data_buffer, &triple)?;
+                        let Some(individual_term_id) = triple.object_term_id else {
+                            return Err(SerializationErrorKind::MissingObject(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                "NamedIndividual triple is missing an individual target"
+                                    .to_string(),
+                            )
+                            .into());
+                        };
+
                         self.increment_individual_count(
                             data_buffer,
                             triple.subject_term_id,
-                            count,
+                            Some(individual_term_id),
+                            1,
                         )?;
                         return Ok(SerializationStatus::Serialized);
                     }
@@ -2668,6 +2694,7 @@ impl GraphDisplayDataSolutionSerializer {
                                     self.increment_individual_count(
                                         data_buffer,
                                         triple.subject_term_id,
+                                        Some(materialized_target),
                                         1,
                                     )?;
                                 }
@@ -3638,15 +3665,30 @@ impl GraphDisplayDataSolutionSerializer {
     fn increment_individual_count(
         &self,
         data_buffer: &mut SerializationDataBuffer,
-        term_id: usize,
+        class_term_id: usize,
+        individual_term_id: Option<usize>,
         delta: u32,
     ) -> Result<(), SerializationError> {
-        let canonical_term_id = self.canonical_count_term_id(data_buffer, term_id)?;
+        let canonical_class_term_id = self.canonical_count_term_id(data_buffer, class_term_id)?;
+
+        if let Some(individual_term_id) = individual_term_id {
+            let canonical_individual_term_id =
+                self.canonical_count_term_id(data_buffer, individual_term_id)?;
+
+            let mut counted_members = data_buffer.counted_individual_members.write()?;
+            let members = counted_members.entry(canonical_class_term_id).or_default();
+
+            if !members.insert(canonical_individual_term_id) {
+                return Ok(());
+            }
+        }
+
         *data_buffer
             .individual_count_buffer
             .write()?
-            .entry(canonical_term_id)
+            .entry(canonical_class_term_id)
             .or_default() += delta;
+
         Ok(())
     }
 

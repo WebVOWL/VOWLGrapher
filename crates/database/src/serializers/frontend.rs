@@ -1329,32 +1329,128 @@ impl GraphDisplayDataSolutionSerializer {
         }
     }
 
+    fn is_preferred_inverse_endpoint(
+        &self,
+        data_buffer: &SerializationDataBuffer,
+        term_id: usize,
+    ) -> Result<bool, SerializationError> {
+        let resolved_term_id = self.follow_redirection(data_buffer, term_id)?;
+        let term = data_buffer.term_index.get(&resolved_term_id)?;
+
+        if term.is_blank_node() || is_synthetic(&term) {
+            return Ok(false);
+        }
+
+        let node_type = {
+            data_buffer
+                .node_element_buffer
+                .read()?
+                .get(&resolved_term_id)
+                .copied()
+        };
+
+        Ok(!matches!(
+            node_type,
+            Some(ElementType::Owl(OwlType::Node(
+                OwlNode::AnonymousClass
+                    | OwlNode::Complement
+                    | OwlNode::IntersectionOf
+                    | OwlNode::UnionOf
+                    | OwlNode::DisjointUnion
+                    | OwlNode::EquivalentClass
+            )))
+        ))
+    }
+
+    fn select_property_endpoint(
+        &self,
+        data_buffer: &SerializationDataBuffer,
+        candidates: &HashSet<usize>,
+    ) -> Result<Option<usize>, SerializationError> {
+        let mut concrete_fallback = None;
+        let mut non_query_fallback = None;
+        let mut any_fallback = None;
+
+        for candidate in candidates {
+            let resolved_candidate = self.follow_redirection(data_buffer, *candidate)?;
+
+            if any_fallback.is_none() {
+                any_fallback = Some(resolved_candidate);
+            }
+
+            if self.is_preferred_inverse_endpoint(data_buffer, resolved_candidate)? {
+                return Ok(Some(resolved_candidate));
+            }
+
+            let term = data_buffer.term_index.get(&resolved_candidate)?;
+            if concrete_fallback.is_none() && !is_synthetic(&term) {
+                concrete_fallback = Some(resolved_candidate);
+            }
+            if non_query_fallback.is_none() && !is_query_fallback_endpoint(&term) {
+                non_query_fallback = Some(resolved_candidate);
+            }
+        }
+
+        Ok(concrete_fallback.or(non_query_fallback).or(any_fallback))
+    }
+
+    fn is_direct_property_render_edge(edge: &ArcEdge) -> bool {
+        matches!(
+            edge.edge_type,
+            ElementType::Owl(OwlType::Edge(
+                OwlEdge::ObjectProperty
+                    | OwlEdge::DatatypeProperty
+                    | OwlEdge::DeprecatedProperty
+                    | OwlEdge::ExternalProperty
+            )) | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))
+        )
+    }
+
+    fn collect_property_render_edges(
+        &self,
+        data_buffer: &SerializationDataBuffer,
+        property_term_ids: &[usize],
+    ) -> Result<Vec<ArcEdge>, SerializationError> {
+        let property_term_ids = property_term_ids.iter().copied().collect::<HashSet<_>>();
+
+        Ok(data_buffer
+            .edge_buffer
+            .read()?
+            .iter()
+            .filter(|edge| {
+                edge.property_term_id
+                    .is_some_and(|property_term_id| property_term_ids.contains(&property_term_id))
+                    && Self::is_direct_property_render_edge(edge)
+            })
+            .cloned()
+            .collect())
+    }
+
     fn inverse_edge_endpoints(
         &self,
         data_buffer: &mut SerializationDataBuffer,
         property_term_id: &usize,
     ) -> Result<Option<(usize, usize)>, SerializationError> {
         let domain = {
-            data_buffer
-                .property_domain_map
-                .read()?
-                .get(property_term_id)
-                .and_then(|domains| domains.iter().next())
-                .copied()
-        };
-        let range = {
-            data_buffer
-                .property_range_map
-                .read()?
-                .get(property_term_id)
-                .and_then(|ranges| ranges.iter().next())
-                .copied()
+            let property_domain_map = data_buffer.property_domain_map.read()?;
+            match property_domain_map.get(property_term_id) {
+                Some(domains) => self.select_property_endpoint(data_buffer, domains)?,
+                None => None,
+            }
         };
 
-        match (&domain, &range) {
+        let range = {
+            let property_range_map = data_buffer.property_range_map.read()?;
+            match property_range_map.get(property_term_id) {
+                Some(ranges) => self.select_property_endpoint(data_buffer, ranges)?,
+                None => None,
+            }
+        };
+
+        match (domain, range) {
             (Some(domain), Some(range)) => {
-                let subject = self.normalize_inverse_endpoint(data_buffer, domain, range)?;
-                let object = self.normalize_inverse_endpoint(data_buffer, range, domain)?;
+                let subject = self.normalize_inverse_endpoint(data_buffer, &domain, &range)?;
+                let object = self.normalize_inverse_endpoint(data_buffer, &range, &domain)?;
                 Ok(Some((subject, object)))
             }
             _ => Ok(None),
@@ -1459,21 +1555,22 @@ impl GraphDisplayDataSolutionSerializer {
             return Ok(SerializationStatus::Serialized);
         }
 
-        let (merged_label, merged_characteristics) = {
-            let left_edge = {
-                data_buffer
-                    .property_edge_map
-                    .read()?
-                    .get(&left_property)
-                    .cloned()
-            };
-            let right_edge = {
-                data_buffer
-                    .property_edge_map
-                    .read()?
-                    .get(&right_property)
-                    .cloned()
-            };
+        let property_edges_to_remove =
+            self.collect_property_render_edges(data_buffer, &[left_property, right_property])?;
+
+        let merged_label = {
+            let edge_label_buffer = data_buffer.edge_label_buffer.read()?;
+            let label_buffer = data_buffer.label_buffer.read()?;
+            let left_edge = data_buffer
+                .property_edge_map
+                .read()?
+                .get(&left_property)
+                .cloned();
+            let right_edge = data_buffer
+                .property_edge_map
+                .read()?
+                .get(&right_property)
+                .cloned();
 
             let merged_label = {
                 let edge_label_buffer = data_buffer.edge_label_buffer.read()?;
@@ -1492,36 +1589,27 @@ impl GraphDisplayDataSolutionSerializer {
                 merge_optional_labels(left_label, right_label)
             };
 
-            self.merge_properties(data_buffer, &right_property, &left_property)?;
+        self.merge_properties(data_buffer, &right_property, &left_property)?;
 
-            if let Some(ref left_edge) = left_edge {
-                self.remove_edge_include(data_buffer, &left_edge.domain_term_id, left_edge)?;
-                self.remove_edge_include(data_buffer, &left_edge.range_term_id, left_edge)?;
-                data_buffer.edge_buffer.write()?.remove(left_edge);
-                data_buffer.edge_label_buffer.write()?.remove(left_edge);
-            }
+        let merged_characteristics = {
+            let mut merged_characteristics = HashSet::new();
 
-            if let Some(ref right_edge) = right_edge {
-                self.remove_edge_include(data_buffer, &right_edge.domain_term_id, right_edge)?;
-                self.remove_edge_include(data_buffer, &right_edge.range_term_id, right_edge)?;
-                data_buffer.edge_buffer.write()?.remove(right_edge);
-                data_buffer.edge_label_buffer.write()?.remove(right_edge);
-            }
+            for edge in &property_edges_to_remove {
+                self.remove_edge_include(data_buffer, &edge.domain_term_id, edge)?;
+                self.remove_edge_include(data_buffer, &edge.range_term_id, edge)?;
+                data_buffer.edge_buffer.write()?.remove(edge);
+                data_buffer.edge_label_buffer.write()?.remove(edge);
+                data_buffer.edge_cardinality_buffer.write()?.remove(edge);
 
-            let merged_characteristics = {
-                let mut edge_characteristics = data_buffer.edge_characteristics.write()?;
-                let mut merged_characteristics = left_edge
-                    .and_then(|edge| edge_characteristics.remove(&edge))
-                    .unwrap_or_default();
+                let removed_characteristics =
+                    { data_buffer.edge_characteristics.write()?.remove(edge) };
 
-                if let Some(right_characteristics) =
-                    right_edge.and_then(|edge| edge_characteristics.remove(&edge))
-                {
-                    merged_characteristics.extend(right_characteristics);
+                if let Some(characteristics) = removed_characteristics {
+                    merged_characteristics.extend(characteristics);
                 }
-                merged_characteristics
-            };
-            (merged_label, merged_characteristics)
+            }
+
+            merged_characteristics
         };
 
         let inverse_property = Some(left_property);
@@ -3198,37 +3286,35 @@ impl GraphDisplayDataSolutionSerializer {
                                                 )?;
 
                                             if should_replace {
+                                                data_buffer.property_edge_map.write()?.insert(
+                                                    edge_triple_predicate_term_id,
+                                                    edge.clone(),
+                                                );
+
+                                                data_buffer.property_domain_map.write()?.insert(
+                                                    edge_triple_predicate_term_id,
+                                                    HashSet::from([edge.domain_term_id]),
+                                                );
+
+                                                data_buffer.property_range_map.write()?.insert(
+                                                    edge_triple_predicate_term_id,
+                                                    HashSet::from([edge.range_term_id]),
+                                                );
+                                            } else {
                                                 data_buffer
-                                                    .property_edge_map
+                                                    .property_domain_map
                                                     .write()?
-                                                    .insert(edge_triple_predicate_term_id, edge);
+                                                    .entry(edge_triple_predicate_term_id)
+                                                    .or_default()
+                                                    .insert(edge.domain_term_id);
+
+                                                data_buffer
+                                                    .property_range_map
+                                                    .write()?
+                                                    .entry(edge_triple_predicate_term_id)
+                                                    .or_default()
+                                                    .insert(edge.range_term_id);
                                             }
-
-                                            data_buffer
-                                                .property_domain_map
-                                                .write()?
-                                                .entry(edge_triple_predicate_term_id)
-                                                .or_default()
-                                                .insert(edge_triple.subject_term_id);
-
-                                            let object_term_id =
-                                                edge_triple.object_term_id.ok_or_else(|| {
-                                                    SerializationErrorKind::MissingObject(
-                                                        data_buffer
-                                                            .term_index
-                                                            .display_triple(&edge_triple)
-                                                            .unwrap_or_default(),
-                                                        "Failed to update range for edge"
-                                                            .to_string(),
-                                                    )
-                                                })?;
-
-                                            data_buffer
-                                                .property_range_map
-                                                .write()?
-                                                .entry(edge_triple_predicate_term_id)
-                                                .or_default()
-                                                .insert(object_term_id);
                                         }
                                     }
                                     None => {

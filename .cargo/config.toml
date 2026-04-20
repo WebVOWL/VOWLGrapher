@@ -59,7 +59,7 @@
         "-Clinker-plugin-lto",
         "-Clink-arg=-fuse-ld=mold",
         "-Clink-arg=-flto",
-        "-Zpre-link-args=link_libs/mimalloc.o",
+        "-Zpre-link-args=target/link_libs/mimalloc.o",
     ]
 
 
@@ -71,6 +71,7 @@
 
 # Frontend of program
 [target.wasm32-unknown-unknown]
+    linker="wasm-ld"
     rustflags=[
         "-Clink-arg=--max-memory=4294967296",
         "-Ctarget-feature=+atomics,+simd128",

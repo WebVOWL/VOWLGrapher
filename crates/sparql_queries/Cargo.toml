@@ -17,4 +17,5 @@
 
 [dependencies]
     grapher={workspace=true}
+    regex="1.12.3"
     vowlgrapher-util={path="../util"}

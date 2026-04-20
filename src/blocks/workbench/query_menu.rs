@@ -6,9 +6,7 @@ use web_sys::HtmlInputElement;
 
 #[component]
 pub fn CustomSparql() -> impl IntoView {
-    let query_input = RwSignal::new(String::from(
-        "SELECT ?id ?nodeType \nWHERE {\n   \n}",
-    ));
+    let query_input = RwSignal::new(String::new());
     let is_loading = RwSignal::new(false);
     let textarea_ref = NodeRef::<leptos::html::Textarea>::new();
 

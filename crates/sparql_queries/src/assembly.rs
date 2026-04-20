@@ -2,6 +2,7 @@ use crate::snippets::SparqlSnippet;
 use crate::{prelude::GENERAL_SNIPPETS, snippets::void::VOID};
 use grapher::prelude::ElementType;
 use std::collections::HashMap;
+use regex::Regex;
 
 // TODO: Remove when automatic prefix fetching is implemented.
 pub const DEFAULT_PREFIXES: [&str; 8] = [
@@ -76,12 +77,29 @@ impl QueryAssembler {
         Self::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
     }
 
+    /// Construct a custom SPARQL query based of query inserted by the user in the UI(query_menu)
     pub fn assemble_custom_query(user_query: &str) -> String {
         let prefixes = DEFAULT_PREFIXES
             .iter()
             .map(|item| format!("PREFIX {item}"))
             .collect::<Vec<_>>()
             .join("\n");
+
+        let re= Regex::new(r"\?([a-zA-Z0-9_]+)").unwrap();
+        let first_var = re.captures(user_query)
+            .map(|cap| cap.get(0).unwrap().as_str())
+            .unwrap_or("?s");
+
+        let content_re = Regex::new(r"(?i)WHERE\s*\{([\s\S]*)\}").unwrap();
+        let inner_content = content_re.captures(user_query)
+            .map(|cap| cap.get(1).unwrap().as_str().trim())
+            .unwrap_or(user_query);
+
+        let bind_logic = if first_var == "?id" {
+            "".to_string()
+        } else {
+            format!("BIND({} AS ?id)", first_var)
+        };
 
         format!(
             r#"
@@ -94,13 +112,25 @@ impl QueryAssembler {
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
                     {{  {}  }}
+
+                    {}
+
+                    OPTIONAL {{ ?id rdf:type ?nodeType . }}
                     OPTIONAL {{ ?id rdfs:label ?label }}
                     OPTIONAL {{ ?id ?p ?target . FILTER(?p != rdf:type && ?p != rdfs:label) }}
+                    BIND(
+                        IF(?nodeType = owl:Ontology, 0,
+                            IF(?nodeType = owl:Class, 1, 2)
+                        )
+                        AS ?weight
+                    )
                 }}
             }}
+            ORDER BY ?weight
             "#,
             prefixes,
-            user_query
+            inner_content,
+            bind_logic
         )
     }
 

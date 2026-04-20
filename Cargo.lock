@@ -8300,6 +8300,7 @@ name = "vowlgrapher-sparql-queries"
 version = "0.2.0-beta"
 dependencies = [
  "grapher",
+ "regex",
  "vowlgrapher-util",
 ]
 

@@ -1657,8 +1657,6 @@ impl GraphDisplayDataSolutionSerializer {
             self.collect_property_render_edges(data_buffer, &[left_property, right_property])?;
 
         let merged_label = {
-            let edge_label_buffer = data_buffer.edge_label_buffer.read()?;
-            let label_buffer = data_buffer.label_buffer.read()?;
             let left_edge = data_buffer
                 .property_edge_map
                 .read()?
@@ -1670,22 +1668,23 @@ impl GraphDisplayDataSolutionSerializer {
                 .get(&right_property)
                 .cloned();
 
-            let merged_label = {
-                let edge_label_buffer = data_buffer.edge_label_buffer.read()?;
-                let label_buffer = data_buffer.label_buffer.read()?;
-                let left_label = left_edge
-                    .as_ref()
-                    .and_then(|edge| edge_label_buffer.get(edge))
-                    .or_else(|| label_buffer.get(&left_property))
-                    .and_then(Option::as_ref);
+            let edge_label_buffer = data_buffer.edge_label_buffer.read()?;
+            let label_buffer = data_buffer.label_buffer.read()?;
 
-                let right_label = right_edge
-                    .as_ref()
-                    .and_then(|edge| edge_label_buffer.get(edge))
-                    .or_else(|| label_buffer.get(&right_property))
-                    .and_then(Option::as_ref);
-                merge_optional_labels(left_label, right_label)
-            };
+            let left_label = left_edge
+                .as_ref()
+                .and_then(|edge| edge_label_buffer.get(edge))
+                .or_else(|| label_buffer.get(&left_property))
+                .and_then(Option::as_ref);
+
+            let right_label = right_edge
+                .as_ref()
+                .and_then(|edge| edge_label_buffer.get(edge))
+                .or_else(|| label_buffer.get(&right_property))
+                .and_then(Option::as_ref);
+
+            merge_optional_labels(left_label, right_label)
+        };
 
         self.merge_properties(data_buffer, &right_property, &left_property)?;
 
@@ -2418,12 +2417,6 @@ impl GraphDisplayDataSolutionSerializer {
                                 .read()?
                                 .get(&resolved_object_term_id)
                                 .copied();
-
-                            let object_label_before_merge = data_buffer
-                                .label_buffer
-                                .read()?
-                                .get(&resolved_object_term_id)
-                                .cloned();
 
                             self.merge_nodes(
                                 data_buffer,

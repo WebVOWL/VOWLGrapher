@@ -60,15 +60,19 @@ pub struct VOWLGrapherEnviron {
     #[rkyv(with = SerilizableByteSize)]
     #[serde(with = "SerilizableByteSize")]
     pub max_input_size_bytes: ByteSize,
+    /// Whether owl:imports should be fetched and loaded recursively.
+    pub resolve_imports: bool,
 }
 
 impl VOWLGrapherEnviron {
+    /// Returns the values parsed from the environment.
     pub fn new() -> Self {
         let max_input_size_bytes =
             Self::parse_environment("VOWLGRAPHER_MAX_INPUT_SIZE_BYTES", ByteSize::mb(50));
-
+        let resolve_imports = Self::parse_environment("VOWLGRAPHER_RESOLVE_IMPORTS", true);
         Self {
             max_input_size_bytes,
+            resolve_imports,
         }
     }
 

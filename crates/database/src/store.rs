@@ -8,7 +8,6 @@ use rdf_fusion::model::{NamedNodeRef, Quad};
 use rdf_fusion::store::Store;
 use reqwest::{Client, Url};
 use std::collections::{HashSet, VecDeque};
-use std::env::var;
 use std::path::Path;
 use std::time::Duration;
 use std::time::Instant;
@@ -18,26 +17,9 @@ use vowlgrapher_parser::parser_util::{
     format_from_resource_type, parse_quads_to_format, parser_from_bytes, parser_from_path,
     path_type,
 };
-use vowlgrapher_util::prelude::{DataType, ErrorRecord, VOWLGrapherError};
+use vowlgrapher_util::prelude::{DataType, ErrorRecord, VOWLGRAPHER_ENVIRONMENT, VOWLGrapherError};
 
 static GLOBAL_STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
-static RESOLVE_IMPORTS: std::sync::LazyLock<bool> =
-    std::sync::LazyLock::new(|| parse_bool_env("VOWLGRAPHER_RESOLVE_IMPORTS", true));
-
-fn parse_bool_env(key: &str, default: bool) -> bool {
-    var(key).map_or(default, |value| {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => true,
-            "0" | "false" | "no" | "off" => false,
-            other => {
-                warn!(
-                    "Failed to parse value '{other}' for environment variable {key}. Using default '{default}'"
-                );
-                default
-            }
-        }
-    })
-}
 
 /// The graph database.
 pub struct VOWLGrapherStore {
@@ -375,8 +357,8 @@ impl VOWLGrapherStore {
         lenient: bool,
         root_base: ImportBase,
     ) -> Result<(Vec<Quad>, Option<VOWLGrapherError>), VOWLGrapherStoreError> {
-        if !*RESOLVE_IMPORTS {
-            info!("Import resolution disabled via VOWLGRAPHER_RESOLVE_IMPORTS");
+        if !VOWLGRAPHER_ENVIRONMENT.resolve_imports {
+            debug!("Import resolution disabled via VOWLGRAPHER_RESOLVE_IMPORTS");
             return Ok((root_quads, None));
         }
 

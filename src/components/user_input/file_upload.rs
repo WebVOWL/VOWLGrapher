@@ -23,9 +23,9 @@ use vowlgrapher_util::prelude::manage_user_id;
 use vowlgrapher_util::prelude::{DataType, VOWLGrapherError};
 use web_sys::{FileList, FormData};
 
-#[cfg(feature = "server")]
-use crate::env::VOWLGRAPHER_ENVIRONMENT;
 use crate::errors::ClientErrorKind;
+#[cfg(feature = "server")]
+use vowlgrapher_util::prelude::VOWLGRAPHER_ENVIRONMENT;
 
 #[cfg(feature = "ssr")]
 mod progress {

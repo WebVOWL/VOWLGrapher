@@ -62,6 +62,7 @@
 
     [workspace.dependencies]
         actix-session={version="0.11.0", features=["cookie-session"]}
+        bytesize="2.3.1"
         env_logger="0.11"
         futures="0.3.31"
         grapher={features=[
@@ -91,7 +92,7 @@
     ]}
     async-broadcast="0.7.2"
     bytes="1.9"
-    bytesize="2.3.1"
+    bytesize.workspace=true
     console_error_panic_hook={version="0.1", optional=true}
     console_log={version="1.0", optional=true}
     dashmap="6.1.0"

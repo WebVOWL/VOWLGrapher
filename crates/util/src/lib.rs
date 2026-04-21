@@ -1,6 +1,7 @@
 //! Utility code used by the entire `VOWLGrapher` workspace
 
 mod datatypes;
+mod env;
 mod error_handler;
 mod layout;
 mod time;
@@ -8,6 +9,10 @@ mod time;
 pub mod prelude {
     //! Export all types of the crate.
     pub use crate::datatypes::DataType;
+
+    #[cfg(feature = "server")]
+    pub use crate::env::VOWLGRAPHER_ENVIRONMENT;
+    pub use crate::env::{VOWLGrapherEnviron, environ};
     pub use crate::error_handler::{ErrorRecord, ErrorSeverity, ErrorType, VOWLGrapherError};
     pub use crate::layout::TableHTML;
     pub use crate::time::get_timestamp;

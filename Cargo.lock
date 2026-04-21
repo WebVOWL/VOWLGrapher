@@ -8268,6 +8268,7 @@ name = "vowlgrapher-util"
 version = "0.1.0-alpha"
 dependencies = [
  "actix-session",
+ "bytesize",
  "leptos",
  "leptos_actix",
  "log",

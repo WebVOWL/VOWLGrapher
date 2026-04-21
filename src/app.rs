@@ -1,4 +1,3 @@
-use crate::env::{VOWLGrapherEnviron, environ};
 use crate::errors::{ClientErrorKind, ErrorLogContext};
 use crate::pages::home::Home;
 use leptos::prelude::*;
@@ -9,6 +8,7 @@ use leptos_router::{
     StaticSegment,
     components::{FlatRoutes, Route, Router},
 };
+use vowlgrapher_util::prelude::{VOWLGrapherEnviron, environ};
 
 #[component]
 pub fn App() -> impl IntoView {

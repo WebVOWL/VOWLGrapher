@@ -5,7 +5,6 @@ use crate::components::user_input::internal_sparql::load_graph;
 use crate::components::user_input::stored_ontology::StoredOntology;
 use crate::components::user_input::stored_ontology::load_stored_ontology;
 use crate::components::{icon::Icon, user_input::file_upload::FileUpload};
-use crate::env::VOWLGrapherEnviron;
 use crate::errors::ClientErrorKind;
 use crate::errors::ErrorLogContext;
 use leptos::prelude::*;
@@ -14,6 +13,7 @@ use log::info;
 use std::iter::once;
 use strum::IntoEnumIterator;
 use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
+use vowlgrapher_util::prelude::VOWLGrapherEnviron;
 use web_sys::Event;
 use web_sys::HtmlInputElement;
 
@@ -162,6 +162,7 @@ pub fn UploadInput() -> impl IntoView {
     let upload_files = move |ev: Event| {
         let VOWLGrapherEnviron {
             max_input_size_bytes,
+            ..
         } = expect_context::<VOWLGrapherEnviron>();
 
         let input: HtmlInputElement = event_target(&ev);

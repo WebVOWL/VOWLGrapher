@@ -17,6 +17,7 @@
 
 [dependencies]
     actix-session={workspace=true, optional=true}
+    bytesize.workspace=true
     leptos.workspace=true
     leptos_actix={workspace=true, optional=true}
     log.workspace=true

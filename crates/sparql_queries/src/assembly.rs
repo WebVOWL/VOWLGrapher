@@ -2,6 +2,8 @@ use crate::snippets::SparqlSnippet;
 use crate::{prelude::GENERAL_SNIPPETS, snippets::void::VOID};
 use grapher::prelude::ElementType;
 use std::collections::HashMap;
+use spargebra::Query;
+use spargebra::SparqlParser;
 use regex::Regex;
 
 // TODO: Remove when automatic prefix fetching is implemented.
@@ -85,20 +87,28 @@ impl QueryAssembler {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let re= Regex::new(r"\?([a-zA-Z0-9_]+)").unwrap();
-        let first_var = re.captures(user_query)
-            .map(|cap| cap.get(0).unwrap().as_str())
-            .unwrap_or("?s");
+        let parser = SparqlParser::new();
 
-        let content_re = Regex::new(r"(?i)WHERE\s*\{([\s\S]*)\}").unwrap();
-        let inner_content = content_re.captures(user_query)
-            .map(|cap| cap.get(1).unwrap().as_str().trim())
-            .unwrap_or(user_query);
-
-        let bind_logic = if first_var == "?id" {
+        let first_var_name = match parser.parse_query(user_query) {
+            Ok(query) => {
+                let sse = query.to_sse();
+                let re = Regex::new(r"\(project\s+(\?[a-zA-Z0-9_]+)").unwrap();
+                if let Some(cap) = re.captures(&sse){
+                    cap.get(1).unwrap().as_str().to_string()
+                } else {
+                    let fallback_re = Regex::new(r"\?([a-zA-Z0-9_]+)").unwrap();
+                    fallback_re.captures(user_query)
+                        .map(|c| c.get(1).unwrap().as_str().to_string())
+                        .unwrap_or_else(|| "id".to_string())
+                }
+            },
+            Err(_) => "s".to_string(),
+        };
+        
+        let bind_line = if first_var_name == "id" {
             "".to_string()
         } else {
-            format!("BIND({} AS ?id)", first_var)
+            format!("BIND(?{} AS ?id)", first_var_name)
         };
 
         format!(
@@ -111,11 +121,11 @@ impl QueryAssembler {
             }}
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
-                    {{  {}  }}
+                    {{ {} }}
 
                     {}
 
-                    OPTIONAL {{ ?id rdf:type ?nodeType . }}
+                    ?id rdf:type ?nodeType .
                     OPTIONAL {{ ?id rdfs:label ?label }}
                     OPTIONAL {{ ?id ?p ?target . FILTER(?p != rdf:type && ?p != rdfs:label) }}
                     BIND(
@@ -129,8 +139,8 @@ impl QueryAssembler {
             ORDER BY ?weight
             "#,
             prefixes,
-            inner_content,
-            bind_logic
+            user_query,
+            bind_line
         )
     }
 

@@ -8301,6 +8301,7 @@ version = "0.2.0-beta"
 dependencies = [
  "grapher",
  "regex",
+ "spargebra",
  "vowlgrapher-util",
 ]
 

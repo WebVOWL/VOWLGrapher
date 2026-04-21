@@ -1,3 +1,5 @@
+#![expect(clippy::struct_field_names)]
+
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
@@ -19,7 +21,7 @@ impl Display for Triple {
             "{}",
             self.predicate_term_id
                 .as_ref()
-                .map(|t| t.to_string())
+                .map(std::string::ToString::to_string)
                 .unwrap_or_default(),
         )?;
         write!(
@@ -27,7 +29,7 @@ impl Display for Triple {
             "{}",
             self.object_term_id
                 .as_ref()
-                .map(|t| t.to_string())
+                .map(std::string::ToString::to_string)
                 .unwrap_or_default(),
         )?;
         write!(f, "}}")
@@ -35,7 +37,7 @@ impl Display for Triple {
 }
 
 impl Triple {
-    pub fn new(
+    pub const fn new(
         subject_term_id: usize,
         predicate_term_id: Option<usize>,
         object_term_id: Option<usize>,

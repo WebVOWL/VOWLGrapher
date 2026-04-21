@@ -8,16 +8,14 @@ pub mod serialize_triple;
 pub mod synthetic;
 
 use grapher::prelude::{
-    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsNode, RdfsType,
+    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType,
 };
 use log::warn;
 use oxrdf::TermRef;
 use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
-    datastructures::{
-        ArcEdge, ArcTerm, index::TermIndex, serialization_data_buffer::SerializationDataBuffer,
-    },
+    datastructures::{ArcTerm, serialization_data_buffer::SerializationDataBuffer},
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::synthetic::{
         SYNTH_LITERAL, SYNTH_LITERAL_VALUE, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING,
@@ -243,47 +241,6 @@ pub fn synthetic_iri(base: &ArcTerm, suffix: &str) -> String {
     format!("{clean}{suffix}")
 }
 
-pub const fn is_structural_set_node(element: ElementType) -> bool {
-    matches!(
-        element,
-        ElementType::Owl(OwlType::Node(
-            OwlNode::Complement
-                | OwlNode::IntersectionOf
-                | OwlNode::UnionOf
-                | OwlNode::DisjointUnion
-        ))
-    )
-}
-
-pub fn can_upgrade_node_type(old: ElementType, new: ElementType) -> bool {
-    if matches!(
-        old,
-        ElementType::Owl(OwlType::Node(OwlNode::Class | OwlNode::AnonymousClass))
-    ) {
-        return true;
-    }
-
-    old == ElementType::Owl(OwlType::Node(OwlNode::EquivalentClass)) && is_structural_set_node(new)
-}
-
-pub fn merge_optional_labels(left: Option<&String>, right: Option<&String>) -> Option<String> {
-    match (left, right) {
-        (Some(left), Some(right)) if left == right => Some(left.clone()),
-        (Some(left), Some(right)) => Some(format!("{left}\n{right}")),
-        (Some(label), None) | (None, Some(label)) => Some(label.clone()),
-        (None, None) => None,
-    }
-}
-
-pub fn is_query_fallback_endpoint(term: &ArcTerm) -> bool {
-    term.as_ref().as_ref() == owl::THING.into() || term.as_ref().as_ref() == rdfs::LITERAL.into()
-}
-
-pub fn is_restriction_owner_edge(edge: &ArcEdge) -> bool {
-    edge.edge_type == ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
-        || edge.edge_type == ElementType::NoDraw
-}
-
 pub fn iri_matches_document_base(base: &str, iri: &str) -> bool {
     iri == base
         || (!base.ends_with('/') && !base.ends_with('#') && iri.starts_with(&format!("{base}#")))
@@ -299,45 +256,21 @@ pub fn is_external(
     }
 
     let clean_term = trim_tag_circumfix(&term.to_string());
-    match &*data_buffer.document_base.read()? {
-        Some(base) => Ok(!(iri_matches_document_base(base.as_ref(), &clean_term)
+    if let Some(base) = &*data_buffer.document_base.read()? {
+        Ok(!(iri_matches_document_base(base.as_ref(), &clean_term)
             || is_reserved(term)
-            || is_synthetic(term))),
-        None => {
-            let has_fired = false; // Pending refactor
-            if !has_fired {
-                let msg = "Cannot determine externals: Missing document base!";
-                let e = SerializationErrorKind::MissingDocumentBase(msg.to_string());
-                warn!("{msg}");
-                data_buffer
-                    .failed_buffer
-                    .write()?
-                    .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
-            }
-            Ok(false)
+            || is_synthetic(term)))
+    } else {
+        let has_fired = false; // TODO: Pending refactor
+        if !has_fired {
+            let msg = "Cannot determine externals: Missing document base!";
+            let e = SerializationErrorKind::MissingDocumentBase(msg.to_string());
+            warn!("{msg}");
+            data_buffer
+                .failed_buffer
+                .write()?
+                .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
         }
+        Ok(false)
     }
-}
-
-pub fn is_synthetic_property_fallback(
-    term_index: &TermIndex,
-    edge: &ArcEdge,
-) -> Result<bool, SerializationError> {
-    let is_property_edge = matches!(
-        edge.edge_type,
-        ElementType::Owl(OwlType::Edge(
-            OwlEdge::ObjectProperty
-                | OwlEdge::DatatypeProperty
-                | OwlEdge::DeprecatedProperty
-                | OwlEdge::ExternalProperty
-        )) | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))
-    );
-
-    if !is_property_edge {
-        return Ok(false);
-    }
-
-    let subject_term = term_index.get(&edge.domain_term_id)?;
-    let object_term = term_index.get(&edge.range_term_id)?;
-    Ok(is_synthetic(&subject_term) && is_synthetic(&object_term))
 }

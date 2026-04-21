@@ -5,12 +5,13 @@ pub mod restrictions;
 use std::collections::HashSet;
 
 use grapher::prelude::{ElementType, OwlEdge, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsType};
-use log::{debug, trace, warn};
-use vowlgrapher_util::prelude::ErrorRecord;
+use log::{debug, trace};
 
 use crate::{
-    datastructures::{ArcEdge, ArcTriple, serialization_data_buffer::SerializationDataBuffer},
-    errors::{SerializationError, SerializationErrorKind},
+    datastructures::{
+        ArcEdge, ArcTriple, index::TermIndex, serialization_data_buffer::SerializationDataBuffer,
+    },
+    errors::SerializationError,
     serializer_util::{
         PROPERTY_EDGE_TYPES,
         buffers::{
@@ -18,7 +19,7 @@ use crate::{
             insert_edge_include, remove_edge_include, resolve_so,
         },
         entity_creation::create_edge_from_id,
-        is_external, is_synthetic_property_fallback,
+        is_external, is_synthetic,
         nodes::remove_orphan_synthetic_node,
     },
 };
@@ -30,8 +31,8 @@ pub fn redirect_iri(
 ) -> Result<(), SerializationError> {
     debug!(
         "Redirecting '{}' to '{}'",
-        data_buffer.term_index.get(&old_term_id)?,
-        data_buffer.term_index.get(&new_term_id)?
+        data_buffer.term_index.get(old_term_id)?,
+        data_buffer.term_index.get(new_term_id)?
     );
     {
         data_buffer
@@ -39,7 +40,7 @@ pub fn redirect_iri(
             .write()?
             .insert(old_term_id, new_term_id);
     }
-    check_unknown_buffer(data_buffer, &old_term_id)?;
+    check_unknown_buffer(data_buffer, old_term_id)?;
     Ok(())
 }
 
@@ -66,7 +67,7 @@ pub fn follow_redirection(
 /// Note that tuples or any triple where the subject is an edge iri,
 /// not present in the element buffer, will NEVER be resolved!
 pub fn insert_edge(
-    data_buffer: &mut SerializationDataBuffer,
+    data_buffer: &SerializationDataBuffer,
     triple: ArcTriple,
     edge_type: ElementType,
     label: Option<String>,
@@ -83,7 +84,7 @@ pub fn insert_edge(
     let new_type = if !matches!(
         edge_type,
         ElementType::NoDraw | ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
-    ) && is_external(data_buffer, &data_buffer.term_index.get(external_probe)?)?
+    ) && is_external(data_buffer, &data_buffer.term_index.get(*external_probe)?)?
     {
         ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty))
     } else {
@@ -124,7 +125,7 @@ pub fn insert_edge(
             data_buffer
                 .edge_label_buffer
                 .write()?
-                .insert(edge.clone(), label.unwrap_or(new_type.to_string()));
+                .insert(edge.clone(), label);
             return Ok(Some(edge));
         }
         (None, Some(_)) => {
@@ -152,7 +153,7 @@ pub fn insert_edge(
 }
 
 pub fn update_edges(
-    data_buffer: &mut SerializationDataBuffer,
+    data_buffer: &SerializationDataBuffer,
     old_term_id: usize,
     new_term_id: usize,
 ) -> Result<(), SerializationError> {
@@ -160,8 +161,8 @@ pub fn update_edges(
     if let Some(old_edges) = old_edges {
         debug!(
             "Updating edges from '{}' to '{}'",
-            data_buffer.term_index.get(&old_term_id)?,
-            data_buffer.term_index.get(&new_term_id)?
+            data_buffer.term_index.get(old_term_id)?,
+            data_buffer.term_index.get(new_term_id)?
         );
         for old_edge in old_edges {
             let label = { data_buffer.edge_label_buffer.write()?.remove(&old_edge) };
@@ -178,10 +179,10 @@ pub fn update_edges(
             }
 
             if old_edge.domain_term_id != old_term_id {
-                remove_edge_include(data_buffer, &old_edge.domain_term_id, &old_edge)?;
+                remove_edge_include(data_buffer, old_edge.domain_term_id, &old_edge)?;
             }
             if old_edge.range_term_id != old_term_id {
-                remove_edge_include(data_buffer, &old_edge.range_term_id, &old_edge)?;
+                remove_edge_include(data_buffer, old_edge.range_term_id, &old_edge)?;
             }
 
             let is_degenerate_structural_edge = old_edge.domain_term_id == old_edge.range_term_id
@@ -253,15 +254,15 @@ pub fn update_edges(
 }
 
 pub fn upgrade_property_type(
-    data_buffer: &mut SerializationDataBuffer,
-    property_term_id: &usize,
+    data_buffer: &SerializationDataBuffer,
+    property_term_id: usize,
     new_element: ElementType,
 ) -> Result<(), SerializationError> {
     let old_elem_opt = {
         data_buffer
             .edge_element_buffer
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .copied()
     };
     let Some(old_elem) = old_elem_opt else {
@@ -270,12 +271,7 @@ pub fn upgrade_property_type(
             data_buffer.term_index.get(property_term_id)?,
             new_element
         );
-        let e = SerializationErrorKind::SerializationWarning(msg.to_string());
-        warn!("{msg}");
-        data_buffer
-            .failed_buffer
-            .write()?
-            .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
+        debug!("{msg}");
 
         return Ok(());
     };
@@ -294,20 +290,15 @@ pub fn upgrade_property_type(
             data_buffer.term_index.get(property_term_id)?,
             old_elem
         );
-        let e = SerializationErrorKind::SerializationWarning(msg.to_string());
-        warn!("{msg}");
-        data_buffer
-            .failed_buffer
-            .write()?
-            .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
+        debug!("{msg}");
 
         return Ok(());
     }
 
     add_term_to_element_buffer(
         &data_buffer.term_index,
-        &mut data_buffer.edge_element_buffer,
-        *property_term_id,
+        &data_buffer.edge_element_buffer,
+        property_term_id,
         new_element,
     )?;
 
@@ -315,7 +306,7 @@ pub fn upgrade_property_type(
         data_buffer
             .property_edge_map
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .cloned()
     };
     let Some(old_edge) = maybe_old_edge else {
@@ -357,12 +348,11 @@ pub fn upgrade_property_type(
         let label = data_buffer
             .label_buffer
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .cloned()
-            .or_else(|| edge_label_buffer.remove(&old_edge))
-            .unwrap_or_else(|| new_element.to_string());
+            .or_else(|| edge_label_buffer.remove(&old_edge));
 
-        edge_label_buffer.insert(new_edge.clone(), label);
+        edge_label_buffer.insert(new_edge.clone(), label.flatten());
     }
 
     {
@@ -388,7 +378,7 @@ pub fn upgrade_property_type(
         data_buffer
             .property_edge_map
             .write()?
-            .insert(*property_term_id, new_edge);
+            .insert(property_term_id, new_edge);
     }
     debug!(
         "Upgraded deprecated property '{}' from {} to {}",
@@ -401,8 +391,8 @@ pub fn upgrade_property_type(
 
 pub fn merge_properties(
     data_buffer: &mut SerializationDataBuffer,
-    old_term_id: &usize,
-    new_term_id: &usize,
+    old_term_id: usize,
+    new_term_id: usize,
 ) -> Result<(), SerializationError> {
     if old_term_id == new_term_id {
         return Ok(());
@@ -415,28 +405,34 @@ pub fn merge_properties(
     );
 
     {
-        data_buffer.edge_element_buffer.write()?.remove(old_term_id);
+        data_buffer
+            .edge_element_buffer
+            .write()?
+            .remove(&old_term_id);
     }
 
     // Remove stale node placeholders for property aliases.
     {
-        data_buffer.node_element_buffer.write()?.remove(old_term_id);
+        data_buffer
+            .node_element_buffer
+            .write()?
+            .remove(&old_term_id);
     }
     {
-        data_buffer.label_buffer.write()?.remove(old_term_id);
+        data_buffer.label_buffer.write()?.remove(&old_term_id);
     }
     {
         data_buffer
             .node_characteristics
             .write()?
-            .remove(old_term_id);
+            .remove(&old_term_id);
     }
 
     {
         let mut property_domain_map = data_buffer.property_domain_map.write()?;
-        if let Some(domains) = property_domain_map.remove(old_term_id) {
+        if let Some(domains) = property_domain_map.remove(&old_term_id) {
             property_domain_map
-                .entry(*new_term_id)
+                .entry(new_term_id)
                 .or_default()
                 .extend(domains);
         }
@@ -444,27 +440,47 @@ pub fn merge_properties(
 
     {
         let mut property_range_map = data_buffer.property_range_map.write()?;
-        if let Some(ranges) = property_range_map.remove(old_term_id) {
+        if let Some(ranges) = property_range_map.remove(&old_term_id) {
             property_range_map
-                .entry(*new_term_id)
+                .entry(new_term_id)
                 .or_default()
                 .extend(ranges);
         }
     }
 
-    redirect_iri(data_buffer, *old_term_id, *new_term_id)?;
+    {
+        let mut declared_property_domain_map = data_buffer.declared_property_domain_map.write()?;
+        if let Some(domains) = declared_property_domain_map.remove(&old_term_id) {
+            declared_property_domain_map
+                .entry(new_term_id)
+                .or_default()
+                .extend(domains);
+        }
+    }
+
+    {
+        let mut declared_property_range_map = data_buffer.declared_property_range_map.write()?;
+        if let Some(ranges) = declared_property_range_map.remove(&old_term_id) {
+            declared_property_range_map
+                .entry(new_term_id)
+                .or_default()
+                .extend(ranges);
+        }
+    }
+
+    redirect_iri(data_buffer, old_term_id, new_term_id)?;
     Ok(())
 }
 
 pub fn remove_property_fallback_edge(
-    data_buffer: &mut SerializationDataBuffer,
-    property_term_id: &usize,
+    data_buffer: &SerializationDataBuffer,
+    property_term_id: usize,
 ) -> Result<(), SerializationError> {
     let edge = {
         data_buffer
             .property_edge_map
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .cloned()
     };
     let Some(edge) = edge else {
@@ -475,8 +491,8 @@ pub fn remove_property_fallback_edge(
         return Ok(());
     }
 
-    remove_edge_include(data_buffer, &edge.domain_term_id, &edge)?;
-    remove_edge_include(data_buffer, &edge.range_term_id, &edge)?;
+    remove_edge_include(data_buffer, edge.domain_term_id, &edge)?;
+    remove_edge_include(data_buffer, edge.range_term_id, &edge)?;
 
     {
         data_buffer.edge_buffer.write()?.remove(&edge);
@@ -494,28 +510,28 @@ pub fn remove_property_fallback_edge(
         data_buffer
             .property_edge_map
             .write()?
-            .remove(property_term_id);
+            .remove(&property_term_id);
     }
     {
         data_buffer
             .property_domain_map
             .write()?
-            .remove(property_term_id);
+            .remove(&property_term_id);
     }
     {
         data_buffer
             .property_range_map
             .write()?
-            .remove(property_term_id);
+            .remove(&property_term_id);
     }
-    remove_orphan_synthetic_node(data_buffer, &edge.domain_term_id)?;
-    remove_orphan_synthetic_node(data_buffer, &edge.range_term_id)?;
+    remove_orphan_synthetic_node(data_buffer, edge.domain_term_id)?;
+    remove_orphan_synthetic_node(data_buffer, edge.range_term_id)?;
     Ok(())
 }
 
 pub fn rewrite_property_edge(
-    data_buffer: &mut SerializationDataBuffer,
-    property_term_id: &usize,
+    data_buffer: &SerializationDataBuffer,
+    property_term_id: usize,
     new_subject_term_id: usize,
     new_object_term_id: usize,
 ) -> Result<Option<ArcEdge>, SerializationError> {
@@ -523,7 +539,7 @@ pub fn rewrite_property_edge(
         data_buffer
             .property_edge_map
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .cloned()
     }) else {
         return Ok(None);
@@ -552,8 +568,8 @@ pub fn rewrite_property_edge(
             .remove(&old_edge)
     };
 
-    remove_edge_include(data_buffer, &old_edge.domain_term_id, &old_edge)?;
-    remove_edge_include(data_buffer, &old_edge.range_term_id, &old_edge)?;
+    remove_edge_include(data_buffer, old_edge.domain_term_id, &old_edge)?;
+    remove_edge_include(data_buffer, old_edge.range_term_id, &old_edge)?;
     {
         let mut edge_buffer = data_buffer.edge_buffer.write()?;
         edge_buffer.remove(&old_edge);
@@ -586,23 +602,23 @@ pub fn rewrite_property_edge(
         data_buffer
             .property_edge_map
             .write()?
-            .insert(*property_term_id, new_edge.clone());
+            .insert(property_term_id, new_edge.clone());
     }
     {
         data_buffer
             .property_domain_map
             .write()?
-            .insert(*property_term_id, HashSet::from([new_subject_term_id]));
+            .insert(property_term_id, HashSet::from([new_subject_term_id]));
     }
     {
         data_buffer
             .property_range_map
             .write()?
-            .insert(*property_term_id, HashSet::from([new_object_term_id]));
+            .insert(property_term_id, HashSet::from([new_object_term_id]));
     }
 
-    remove_orphan_synthetic_node(data_buffer, &old_edge.domain_term_id)?;
-    remove_orphan_synthetic_node(data_buffer, &old_edge.range_term_id)?;
+    remove_orphan_synthetic_node(data_buffer, old_edge.domain_term_id)?;
+    remove_orphan_synthetic_node(data_buffer, old_edge.range_term_id)?;
 
     Ok(Some(new_edge))
 }
@@ -631,4 +647,79 @@ pub fn canonical_count_term_id(
     term_id: usize,
 ) -> Result<usize, SerializationError> {
     follow_redirection(data_buffer, term_id)
+}
+
+fn collect_property_render_edges(
+    data_buffer: &SerializationDataBuffer,
+    property_term_ids: &[usize],
+) -> Result<Vec<ArcEdge>, SerializationError> {
+    let property_term_ids = property_term_ids.iter().copied().collect::<HashSet<_>>();
+
+    Ok(data_buffer
+        .edge_buffer
+        .read()?
+        .iter()
+        .filter(|edge| {
+            edge.property_term_id
+                .is_some_and(|property_term_id| property_term_ids.contains(&property_term_id))
+                && is_direct_property_render_edge(edge)
+        })
+        .cloned()
+        .collect())
+}
+
+pub fn has_non_fallback_property_edge(
+    data_buffer: &SerializationDataBuffer,
+    property_term_id: usize,
+) -> Result<bool, SerializationError> {
+    let edge = {
+        data_buffer
+            .property_edge_map
+            .read()?
+            .get(&property_term_id)
+            .cloned()
+    };
+
+    let Some(edge) = edge else {
+        return Ok(false);
+    };
+
+    Ok(!is_synthetic_property_fallback(
+        &data_buffer.term_index,
+        &edge,
+    )?)
+}
+
+pub fn is_direct_property_render_edge(edge: &ArcEdge) -> bool {
+    matches!(
+        edge.edge_type,
+        ElementType::Owl(OwlType::Edge(
+            OwlEdge::ObjectProperty
+                | OwlEdge::DatatypeProperty
+                | OwlEdge::DeprecatedProperty
+                | OwlEdge::ExternalProperty
+        )) | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))
+    )
+}
+
+pub fn is_synthetic_property_fallback(
+    term_index: &TermIndex,
+    edge: &ArcEdge,
+) -> Result<bool, SerializationError> {
+    let is_property_edge = matches!(
+        edge.edge_type,
+        ElementType::Owl(OwlType::Edge(
+            OwlEdge::ObjectProperty
+                | OwlEdge::DatatypeProperty
+                | OwlEdge::DeprecatedProperty
+                | OwlEdge::ExternalProperty
+        )) | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))
+    );
+
+    if !is_property_edge {
+        return Ok(false);
+    }
+
+    Ok(is_synthetic(&term_index.get(edge.domain_term_id)?)
+        && is_synthetic(&term_index.get(edge.range_term_id)?))
 }

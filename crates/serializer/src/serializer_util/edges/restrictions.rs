@@ -1,5 +1,5 @@
 use grapher::prelude::{
-    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType,
+    ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsNode, RdfsType,
 };
 use log::{debug, trace};
 use oxrdf::{Literal, Term};
@@ -20,17 +20,20 @@ use crate::{
             create_edge_from_id, create_term, create_triple_from_id, create_triple_from_iri,
             get_or_create_domain_thing,
         },
-        is_query_fallback_endpoint, is_restriction_owner_edge,
         labels::extract_label,
-        nodes::insert_node,
+        nodes::{insert_node, is_query_fallback_endpoint},
         synthetic::{SYNTH_LITERAL, SYNTH_LITERAL_VALUE},
         synthetic_iri, try_resolve_reserved,
     },
     vocab::rdfs,
 };
 
+#[expect(
+    clippy::significant_drop_tightening,
+    reason = "restriction_buffer is used throughout the function"
+)]
 pub fn merge_restriction_state(
-    data_buffer: &mut SerializationDataBuffer,
+    data_buffer: &SerializationDataBuffer,
     old_term_id: usize,
     new_term_id: usize,
 ) -> Result<(), SerializationError> {
@@ -58,7 +61,7 @@ pub fn merge_restriction_state(
         new_state.filler = *filler;
     }
     if new_state.cardinality.is_none() {
-        new_state.cardinality = cardinality.clone();
+        new_state.cardinality.clone_from(cardinality);
     }
 
     new_state.self_restriction |= self_restriction;
@@ -72,8 +75,8 @@ pub fn merge_restriction_state(
 
 pub fn should_skip_structural_operand(
     data_buffer: &SerializationDataBuffer,
-    subject_term_id: &usize,
-    object_term_id: &usize,
+    subject_term_id: usize,
+    object_term_id: usize,
     operator: &str,
 ) -> Result<bool, SerializationError> {
     if is_consumed_restriction(data_buffer, object_term_id)? {
@@ -86,15 +89,15 @@ pub fn should_skip_structural_operand(
     }
 
     if let (Some(resolved_subject), Some(resolved_target)) = (
-        resolve(data_buffer, *subject_term_id)?,
-        resolve(data_buffer, *object_term_id)?,
+        resolve(data_buffer, subject_term_id)?,
+        resolve(data_buffer, object_term_id)?,
     ) && resolved_subject == resolved_target
     {
         debug!(
             "Skipping {} self-loop after restriction redirection: {} -> {}",
             operator,
-            data_buffer.term_index.get(&resolved_subject)?,
-            data_buffer.term_index.get(&resolved_target)?
+            data_buffer.term_index.get(resolved_subject)?,
+            data_buffer.term_index.get(resolved_target)?
         );
         return Ok(true);
     }
@@ -114,7 +117,7 @@ pub fn cardinality_literal(
         .into());
     };
 
-    let object_term = data_buffer.term_index.get(&object_term_id)?;
+    let object_term = data_buffer.term_index.get(object_term_id)?;
     match object_term.as_ref() {
         Term::Literal(literal) => Ok(literal.value().to_string()),
         other => Err(SerializationErrorKind::SerializationFailedTriple(
@@ -127,26 +130,26 @@ pub fn cardinality_literal(
 
 pub fn is_consumed_restriction(
     data_buffer: &SerializationDataBuffer,
-    restriction_term_id: &usize,
+    restriction_term_id: usize,
 ) -> Result<bool, SerializationError> {
     let result = data_buffer
         .edge_redirection
         .read()?
-        .contains_key(restriction_term_id)
+        .contains_key(&restriction_term_id)
         && !data_buffer
             .node_element_buffer
             .read()?
-            .contains_key(restriction_term_id)
+            .contains_key(&restriction_term_id)
         && !data_buffer
             .restriction_buffer
             .read()?
-            .contains_key(restriction_term_id);
+            .contains_key(&restriction_term_id);
     Ok(result)
 }
 
 pub fn is_ephemeral_restriction_node(
     data_buffer: &SerializationDataBuffer,
-    restriction_term_id: &usize,
+    restriction_term_id: usize,
 ) -> Result<bool, SerializationError> {
     let restriction = data_buffer.term_index.get(restriction_term_id)?;
     Ok(restriction.is_blank_node()
@@ -154,29 +157,34 @@ pub fn is_ephemeral_restriction_node(
             data_buffer
                 .node_element_buffer
                 .read()?
-                .get(restriction_term_id),
+                .get(&restriction_term_id),
             Some(ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass)))
         ))
 }
 
+pub fn is_restriction_owner_edge(edge: &ArcEdge) -> bool {
+    edge.edge_type == ElementType::Rdfs(RdfsType::Edge(RdfsEdge::SubclassOf))
+        || edge.edge_type == ElementType::NoDraw
+}
+
 pub fn restriction_owner(
     data_buffer: &SerializationDataBuffer,
-    restriction_term_id: &usize,
+    restriction_term_id: usize,
 ) -> Result<Option<usize>, SerializationError> {
     // After an owl:equivalentClass merge, restriction state can live on the
-    // named class IRI itself. In that case, the class is the owner and must
+    // named class IRI it In that case, the class is the owner and must
     // not be inferred from incoming subclass edges.
     if !is_ephemeral_restriction_node(data_buffer, restriction_term_id)? {
-        return Ok(Some(*restriction_term_id));
+        return Ok(Some(restriction_term_id));
     }
 
     let result = data_buffer
         .edges_include_map
         .read()?
-        .get(restriction_term_id)
+        .get(&restriction_term_id)
         .and_then(|edges| {
             edges.iter().find_map(|edge| {
-                (edge.range_term_id == *restriction_term_id && is_restriction_owner_edge(edge))
+                (edge.range_term_id == restriction_term_id && is_restriction_owner_edge(edge))
                     .then(|| edge.domain_term_id)
             })
         });
@@ -185,14 +193,14 @@ pub fn restriction_owner(
 
 pub fn default_restriction_target(
     data_buffer: &mut SerializationDataBuffer,
-    owner_term_id: &usize,
-    property_term_id: &usize,
+    owner_term_id: usize,
+    property_term_id: usize,
 ) -> Result<usize, SerializationError> {
     let property_edge_type = {
         data_buffer
             .edge_element_buffer
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .copied()
     };
 
@@ -202,13 +210,13 @@ pub fn default_restriction_target(
                 data_buffer
                     .property_range_map
                     .read()?
-                    .get(property_term_id)
+                    .get(&property_term_id)
                     .and_then(|ranges| ranges.iter().next())
                     .copied()
             };
 
             if let Some(range_term_id) = preferred_range_term_id {
-                let range_term = data_buffer.term_index.get(&range_term_id)?;
+                let range_term = data_buffer.term_index.get(range_term_id)?;
 
                 if !is_query_fallback_endpoint(&range_term) {
                     if let Some(resolved_range_term_id) = resolve(data_buffer, range_term_id)? {
@@ -267,7 +275,7 @@ pub fn default_restriction_target(
             let property_term = data_buffer.term_index.get(property_term_id)?;
             let literal_iri = synthetic_iri(&property_term, SYNTH_LITERAL);
             let literal_triple = create_triple_from_iri(
-                &mut data_buffer.term_index,
+                &data_buffer.term_index,
                 &literal_iri,
                 &rdfs::LITERAL.as_str().to_string(),
                 None,
@@ -285,10 +293,10 @@ pub fn default_restriction_target(
             }
 
             {
-                data_buffer
-                    .label_buffer
-                    .write()?
-                    .insert(literal_triple.subject_term_id, element_type.to_string());
+                data_buffer.label_buffer.write()?.insert(
+                    literal_triple.subject_term_id,
+                    Some(element_type.to_string()),
+                );
             }
 
             Ok(literal_triple.subject_term_id)
@@ -299,8 +307,8 @@ pub fn default_restriction_target(
 
 pub fn materialize_one_of_target(
     data_buffer: &mut SerializationDataBuffer,
-    owner_term_id: &usize,
-    target_term_id: &usize,
+    owner_term_id: usize,
+    target_term_id: usize,
 ) -> Result<usize, SerializationError> {
     let target_term = data_buffer.term_index.get(target_term_id)?;
     match target_term.as_ref() {
@@ -308,14 +316,14 @@ pub fn materialize_one_of_target(
             materialize_literal_value_target(data_buffer, owner_term_id, literal)
         }
         Term::NamedNode(_) | Term::BlankNode(_) => {
-            if let Some(resolved) = resolve(data_buffer, *target_term_id)? {
+            if let Some(resolved) = resolve(data_buffer, target_term_id)? {
                 return Ok(resolved);
             }
 
             if !data_buffer
                 .label_buffer
                 .read()?
-                .contains_key(target_term_id)
+                .contains_key(&target_term_id)
             {
                 extract_label(data_buffer, None, &target_term, target_term_id)?;
             }
@@ -324,14 +332,14 @@ pub fn materialize_one_of_target(
                 data_buffer
                     .node_element_buffer
                     .read()?
-                    .contains_key(target_term_id)
+                    .contains_key(&target_term_id)
             };
             if !node_exists {
                 let predicate_term_id = { data_buffer.term_index.insert(rdfs::RESOURCE.into())? };
 
                 let resource_triple = create_triple_from_id(
                     &data_buffer.term_index,
-                    *target_term_id,
+                    target_term_id,
                     Some(predicate_term_id),
                     None,
                 )?;
@@ -343,14 +351,14 @@ pub fn materialize_one_of_target(
                 )?;
             }
 
-            Ok(*target_term_id)
+            Ok(target_term_id)
         }
     }
 }
 
 pub fn materialize_literal_value_target(
     data_buffer: &mut SerializationDataBuffer,
-    restriction_term_id: &usize,
+    restriction_term_id: usize,
     literal: &Literal,
 ) -> Result<usize, SerializationError> {
     let subject_term_id = {
@@ -369,7 +377,7 @@ pub fn materialize_literal_value_target(
     };
 
     if !node_exists {
-        let predicate_term_id = { data_buffer.term_index.insert(rdfs::LITERAL.into())? };
+        let predicate_term_id = data_buffer.term_index.insert(rdfs::LITERAL.into())?;
         let literal_triple = create_triple_from_id(
             &data_buffer.term_index,
             subject_term_id,
@@ -387,14 +395,13 @@ pub fn materialize_literal_value_target(
     data_buffer
         .label_buffer
         .write()?
-        .insert(subject_term_id, literal.value().to_string());
+        .insert(subject_term_id, Some(literal.value().to_string()));
 
     Ok(subject_term_id)
 }
 
-#[expect(clippy::too_many_arguments)]
 pub fn insert_restriction_edge(
-    data_buffer: &mut SerializationDataBuffer,
+    data_buffer: &SerializationDataBuffer,
     subject_term_id: usize,
     property_term_id: usize,
     object_term_id: usize,
@@ -419,7 +426,7 @@ pub fn insert_restriction_edge(
         data_buffer
             .edge_label_buffer
             .write()?
-            .insert(edge.clone(), label);
+            .insert(edge.clone(), Some(label));
     }
     if let Some(cardinality) = cardinality {
         data_buffer
@@ -433,28 +440,28 @@ pub fn insert_restriction_edge(
 
 pub fn restriction_edge_type(
     data_buffer: &SerializationDataBuffer,
-    property_term_id: &usize,
+    property_term_id: usize,
     render_mode: RestrictionRenderMode,
 ) -> Result<ElementType, SerializationError> {
     if render_mode == RestrictionRenderMode::ValuesFrom {
         return Ok(ElementType::Owl(OwlType::Edge(OwlEdge::ValuesFrom)));
     }
 
-    match data_buffer
+    let value = data_buffer
         .edge_element_buffer
         .read()?
-        .get(property_term_id)
-        .copied()
-    {
+        .get(&property_term_id)
+        .copied();
+    match value {
         Some(
-            edge_type @ ElementType::Owl(OwlType::Edge(
+            edge_type @ (ElementType::Owl(OwlType::Edge(
                 OwlEdge::ObjectProperty
                 | OwlEdge::DatatypeProperty
                 | OwlEdge::DeprecatedProperty
                 | OwlEdge::ExternalProperty,
-            )),
-        )
-        | Some(edge_type @ ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))) => Ok(edge_type),
+            ))
+            | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))),
+        ) => Ok(edge_type),
         Some(_) | None => Ok(ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty))),
     }
 }
@@ -472,13 +479,13 @@ pub fn is_numeric_cardinality(cardinality: &(String, Option<String>)) -> bool {
 
 pub fn try_materialize_restriction(
     data_buffer: &mut SerializationDataBuffer,
-    restriction_term_id: &usize,
+    restriction_term_id: usize,
 ) -> Result<SerializationStatus, SerializationError> {
     let maybe_state_lock = {
         data_buffer
             .restriction_buffer
             .read()?
-            .get(restriction_term_id)
+            .get(&restriction_term_id)
             .cloned()
     };
     let Some(state_lock) = maybe_state_lock else {
@@ -537,7 +544,7 @@ pub fn try_materialize_restriction(
     };
 
     let restriction_edge_type =
-        restriction_edge_type(data_buffer, &property_term_id, state.render_mode)?;
+        restriction_edge_type(data_buffer, property_term_id, state.render_mode)?;
 
     let restriction_label = {
         let label_buffer = data_buffer.label_buffer.read()?;
@@ -553,6 +560,7 @@ pub fn try_materialize_restriction(
                     .get(&property_term_id)
                     .and_then(|edge| edge_label_buffer.get(edge).cloned())
             })
+            .flatten()
             .unwrap_or_else(|| restriction_edge_type.to_string())
     };
 
@@ -570,24 +578,20 @@ pub fn try_materialize_restriction(
             return Ok(SerializationStatus::Deferred);
         };
 
-        let object_term_id = if let Some(filler_id) = state.filler.as_ref() {
+        let object_term_id = if let Some(filler_id) = state.filler {
             let filler_term = data_buffer.term_index.get(filler_id)?;
             match &*filler_term {
                 Term::Literal(literal) => {
-                    data_buffer
-                        .label_buffer
-                        .write()?
-                        .insert(existing_edge.range_term_id, literal.value().to_string());
+                    data_buffer.label_buffer.write()?.insert(
+                        existing_edge.range_term_id,
+                        Some(literal.value().to_string()),
+                    );
                     existing_edge.range_term_id
                 }
-                _ => match resolve(data_buffer, *filler_id)? {
+                _ => match resolve(data_buffer, filler_id)? {
                     Some(resolved) => resolved,
                     None => {
-                        debug!(
-                            "Deferring restriction for term '{}': cannot resolve filler",
-                            data_buffer.term_index.get(restriction_term_id)?
-                        );
-                        return Ok(SerializationStatus::Deferred);
+                        materialize_named_value_target(data_buffer, property_term_id, filler_id)?
                     }
                 },
             }
@@ -598,35 +602,34 @@ pub fn try_materialize_restriction(
         let edge = {
             let rewritten = rewrite_property_edge(
                 data_buffer,
-                &property_term_id,
+                property_term_id,
                 subject_term_id,
                 object_term_id,
             )?;
 
-            match rewritten {
-                Some(edge) => edge,
-                None => {
-                    let triple = create_triple_from_id(
-                        &data_buffer.term_index,
-                        subject_term_id,
-                        Some(property_term_id),
-                        None,
-                    )?;
-                    let display_triple = data_buffer.term_index.display_triple(&triple)?;
-                    return Err(SerializationErrorKind::SerializationFailedTriple(
-                        display_triple,
-                        "Failed to rewrite canonical property edge for hasValue restriction"
-                            .to_string(),
-                    ))?;
-                }
+            if let Some(edge) = rewritten {
+                edge
+            } else {
+                let triple = create_triple_from_id(
+                    &data_buffer.term_index,
+                    subject_term_id,
+                    Some(property_term_id),
+                    None,
+                )?;
+                let display_triple = data_buffer.term_index.display_triple(&triple)?;
+                return Err(SerializationErrorKind::SerializationFailedTriple(
+                    display_triple,
+                    "Failed to rewrite canonical property edge for hasValue restriction"
+                        .to_string(),
+                ))?;
             }
         };
-        {
-            data_buffer
-                .edge_label_buffer
-                .write()?
-                .insert(edge.clone(), restriction_label);
-        }
+
+        data_buffer
+            .edge_label_buffer
+            .write()?
+            .insert(edge.clone(), Some(restriction_label));
+
         if let Some(cardinality) = &state.cardinality {
             data_buffer
                 .edge_cardinality_buffer
@@ -637,8 +640,8 @@ pub fn try_materialize_restriction(
         remove_restriction_stub(data_buffer, restriction_term_id)?;
         remove_restriction_node(data_buffer, restriction_term_id)?;
 
-        if subject_term_id != *restriction_term_id {
-            redirect_iri(data_buffer, *restriction_term_id, subject_term_id)?;
+        if subject_term_id != restriction_term_id {
+            redirect_iri(data_buffer, restriction_term_id, subject_term_id)?;
         }
 
         trace!(
@@ -651,18 +654,18 @@ pub fn try_materialize_restriction(
     let object_term_id = if state.self_restriction {
         subject_term_id
     } else if let Some(filler_id) = state.filler {
-        let filler_term = data_buffer.term_index.get(&filler_id)?;
+        let filler_term = data_buffer.term_index.get(filler_id)?;
         match &*filler_term {
             Term::Literal(literal) => {
                 materialize_literal_value_target(data_buffer, restriction_term_id, literal)?
             }
             _ => match resolve(data_buffer, filler_id)? {
                 Some(resolved) => resolved,
-                None => materialize_named_value_target(data_buffer, &property_term_id, &filler_id)?,
+                None => materialize_named_value_target(data_buffer, property_term_id, filler_id)?,
             },
         }
     } else {
-        default_restriction_target(data_buffer, &subject_term_id, &property_term_id)?
+        default_restriction_target(data_buffer, subject_term_id, property_term_id)?
     };
 
     let maybe_numeric_cardinality = state
@@ -681,17 +684,17 @@ pub fn try_materialize_restriction(
         };
 
         if let Some(existing_edge) = maybe_existing_edge {
-            remove_property_fallback_edge(data_buffer, &property_term_id)?;
+            remove_property_fallback_edge(data_buffer, property_term_id)?;
 
-            let edge = match rewrite_property_edge(
+            let edge = (rewrite_property_edge(
                 data_buffer,
-                &property_term_id,
+                property_term_id,
                 subject_term_id,
                 object_term_id,
-            )? {
-                Some(edge) => edge,
-                None => existing_edge,
-            };
+            )?)
+            .map_or(existing_edge, |edge| edge);
+
+            register_property_endpoints(data_buffer, property_term_id, &edge)?;
 
             {
                 data_buffer
@@ -703,8 +706,8 @@ pub fn try_materialize_restriction(
             remove_restriction_stub(data_buffer, restriction_term_id)?;
             remove_restriction_node(data_buffer, restriction_term_id)?;
 
-            if subject_term_id != *restriction_term_id {
-                redirect_iri(data_buffer, *restriction_term_id, subject_term_id)?;
+            if subject_term_id != restriction_term_id {
+                redirect_iri(data_buffer, restriction_term_id, subject_term_id)?;
             }
 
             trace!(
@@ -715,7 +718,7 @@ pub fn try_materialize_restriction(
         }
     }
 
-    remove_property_fallback_edge(data_buffer, &property_term_id)?;
+    remove_property_fallback_edge(data_buffer, property_term_id)?;
 
     let edge = insert_restriction_edge(
         data_buffer,
@@ -726,6 +729,8 @@ pub fn try_materialize_restriction(
         restriction_label,
         state.cardinality.clone(),
     )?;
+    drop(state);
+    register_property_endpoints(data_buffer, property_term_id, &edge)?;
 
     {
         data_buffer
@@ -736,8 +741,8 @@ pub fn try_materialize_restriction(
     remove_restriction_stub(data_buffer, restriction_term_id)?;
     remove_restriction_node(data_buffer, restriction_term_id)?;
 
-    if subject_term_id != *restriction_term_id {
-        redirect_iri(data_buffer, *restriction_term_id, subject_term_id)?;
+    if subject_term_id != restriction_term_id {
+        redirect_iri(data_buffer, restriction_term_id, subject_term_id)?;
     }
 
     trace!(
@@ -748,8 +753,8 @@ pub fn try_materialize_restriction(
 }
 
 pub fn remove_restriction_stub(
-    data_buffer: &mut SerializationDataBuffer,
-    restriction_term_id: &usize,
+    data_buffer: &SerializationDataBuffer,
+    restriction_term_id: usize,
 ) -> Result<(), SerializationError> {
     if !is_ephemeral_restriction_node(data_buffer, restriction_term_id)? {
         return Ok(());
@@ -759,13 +764,13 @@ pub fn remove_restriction_stub(
         data_buffer
             .edges_include_map
             .read()?
-            .get(restriction_term_id)
+            .get(&restriction_term_id)
             .cloned()
     } {
         for edge in edges {
-            if edge.range_term_id == *restriction_term_id && is_restriction_owner_edge(&edge) {
-                remove_edge_include(data_buffer, &edge.domain_term_id, &edge)?;
-                remove_edge_include(data_buffer, &edge.range_term_id, &edge)?;
+            if edge.range_term_id == restriction_term_id && is_restriction_owner_edge(&edge) {
+                remove_edge_include(data_buffer, edge.domain_term_id, &edge)?;
+                remove_edge_include(data_buffer, edge.range_term_id, &edge)?;
                 {
                     data_buffer.edge_buffer.write()?.remove(&edge);
                 }
@@ -786,26 +791,28 @@ pub fn remove_restriction_stub(
 
 pub fn materialize_named_value_target(
     data_buffer: &mut SerializationDataBuffer,
-    property_term_id: &usize,
-    target_term_id: &usize,
+    property_term_id: usize,
+    target_term_id: usize,
 ) -> Result<usize, SerializationError> {
     let property_element_type = {
         data_buffer
             .edge_element_buffer
             .read()?
-            .get(property_term_id)
+            .get(&property_term_id)
             .copied()
     };
     match property_element_type {
-        Some(ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)))
-        | Some(ElementType::Owl(OwlType::Edge(OwlEdge::ExternalProperty)))
-        | Some(ElementType::Owl(OwlType::Edge(OwlEdge::DeprecatedProperty)))
-        | Some(ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty))) => {
+        Some(
+            ElementType::Owl(OwlType::Edge(
+                OwlEdge::ObjectProperty | OwlEdge::ExternalProperty | OwlEdge::DeprecatedProperty,
+            ))
+            | ElementType::Rdf(RdfType::Edge(RdfEdge::RdfProperty)),
+        ) => {
             let target_has_label = {
                 data_buffer
                     .label_buffer
                     .read()?
-                    .contains_key(target_term_id)
+                    .contains_key(&target_term_id)
             };
             if !target_has_label {
                 let target_term = data_buffer.term_index.get(target_term_id)?;
@@ -816,13 +823,13 @@ pub fn materialize_named_value_target(
                 data_buffer
                     .node_element_buffer
                     .read()?
-                    .contains_key(target_term_id)
+                    .contains_key(&target_term_id)
             };
             if !node_exists {
-                let predicate_term_id = { data_buffer.term_index.insert(rdfs::RESOURCE.into())? };
+                let predicate_term_id = data_buffer.term_index.insert(rdfs::RESOURCE.into())?;
                 let resource_triple = create_triple_from_id(
                     &data_buffer.term_index,
-                    *target_term_id,
+                    target_term_id,
                     Some(predicate_term_id),
                     None,
                 )?;
@@ -834,13 +841,74 @@ pub fn materialize_named_value_target(
                 )?;
             }
 
-            Ok(*target_term_id)
+            Ok(target_term_id)
         }
+
+        Some(ElementType::Owl(OwlType::Edge(OwlEdge::DatatypeProperty))) => {
+            let target_has_label = {
+                data_buffer
+                    .label_buffer
+                    .read()?
+                    .contains_key(&target_term_id)
+            };
+            if !target_has_label {
+                let target_term = data_buffer.term_index.get(target_term_id)?;
+                extract_label(data_buffer, None, &target_term, target_term_id)?;
+            }
+
+            let node_exists = {
+                data_buffer
+                    .node_element_buffer
+                    .read()?
+                    .contains_key(&target_term_id)
+            };
+            if !node_exists {
+                let target_term = data_buffer.term_index.get(target_term_id)?;
+
+                let predicate_term_id =
+                    if let Some(element_type) = try_resolve_reserved(&target_term) {
+                        let predicate = match element_type {
+                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)) => {
+                                data_buffer.term_index.insert(rdfs::DATATYPE.into())?
+                            }
+                            _ => data_buffer.term_index.insert(rdfs::RESOURCE.into())?,
+                        };
+
+                        let datatype_triple = create_triple_from_id(
+                            &data_buffer.term_index,
+                            target_term_id,
+                            Some(predicate),
+                            None,
+                        )?;
+
+                        insert_node(data_buffer, &datatype_triple, element_type)?;
+                        return Ok(target_term_id);
+                    } else {
+                        data_buffer.term_index.insert(rdfs::DATATYPE.into())?
+                    };
+
+                let datatype_triple = create_triple_from_id(
+                    &data_buffer.term_index,
+                    target_term_id,
+                    Some(predicate_term_id),
+                    None,
+                )?;
+
+                insert_node(
+                    data_buffer,
+                    &datatype_triple,
+                    ElementType::Rdfs(RdfsType::Node(RdfsNode::Datatype)),
+                )?;
+            }
+
+            Ok(target_term_id)
+        }
+
         _ => {
             let triple = create_triple_from_id(
                 &data_buffer.term_index,
-                *target_term_id,
-                Some(*property_term_id),
+                target_term_id,
+                Some(property_term_id),
                 None,
             )?;
             let display_triple = data_buffer.term_index.display_triple(&triple)?;
@@ -864,20 +932,20 @@ pub fn retry_restrictions(
             .restriction_buffer
             .read()?
             .keys()
-            .cloned()
+            .copied()
             .collect::<Vec<_>>()
     };
 
     for restriction in restrictions {
-        try_materialize_restriction(data_buffer, &restriction)?;
+        try_materialize_restriction(data_buffer, restriction)?;
     }
 
     Ok(())
 }
 
 pub fn remove_restriction_node(
-    data_buffer: &mut SerializationDataBuffer,
-    restriction_term_id: &usize,
+    data_buffer: &SerializationDataBuffer,
+    restriction_term_id: usize,
 ) -> Result<(), SerializationError> {
     // Named classes can temporarily carry restriction state after merging
     // an anonymous equivalentClass expression. Clear only the restriction state.
@@ -885,7 +953,7 @@ pub fn remove_restriction_node(
         data_buffer
             .restriction_buffer
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
         return Ok(());
     }
 
@@ -893,37 +961,82 @@ pub fn remove_restriction_node(
         data_buffer
             .node_element_buffer
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
     }
     {
         data_buffer
             .label_buffer
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
     }
     {
         data_buffer
             .node_characteristics
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
     }
     {
         data_buffer
             .edges_include_map
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
     }
     {
         data_buffer
             .restriction_buffer
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
     }
     {
         data_buffer
             .individual_count_buffer
             .write()?
-            .remove(restriction_term_id);
+            .remove(&restriction_term_id);
     }
+    Ok(())
+}
+
+pub fn register_declared_property_endpoints(
+    data_buffer: &SerializationDataBuffer,
+    property_term_id: usize,
+    domain_term_id: usize,
+    range_term_id: usize,
+) -> Result<(), SerializationError> {
+    data_buffer
+        .declared_property_domain_map
+        .write()?
+        .entry(property_term_id)
+        .or_default()
+        .insert(domain_term_id);
+
+    data_buffer
+        .declared_property_range_map
+        .write()?
+        .entry(property_term_id)
+        .or_default()
+        .insert(range_term_id);
+
+    Ok(())
+}
+
+pub fn register_property_endpoints(
+    data_buffer: &SerializationDataBuffer,
+    property_term_id: usize,
+    edge: &ArcEdge,
+) -> Result<(), SerializationError> {
+    data_buffer
+        .property_domain_map
+        .write()?
+        .entry(property_term_id)
+        .or_default()
+        .insert(edge.domain_term_id);
+
+    data_buffer
+        .property_range_map
+        .write()?
+        .entry(property_term_id)
+        .or_default()
+        .insert(edge.range_term_id);
+
     Ok(())
 }

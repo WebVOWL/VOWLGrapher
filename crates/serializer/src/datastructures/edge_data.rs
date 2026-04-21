@@ -1,3 +1,5 @@
+#![expect(clippy::struct_field_names)]
+
 use grapher::prelude::ElementType;
 use std::{
     fmt::{Display, Formatter},
@@ -23,7 +25,7 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(
+    pub const fn new(
         domain_term_id: usize,
         edge_type: ElementType,
         range_term_id: usize,
@@ -129,8 +131,8 @@ mod tests {
 
         // Test that they hash to the same value by inserting into a HashSet
         let mut edge_set = HashSet::new();
-        edge_set.insert(edge1.clone());
-        edge_set.insert(edge2.clone());
+        edge_set.insert(edge1);
+        edge_set.insert(edge2);
 
         assert_eq!(
             edge_set.len(),
@@ -167,8 +169,8 @@ mod tests {
 
         // Test that they both appear in the HashSet
         let mut edge_set = HashSet::new();
-        edge_set.insert(edge1.clone());
-        edge_set.insert(edge2.clone());
+        edge_set.insert(edge1);
+        edge_set.insert(edge2);
 
         assert_eq!(
             edge_set.len(),

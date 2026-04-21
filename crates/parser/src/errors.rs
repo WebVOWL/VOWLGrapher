@@ -56,7 +56,7 @@ pub enum VOWLGrapherStoreErrorKind {
 
 impl From<VOWLGrapherStoreErrorKind> for VOWLGrapherError {
     fn from(value: VOWLGrapherStoreErrorKind) -> Self {
-        <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(value.into())
+        <VOWLGrapherStoreError as Into<Self>>::into(value.into())
     }
 }
 
@@ -198,12 +198,12 @@ impl std::error::Error for VOWLGrapherStoreError {
             VOWLGrapherStoreErrorKind::InvalidFileType(_)
             | VOWLGrapherStoreErrorKind::IncorrectFileExtension(_)
             | VOWLGrapherStoreErrorKind::ImportResolutionError(_)
-            | VOWLGrapherStoreErrorKind::RemoteFetchError(_) => None,
+            | VOWLGrapherStoreErrorKind::RemoteFetchError(_)
+            | VOWLGrapherStoreErrorKind::UnsupportedQueryType(_) => None,
             VOWLGrapherStoreErrorKind::LoaderError(e) => Some(e),
             VOWLGrapherStoreErrorKind::QueryEvaluationError(e) => Some(e),
             VOWLGrapherStoreErrorKind::JoinError(e) => Some(e),
             VOWLGrapherStoreErrorKind::StorageError(e) => Some(e),
-            VOWLGrapherStoreErrorKind::UnsupportedQueryType(_) => None,
             VOWLGrapherStoreErrorKind::SerializerError(e) => Some(e),
         }
     }

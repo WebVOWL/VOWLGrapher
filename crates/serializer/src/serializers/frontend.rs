@@ -18,27 +18,38 @@ use rdf_fusion::execution::results::{QuerySolution, QuerySolutionStream};
 use vowlgrapher_parser::errors::VOWLGrapherStoreError;
 use vowlgrapher_util::prelude::{ErrorRecord, VOWLGrapherError};
 
+/// Serializes a [`QuerySolutionStream`] into a [`GraphDisplayData`].
 #[derive(Default)]
 pub struct GraphDisplayDataSolutionSerializer;
 
 impl GraphDisplayDataSolutionSerializer {
-    pub fn new() -> Self {
+    /// Creates an instance of [`self`]
+    pub const fn new() -> Self {
         Self
     }
 
-    #[expect(unused, reason = "performance currently less than single-threaded")]
     /// Serializes a query solution stream into the data buffer using all available threads.
     ///
     /// This method tries to continue serializing despite errors.
     /// As such, the `Ok` value contains non-fatal errors encountered during
     /// serialization. The `Err` value contains fatal errors, preventing serialization.
+    ///
+    /// # Note
+    /// The performance of this method is currently less than the single-threaded variant [`Self::serialize_solution_stream`].
+    ///
+    /// # Errors
+    /// Returns any fatal error encountered while serializing.
     pub async fn par_serialize_solution_stream(
         &self,
         data: &mut GraphDisplayData,
         mut solution_stream: QuerySolutionStream,
     ) -> Result<Option<VOWLGrapherError>, VOWLGrapherError> {
         let thread_count = available_parallelism()
-            .unwrap_or(NonZero::new(1).unwrap())
+            .unwrap_or(NonZero::new(1).ok_or_else(|| {
+                SerializationErrorKind::ThreadPoolFailure(
+                    "Threadpool initialized with illegal thread count".to_string(),
+                )
+            })?)
             .into();
 
         info!("Serializing query solution stream using {thread_count} threads...");
@@ -48,7 +59,7 @@ impl GraphDisplayDataSolutionSerializer {
         let pool = ThreadPoolBuilder::new()
             .num_threads(thread_count)
             .build()
-            .unwrap();
+            .map_err(|e| <SerializationError as Into<VOWLGrapherError>>::into(e.into()))?;
 
         let mut count: u64 = 0;
         let mut data_buffer = SerializationDataBuffer::new();
@@ -74,7 +85,7 @@ impl GraphDisplayDataSolutionSerializer {
                 }
             };
 
-            pool.install(|| self.serialize_solution(solution, &mut data_buffer))?;
+            pool.install(|| Self::serialize_solution(&solution, &mut data_buffer))?;
 
             count += 1;
         }
@@ -98,7 +109,7 @@ impl GraphDisplayDataSolutionSerializer {
             for triple in triples {
                 let e: SerializationError = SerializationErrorKind::SerializationFailedTriple(
                     data_buffer.term_index.display_triple(&triple)?,
-                    format!("Unresolved reference: could not map '{}'", term_id),
+                    format!("Unresolved reference: could not map '{term_id}'"),
                 )
                 .into();
                 data_buffer
@@ -109,9 +120,9 @@ impl GraphDisplayDataSolutionSerializer {
             }
         }
 
-        let all_errors = self
-            .post_serialization_cleanup(data, &mut data_buffer, start_time, query_time, count)
-            .map_err(<SerializationError as Into<VOWLGrapherError>>::into)?;
+        let all_errors =
+            Self::post_serialization_cleanup(data, &data_buffer, start_time, query_time, count)
+                .map_err(<SerializationError as Into<VOWLGrapherError>>::into)?;
 
         Ok(all_errors)
     }
@@ -121,6 +132,9 @@ impl GraphDisplayDataSolutionSerializer {
     /// This method tries to continue serializing despite errors.
     /// As such, the `Ok` value contains non-fatal errors encountered during
     /// serialization. The `Err` value contains fatal errors, preventing serialization.
+    ///
+    /// # Errors
+    /// Returns any fatal error encountered while serializing.
     pub async fn serialize_solution_stream(
         &self,
         data: &mut GraphDisplayData,
@@ -151,7 +165,7 @@ impl GraphDisplayDataSolutionSerializer {
                 }
             };
 
-            self.serialize_solution(solution, &mut data_buffer)?;
+            Self::serialize_solution(&solution, &mut data_buffer)?;
 
             count += 1;
         }
@@ -177,7 +191,7 @@ impl GraphDisplayDataSolutionSerializer {
                     data_buffer.term_index.display_triple(&triple)?,
                     format!(
                         "Unresolved reference: could not map '{}'",
-                        data_buffer.term_index.get(&term_id)?
+                        data_buffer.term_index.get(term_id)?
                     ),
                 )
                 .into();
@@ -189,17 +203,16 @@ impl GraphDisplayDataSolutionSerializer {
             }
         }
 
-        let all_errors = self
-            .post_serialization_cleanup(data, &mut data_buffer, start_time, query_time, count)
-            .map_err(<SerializationError as Into<VOWLGrapherError>>::into)?;
+        let all_errors =
+            Self::post_serialization_cleanup(data, &data_buffer, start_time, query_time, count)
+                .map_err(<SerializationError as Into<VOWLGrapherError>>::into)?;
 
         Ok(all_errors)
     }
 
     /// Serializes one solution into the data buffer.
     fn serialize_solution(
-        &self,
-        solution: QuerySolution,
+        solution: &QuerySolution,
         data_buffer: &mut SerializationDataBuffer,
     ) -> Result<(), SerializationError> {
         let Some(subject_term) = solution.get("id") else {
@@ -212,7 +225,7 @@ impl GraphDisplayDataSolutionSerializer {
             data_buffer,
             solution.get("label"),
             subject_term,
-            &subject_term_id,
+            subject_term_id,
         )?;
 
         let Some(node_type_term) = solution.get("nodeType") else {
@@ -232,16 +245,19 @@ impl GraphDisplayDataSolutionSerializer {
             object_term_id,
         )?;
 
-        serialize_triple(data_buffer, triple)
+        serialize_triple(data_buffer, &triple)
     }
 
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "this method runs single-threaded"
+    )]
     /// Performs post-serialization cleanup.
     ///
     /// Must be called exactly once in any serialization implementation.
     fn post_serialization_cleanup(
-        &self,
         data: &mut GraphDisplayData,
-        data_buffer: &mut SerializationDataBuffer,
+        data_buffer: &SerializationDataBuffer,
         start_time: Instant,
         query_time: Option<Instant>,
         count: u64,
@@ -257,24 +273,24 @@ impl GraphDisplayDataSolutionSerializer {
             )
         };
 
-        debug!("{}", data_buffer);
-        let serializer_errors = if !data_buffer.failed_buffer.read()?.is_empty() {
+        debug!("{data_buffer}");
+        let serializer_errors = if data_buffer.failed_buffer.read()?.is_empty() {
+            None
+        } else {
             let mut failed_buffer = data_buffer.failed_buffer.write()?;
             let total = failed_buffer.len();
             let err: VOWLGrapherError = take(&mut *failed_buffer).into();
             error!(
                 "Failed to serialize {} triple{}:\n{}",
                 total,
-                if total != 1 { "s" } else { "" },
+                if total == 1 { "" } else { "s" },
                 err
             );
             Some(err)
-        } else {
-            None
         };
         let (converted, convert_errors) = data_buffer.convert_into()?;
         *data = converted;
-        debug!("{}", data);
+        debug!("{data}");
 
         let all_errors = match (serializer_errors, convert_errors) {
             (Some(mut e), Some(mut ce)) => {
@@ -293,14 +309,12 @@ impl GraphDisplayDataSolutionSerializer {
             .checked_duration_since(start_time)
             .unwrap_or_default()
             .as_secs_f32();
-        let query_finish_time = if let Some(qtime) = query_time {
+        let query_finish_time = query_time.map_or(0.0, |qtime| {
             qtime
                 .checked_duration_since(start_time)
                 .unwrap_or_default()
                 .as_secs_f32()
-        } else {
-            0.0
-        };
+        });
         info!(
             "Serialization completed\n \
             \tQuery execution time: {:.5} s\n \

@@ -7,6 +7,7 @@ use vowlgrapher_util::prelude::{
 };
 
 #[derive(Debug)]
+/// The different error types the serializer may raise.
 pub enum SerializationErrorKind {
     /// An error raised when the object of a triple is required but missing.
     ///
@@ -93,10 +94,11 @@ impl From<SerializationErrorKind> for VOWLGrapherError {
 
 impl From<SerializationErrorKind> for ErrorRecord {
     fn from(value: SerializationErrorKind) -> Self {
-        <SerializationError as Into<ErrorRecord>>::into(value.into())
+        <SerializationError as Into<Self>>::into(value.into())
     }
 }
 
+/// Wrapper for errors raised by the serializer.
 #[derive(Debug)]
 pub struct SerializationError {
     /// The contained error type.
@@ -149,11 +151,6 @@ impl From<ThreadPoolBuildError> for SerializationError {
 impl From<SerializationError> for ErrorRecord {
     fn from(value: SerializationError) -> Self {
         let (message, severity) = match value.inner {
-            SerializationErrorKind::MissingObject(triple, e)
-            | SerializationErrorKind::MissingPredicate(triple, e)
-            | SerializationErrorKind::MissingSubject(triple, e) => {
-                (format!("{e}:\n{triple}"), ErrorSeverity::Warning)
-            }
             SerializationErrorKind::MissingDomain(edge, e)
             | SerializationErrorKind::MissingRange(edge, e) => {
                 (format!("{e}:\n{edge}"), ErrorSeverity::Warning)
@@ -167,7 +164,10 @@ impl From<SerializationError> for ErrorRecord {
             SerializationErrorKind::SerializationFailedTriple(triple, e) => {
                 (format!("{e}:\n{triple}"), ErrorSeverity::Critical)
             }
-            SerializationErrorKind::SerializationWarningTriple(triple, e)
+            SerializationErrorKind::MissingObject(triple, e)
+            | SerializationErrorKind::MissingPredicate(triple, e)
+            | SerializationErrorKind::MissingSubject(triple, e)
+            | SerializationErrorKind::SerializationWarningTriple(triple, e)
             | SerializationErrorKind::SerialiationNotSupported(triple, e) => {
                 (format!("{e}:\n{triple}"), ErrorSeverity::Warning)
             }

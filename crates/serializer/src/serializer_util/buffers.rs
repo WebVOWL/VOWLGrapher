@@ -35,7 +35,7 @@ pub fn resolve(
     if let Some(elem) = data_buffer.node_element_buffer.read()?.get(&resolved) {
         trace!(
             "Resolved: {}: {}",
-            data_buffer.term_index.get(&resolved)?,
+            data_buffer.term_index.get(resolved)?,
             elem
         );
         return Ok(Some(resolved));
@@ -44,40 +44,37 @@ pub fn resolve(
     if let Some(elem) = data_buffer.edge_element_buffer.read()?.get(&resolved) {
         trace!(
             "Resolved: {}: {}",
-            data_buffer.term_index.get(&resolved)?,
+            data_buffer.term_index.get(resolved)?,
             elem
         );
         return Ok(Some(resolved));
     }
     Ok(None)
 }
-
 /// Returns the subject and object of the triple if their element type is known.
 pub fn resolve_so(
     data_buffer: &SerializationDataBuffer,
     triple: &ArcTriple,
 ) -> Result<(Option<usize>, Option<usize>), SerializationError> {
     let resolved_subject = resolve(data_buffer, triple.subject_term_id)?;
-    let resolved_object = match &triple.object_term_id {
-        Some(target) => resolve(data_buffer, *target)?,
-        None => {
-            debug!(
-                "Cannot resolve object of triple:\n {}",
-                data_buffer.term_index.display_triple(triple)?
-            );
-            None
-        }
+    let resolved_object = if let Some(target) = &triple.object_term_id {
+        resolve(data_buffer, *target)?
+    } else {
+        debug!(
+            "Cannot resolve object of triple:\n {}",
+            data_buffer.term_index.display_triple(triple)?
+        );
+        None
     };
     Ok((resolved_subject, resolved_object))
 }
-
 /// Add subject of triple to the element buffer.
 ///
 /// In the future, this function will handle cases where an element
 /// identifies itself as multiple elements. E.g. an element is both an rdfs:Class and a owl:class.
 pub fn add_triple_to_element_buffer(
     term_index: &TermIndex,
-    element_buffer: &mut Arc<RwLock<HashMap<usize, ElementType>>>,
+    element_buffer: &Arc<RwLock<HashMap<usize, ElementType>>>,
     triple: &ArcTriple,
     element_type: ElementType,
 ) -> Result<(), SerializationError> {
@@ -92,21 +89,22 @@ pub fn add_triple_to_element_buffer(
 /// Add a term id to a node/edge element buffer.
 pub fn add_term_to_element_buffer(
     term_index: &TermIndex,
-    element_buffer: &mut Arc<RwLock<HashMap<usize, ElementType>>>,
+    element_buffer: &Arc<RwLock<HashMap<usize, ElementType>>>,
     term_id: usize,
     element_type: ElementType,
 ) -> Result<(), SerializationError> {
-    if let Some(element) = element_buffer.write()?.insert(term_id, element_type) {
+    let value = element_buffer.write()?.insert(term_id, element_type);
+    if let Some(element) = value {
         warn!(
             "Registered '{}' to subject '{}' already registered as '{}'",
             element_type,
-            term_index.get(&term_id)?,
+            term_index.get(term_id)?,
             element
         );
     } else {
         trace!(
             "Adding to element buffer: {}: {}",
-            term_index.get(&term_id)?,
+            term_index.get(term_id)?,
             element_type
         );
     }
@@ -115,13 +113,13 @@ pub fn add_term_to_element_buffer(
 
 /// Add an IRI to the unresolved, unknown buffer.
 pub fn add_to_unknown_buffer(
-    data_buffer: &mut SerializationDataBuffer,
+    data_buffer: &SerializationDataBuffer,
     term_id: usize,
     triple: ArcTriple,
 ) -> Result<(), SerializationError> {
     trace!(
         "Adding to unknown buffer: {}: {}",
-        data_buffer.term_index.get(&term_id)?,
+        data_buffer.term_index.get(term_id)?,
         data_buffer.term_index.display_triple(&triple)?
     );
 
@@ -137,13 +135,13 @@ pub fn add_to_unknown_buffer(
 
 pub fn check_unknown_buffer(
     data_buffer: &mut SerializationDataBuffer,
-    term_id: &usize,
+    term_id: usize,
 ) -> Result<(), SerializationError> {
-    let maybe_triples = { data_buffer.unknown_buffer.write()?.remove(term_id) };
+    let maybe_triples = data_buffer.unknown_buffer.write()?.remove(&term_id);
 
     if let Some(triples) = maybe_triples {
         for triple in triples {
-            serialize_triple(data_buffer, triple)?;
+            serialize_triple(data_buffer, &triple)?;
         }
     }
     Ok(())
@@ -151,7 +149,7 @@ pub fn check_unknown_buffer(
 
 /// Insert an edge into the element's edge set.
 pub fn insert_edge_include(
-    data_buffer: &mut SerializationDataBuffer,
+    data_buffer: &SerializationDataBuffer,
     term_id: usize,
     edge: ArcEdge,
 ) -> Result<(), SerializationError> {
@@ -163,14 +161,13 @@ pub fn insert_edge_include(
         .insert(edge);
     Ok(())
 }
-
 /// Remove an edge from the element's edge set.
 pub fn remove_edge_include(
-    data_buffer: &mut SerializationDataBuffer,
-    element_id: &usize,
+    data_buffer: &SerializationDataBuffer,
+    element_id: usize,
     edge: &ArcEdge,
 ) -> Result<(), SerializationError> {
-    if let Some(edges) = data_buffer.edges_include_map.write()?.get_mut(element_id) {
+    if let Some(edges) = data_buffer.edges_include_map.write()?.get_mut(&element_id) {
         edges.remove(edge);
     }
     Ok(())
@@ -180,6 +177,8 @@ pub fn remove_edge_include(
 pub fn check_all_unknowns(
     data_buffer: &mut SerializationDataBuffer,
 ) -> Result<(), SerializationError> {
+    retry_restrictions(data_buffer)?;
+
     let mut pending = {
         let mut unknown_buffer = data_buffer.unknown_buffer.write()?;
         take(&mut *unknown_buffer)
@@ -190,20 +189,17 @@ pub fn check_all_unknowns(
     while !pending.is_empty() && pass < max_passes {
         pass += 1;
 
-        let pending_before: usize = pending.values().map(|set| set.len()).sum();
-        info!(
-            "Unknown resolution pass {} ({} triples pending)",
-            pass, pending_before
-        );
+        let pending_before: usize = pending.values().map(std::collections::HashSet::len).sum();
+        info!("Unknown resolution pass {pass} ({pending_before} triples pending)");
 
         retry_restrictions(data_buffer)?;
         let current = pending;
 
         for (term_id, triples) in current {
-            let term = data_buffer.term_index.get(&term_id)?;
+            let term = data_buffer.term_index.get(term_id)?;
 
             if !data_buffer.label_buffer.read()?.contains_key(&term_id) {
-                extract_label(data_buffer, None, &term, &term_id)?;
+                extract_label(data_buffer, None, &term, term_id)?;
             }
 
             if is_external(data_buffer, &term)? {
@@ -232,7 +228,7 @@ pub fn check_all_unknowns(
             }
 
             for triple in triples {
-                match serialize_triple(data_buffer, triple) {
+                match serialize_triple(data_buffer, &triple) {
                     Ok(()) => {}
                     Err(e) => {
                         data_buffer.failed_buffer.write()?.push(e.into());
@@ -246,12 +242,11 @@ pub fn check_all_unknowns(
             let mut unknown_buffer = data_buffer.unknown_buffer.write()?;
             take(&mut *unknown_buffer)
         };
-        let pending_after: usize = pending.values().map(|set| set.len()).sum();
+        let pending_after: usize = pending.values().map(std::collections::HashSet::len).sum();
 
         if pending_after >= pending_before || pending_after == 0 {
             info!(
-                "Unknown resolution reached fixpoint after pass {} ({} triples still pending)",
-                pass, pending_after
+                "Unknown resolution reached fixpoint after pass {pass} ({pending_after} triples still pending)"
             );
             break;
         }

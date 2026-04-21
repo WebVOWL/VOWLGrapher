@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use grapher::prelude::{
     Characteristic, ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsEdge, RdfsNode,
     RdfsType,
@@ -19,9 +21,10 @@ use crate::{
         },
         edges::{
             characteristics::{insert_characteristic, insert_inverse_of},
-            has_enumeration_member_edge, insert_edge,
+            has_enumeration_member_edge, has_non_fallback_property_edge, insert_edge,
             restrictions::{
-                cardinality_literal, materialize_one_of_target, should_skip_structural_operand,
+                cardinality_literal, materialize_one_of_target,
+                register_declared_property_endpoints, should_skip_structural_operand,
                 try_materialize_restriction,
             },
             upgrade_property_type,
@@ -30,11 +33,12 @@ use crate::{
             create_triple_from_id, create_triple_from_iri, get_or_create_anchor_thing,
             get_or_create_domain_thing,
         },
-        is_ontology, is_query_fallback_endpoint, is_structural_set_node, is_synthetic,
+        is_ontology, is_synthetic,
         labels::extend_element_label,
         nodes::{
-            has_named_equivalent_aliases, increment_individual_count, individual_count_literal,
-            insert_node, merge_nodes, upgrade_deprecated_node_type, upgrade_node_type,
+            has_named_equivalent_aliases, increment_individual_count, insert_node,
+            is_query_fallback_endpoint, is_structural_set_node, merge_nodes,
+            upgrade_deprecated_node_type, upgrade_node_type,
         },
         synthetic::{SYNTH_LITERAL, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING},
         synthetic_iri, trim_tag_circumfix,
@@ -45,19 +49,18 @@ use crate::{
 /// Serialize a triple to the data buffer.
 pub fn serialize_triple(
     data_buffer: &mut SerializationDataBuffer,
-    triple: ArcTriple,
+    triple: &ArcTriple,
 ) -> Result<(), SerializationError> {
-    match _serialize_triple(data_buffer, triple.clone()).or_else(|e| {
+    match internal_serialize_triple(data_buffer, triple.clone()).or_else(|e| {
         data_buffer.failed_buffer.write()?.push(e.into());
         Ok::<SerializationStatus, SerializationError>(SerializationStatus::Serialized)
     })? {
-        SerializationStatus::Serialized => {}
-        SerializationStatus::Deferred => {}
+        SerializationStatus::Serialized | SerializationStatus::Deferred => {}
         SerializationStatus::NotSupported => {
-            let msg = format!("Serialization of {} is not supported", triple);
+            let msg = format!("Serialization of {triple} is not supported");
             data_buffer.failed_buffer.write()?.push(
                 SerializationErrorKind::SerialiationNotSupported(
-                    data_buffer.term_index.display_triple(&triple)?,
+                    data_buffer.term_index.display_triple(triple)?,
                     msg,
                 )
                 .into(),
@@ -67,13 +70,17 @@ pub fn serialize_triple(
     Ok(())
 }
 
-/// Internal implementation detail of [`write_triple`].
-fn _serialize_triple(
+#[expect(
+    clippy::match_same_arms,
+    reason = "keeping vocabularies separated increases readability"
+)]
+/// Internal implementation detail of [`serialize_triple`].
+fn internal_serialize_triple(
     data_buffer: &mut SerializationDataBuffer,
     triple: ArcTriple,
 ) -> Result<SerializationStatus, SerializationError> {
     let predicate_term_id = data_buffer.get_predicate(&triple)?;
-    let predicate_term = data_buffer.term_index.get(&predicate_term_id)?;
+    let predicate_term = data_buffer.term_index.get(predicate_term_id)?;
 
     match predicate_term.as_ref() {
         Term::BlankNode(bnode) => {
@@ -95,7 +102,7 @@ fn _serialize_triple(
             }
             other => {
                 let msg = format!("Visualization of literal '{other}' is not supported");
-                let e = SerializationErrorKind::SerializationWarning(msg.to_string());
+                let e = SerializationErrorKind::SerializationWarning(msg.clone());
                 warn!("{msg}");
                 data_buffer
                     .failed_buffer
@@ -285,7 +292,7 @@ fn _serialize_triple(
                     // Particularly if we haven't seen subject in the element buffer.
                     if let Some(target) = triple.object_term_id
                         && target == triple.subject_term_id
-                        && is_synthetic(&data_buffer.term_index.get(&triple.subject_term_id)?)
+                        && is_synthetic(&data_buffer.term_index.get(triple.subject_term_id)?)
                         && data_buffer
                             .node_element_buffer
                             .read()?
@@ -303,7 +310,7 @@ fn _serialize_triple(
                         None,
                     )? {
                         Some(_) => {
-                            if let Some(restriction_term_id) = triple.object_term_id.as_ref() {
+                            if let Some(restriction_term_id) = triple.object_term_id {
                                 try_materialize_restriction(data_buffer, restriction_term_id)?;
                             }
                             return Ok(SerializationStatus::Serialized);
@@ -336,7 +343,7 @@ fn _serialize_triple(
                         state.render_mode = RestrictionRenderMode::ValuesFrom;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
 
                 // owl::ANNOTATED_PROPERTY => {},
@@ -364,8 +371,8 @@ fn _serialize_triple(
                         if let Some(term_id) = current_term_id {
                             let msg = format!(
                                 "Attempting to override existing backwardCompatibleWith annotation '{}' with new annotation '{}'. Skipping",
-                                data_buffer.term_index.get(&term_id)?,
-                                data_buffer.term_index.get(&object_term_id)?
+                                data_buffer.term_index.get(term_id)?,
+                                data_buffer.term_index.get(object_term_id)?
                             );
                             warn!("{msg}");
                             return Err(SerializationErrorKind::SerializationWarningTriple(
@@ -373,19 +380,18 @@ fn _serialize_triple(
                                 msg,
                             )
                             .into());
-                        } else if is_ontology(&data_buffer.term_index.get(&triple.subject_term_id)?)
+                        } else if is_ontology(&data_buffer.term_index.get(triple.subject_term_id)?)
                         {
                             *data_buffer.metadata.backward_compatible_with.write()? =
                                 Some(object_term_id);
                             return Ok(SerializationStatus::Serialized);
-                        } else {
-                            let msg = "The usage of backwardCompatibleWith annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
-                            return Err(SerializationErrorKind::SerializationFailedTriple(
-                                data_buffer.term_index.display_triple(&triple)?,
-                                msg,
-                            )
-                            .into());
                         }
+                        let msg = "The usage of backwardCompatibleWith annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
+                        return Err(SerializationErrorKind::SerializationFailedTriple(
+                            data_buffer.term_index.display_triple(&triple)?,
+                            msg,
+                        )
+                        .into());
                     }
                     None => {
                         return Err(SerializationErrorKind::MissingObject(
@@ -405,10 +411,10 @@ fn _serialize_triple(
                             .entry(triple.subject_term_id)
                             .or_default()
                             .write()?;
-                        state.cardinality = Some((exact.clone(), None));
+                        state.cardinality = Some((exact, None));
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 owl::QUALIFIED_CARDINALITY => {
                     let exact = cardinality_literal(data_buffer, &triple)?;
@@ -422,7 +428,7 @@ fn _serialize_triple(
                         state.requires_filler = true;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 owl::CLASS => {
                     insert_node(
@@ -433,10 +439,10 @@ fn _serialize_triple(
                     return Ok(SerializationStatus::Serialized);
                 }
                 owl::COMPLEMENT_OF => {
-                    if let Some(target) = triple.object_term_id.as_ref()
+                    if let Some(target) = triple.object_term_id
                         && should_skip_structural_operand(
                             data_buffer,
-                            &triple.subject_term_id,
+                            triple.subject_term_id,
                             target,
                             "owl:complementOf",
                         )?
@@ -448,7 +454,7 @@ fn _serialize_triple(
 
                     if triple.object_term_id.is_some()
                         && let Some(index) = resolve(data_buffer, triple.subject_term_id)?
-                        && !has_named_equivalent_aliases(data_buffer, &index)?
+                        && !has_named_equivalent_aliases(data_buffer, index)?
                     {
                         upgrade_node_type(
                             data_buffer,
@@ -459,9 +465,8 @@ fn _serialize_triple(
 
                     if edge.is_some() {
                         return Ok(SerializationStatus::Serialized);
-                    } else {
-                        return Ok(SerializationStatus::Deferred);
                     }
+                    return Ok(SerializationStatus::Deferred);
                 }
 
                 //TODO: OWL1
@@ -470,11 +475,11 @@ fn _serialize_triple(
                     let e = ElementType::Owl(OwlType::Edge(OwlEdge::DatatypeProperty));
                     add_triple_to_element_buffer(
                         &data_buffer.term_index,
-                        &mut data_buffer.edge_element_buffer,
+                        &data_buffer.edge_element_buffer,
                         &triple,
                         e,
                     )?;
-                    check_unknown_buffer(data_buffer, &triple.subject_term_id)?;
+                    check_unknown_buffer(data_buffer, triple.subject_term_id)?;
                     return Ok(SerializationStatus::Serialized);
                 }
 
@@ -485,7 +490,7 @@ fn _serialize_triple(
                     else {
                         debug!(
                             "Deferring owl:Deprecated for '{}': subject type unresolved",
-                            data_buffer.term_index.get(&triple.subject_term_id)?
+                            data_buffer.term_index.get(triple.subject_term_id)?
                         );
                         add_to_unknown_buffer(data_buffer, triple.subject_term_id, triple)?;
                         return Ok(SerializationStatus::Deferred);
@@ -496,7 +501,7 @@ fn _serialize_triple(
                         .read()?
                         .contains_key(&resolved_term_id)
                     {
-                        upgrade_deprecated_node_type(data_buffer, &resolved_term_id)?;
+                        upgrade_deprecated_node_type(data_buffer, resolved_term_id)?;
                         return Ok(SerializationStatus::Serialized);
                     }
 
@@ -507,16 +512,16 @@ fn _serialize_triple(
                     {
                         upgrade_property_type(
                             data_buffer,
-                            &resolved_term_id,
+                            resolved_term_id,
                             ElementType::Owl(OwlType::Edge(OwlEdge::DeprecatedProperty)),
                         )?;
-                        check_unknown_buffer(data_buffer, &resolved_term_id)?;
+                        check_unknown_buffer(data_buffer, resolved_term_id)?;
                         return Ok(SerializationStatus::Serialized);
                     }
 
                     debug!(
                         "Skipping owl:Deprecated for '{}': resolved subject has no node/edge entry",
-                        data_buffer.term_index.get(&resolved_term_id)?
+                        data_buffer.term_index.get(resolved_term_id)?
                     );
                     return Ok(SerializationStatus::Deferred);
                 }
@@ -548,10 +553,10 @@ fn _serialize_triple(
                 //TODO: OWL1
                 // owl::DIFFERENT_FROM => {}
                 owl::DISJOINT_UNION_OF => {
-                    if let Some(target) = triple.object_term_id.as_ref()
+                    if let Some(target) = triple.object_term_id
                         && should_skip_structural_operand(
                             data_buffer,
-                            &triple.subject_term_id,
+                            triple.subject_term_id,
                             target,
                             "owl:disjointUnionOf",
                         )?
@@ -561,7 +566,7 @@ fn _serialize_triple(
 
                     match insert_edge(data_buffer, triple, ElementType::NoDraw, None)? {
                         Some(edge) => {
-                            if !has_named_equivalent_aliases(data_buffer, &edge.domain_term_id)? {
+                            if !has_named_equivalent_aliases(data_buffer, edge.domain_term_id)? {
                                 upgrade_node_type(
                                     data_buffer,
                                     edge.domain_term_id,
@@ -595,58 +600,51 @@ fn _serialize_triple(
                 // owl::DISTINCT_MEMBERS => {}
                 owl::EQUIVALENT_CLASS => match resolve_so(data_buffer, &triple)? {
                     (Some(resolved_subject_term_id), Some(resolved_object_term_id)) => {
+                        let object_was_anonymous_expr = match triple.object_term_id {
+                            Some(object_term_id) => {
+                                data_buffer.term_index.is_blank_node(object_term_id)?
+                            }
+                            None => false,
+                        };
+
+                        let resolved_object_element_before_merge = data_buffer
+                            .node_element_buffer
+                            .read()?
+                            .get(&resolved_object_term_id)
+                            .copied();
+
                         merge_nodes(
                             data_buffer,
                             resolved_object_term_id,
                             resolved_subject_term_id,
                         )?;
 
-                        let resolved_subject_element = {
-                            match data_buffer
-                                .node_element_buffer
-                                .read()?
-                                .get(&resolved_subject_term_id)
-                                .copied()
-                            {
-                                Some(elem) => elem,
-                                None => {
-                                    let msg =
-                                        "subject not present in node_element_buffer".to_string();
-                                    return Err(
-                                        SerializationErrorKind::SerializationFailedTriple(
-                                            data_buffer.term_index.display_triple(&triple)?,
-                                            msg,
-                                        ),
-                                    )?;
-                                }
-                            }
+                        let value = data_buffer
+                            .node_element_buffer
+                            .read()?
+                            .get(&resolved_subject_term_id)
+                            .copied();
+
+                        let Some(resolved_subject_element) = value else {
+                            let msg = "subject not present in node_element_buffer".to_string();
+                            return Err(SerializationErrorKind::SerializationFailedTriple(
+                                data_buffer.term_index.display_triple(&triple)?,
+                                msg,
+                            )
+                            .into());
                         };
 
                         if resolved_subject_element
                             != ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass))
                         {
-                            let object_was_anonymous_expr = {
-                                match triple.object_term_id {
-                                    Some(object_term_id) => {
-                                        data_buffer.term_index.is_blank_node(&object_term_id)?
-                                    }
-                                    None => false,
-                                }
-                            };
                             let keep_structural_type = object_was_anonymous_expr
                                 && !has_named_equivalent_aliases(
                                     data_buffer,
-                                    &resolved_subject_term_id,
+                                    resolved_subject_term_id,
                                 )?;
 
                             let upgraded_element = if keep_structural_type {
-                                let resolved_object_element = data_buffer
-                                    .node_element_buffer
-                                    .read()?
-                                    .get(&resolved_object_term_id)
-                                    .copied();
-
-                                match resolved_object_element {
+                                match resolved_object_element_before_merge {
                                     Some(object_element)
                                         if is_structural_set_node(object_element) =>
                                     {
@@ -664,36 +662,29 @@ fn _serialize_triple(
                                 upgraded_element,
                             )?;
 
-                            let maybe_label = {
-                                data_buffer
-                                    .label_buffer
-                                    .read()?
-                                    .get(&resolved_object_term_id)
-                                    .cloned()
-                            };
+                            let maybe_label = data_buffer
+                                .label_buffer
+                                .read()?
+                                .get(&resolved_object_term_id)
+                                .cloned()
+                                .flatten();
                             if let Some(label) = maybe_label {
-                                extend_element_label(
-                                    data_buffer,
-                                    &resolved_subject_term_id,
-                                    label,
-                                )?;
+                                extend_element_label(data_buffer, resolved_subject_term_id, label)?;
                             }
                         }
                     }
-                    (Some(_), None) => match triple.object_term_id {
-                        Some(target) => {
+                    (Some(_), None) => {
+                        if let Some(target) = triple.object_term_id {
                             add_to_unknown_buffer(data_buffer, target, triple)?;
                             return Ok(SerializationStatus::Deferred);
                         }
-                        None => {
-                            let msg = "Failed to merge object of equivalence relation into subject: object not found".to_string();
-                            return Err(SerializationErrorKind::MissingObject(
-                                data_buffer.term_index.display_triple(&triple)?,
-                                msg,
-                            )
-                            .into());
-                        }
-                    },
+                        let msg = "Failed to merge object of equivalence relation into subject: object not found".to_string();
+                        return Err(SerializationErrorKind::MissingObject(
+                            data_buffer.term_index.display_triple(&triple)?,
+                            msg,
+                        )
+                        .into());
+                    }
                     (None, Some(resolved_object_term_id)) => {
                         add_to_unknown_buffer(data_buffer, resolved_object_term_id, triple)?;
                         return Ok(SerializationStatus::Deferred);
@@ -715,7 +706,7 @@ fn _serialize_triple(
                 // owl::HAS_KEY => {}
                 owl::HAS_SELF => {
                     let truthy = {
-                        match &triple.object_term_id {
+                        match triple.object_term_id {
                             Some(object_term_id) => {
                                 data_buffer.term_index.is_literal_truthy(object_term_id)?
                             }
@@ -735,7 +726,7 @@ fn _serialize_triple(
                         }
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
 
                 owl::HAS_VALUE => {
@@ -750,7 +741,7 @@ fn _serialize_triple(
                         state.render_mode = RestrictionRenderMode::ExistingProperty;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
 
                 // owl::IMPORTS => {}
@@ -760,8 +751,8 @@ fn _serialize_triple(
                         if let Some(term_id) = current_term_id {
                             let msg = format!(
                                 "Attempting to override existing incompatibleWith annotation '{}' with new annotation '{}'. Skipping",
-                                data_buffer.term_index.get(&term_id)?,
-                                data_buffer.term_index.get(&object_term_id)?
+                                data_buffer.term_index.get(term_id)?,
+                                data_buffer.term_index.get(object_term_id)?
                             );
                             warn!("{msg}");
                             return Err(SerializationErrorKind::SerializationWarningTriple(
@@ -769,18 +760,17 @@ fn _serialize_triple(
                                 msg,
                             )
                             .into());
-                        } else if is_ontology(&data_buffer.term_index.get(&triple.subject_term_id)?)
+                        } else if is_ontology(&data_buffer.term_index.get(triple.subject_term_id)?)
                         {
                             *data_buffer.metadata.incompatible_with.write()? = Some(object_term_id);
                             return Ok(SerializationStatus::Serialized);
-                        } else {
-                            let msg = "The usage of incompatibleWith annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
-                            return Err(SerializationErrorKind::SerializationFailedTriple(
-                                data_buffer.term_index.display_triple(&triple)?,
-                                msg,
-                            )
-                            .into());
                         }
+                        let msg = "The usage of incompatibleWith annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
+                        return Err(SerializationErrorKind::SerializationFailedTriple(
+                            data_buffer.term_index.display_triple(&triple)?,
+                            msg,
+                        )
+                        .into());
                     }
                     None => {
                         return Err(SerializationErrorKind::MissingObject(
@@ -792,10 +782,10 @@ fn _serialize_triple(
                 },
 
                 owl::INTERSECTION_OF => {
-                    if let Some(target) = triple.object_term_id.as_ref()
+                    if let Some(target) = triple.object_term_id
                         && should_skip_structural_operand(
                             data_buffer,
-                            &triple.subject_term_id,
+                            triple.subject_term_id,
                             target,
                             "owl:intersectionOf",
                         )?
@@ -805,7 +795,7 @@ fn _serialize_triple(
 
                     match insert_edge(data_buffer, triple, ElementType::NoDraw, None)? {
                         Some(edge) => {
-                            if !has_named_equivalent_aliases(data_buffer, &edge.domain_term_id)? {
+                            if !has_named_equivalent_aliases(data_buffer, edge.domain_term_id)? {
                                 upgrade_node_type(
                                     data_buffer,
                                     edge.domain_term_id,
@@ -850,7 +840,7 @@ fn _serialize_triple(
                         state.cardinality = Some((String::new(), Some(max)));
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
 
                 owl::MAX_QUALIFIED_CARDINALITY => {
@@ -867,7 +857,7 @@ fn _serialize_triple(
                         state.requires_filler = true;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 // owl::MEMBERS => {}
                 owl::MIN_CARDINALITY => {
@@ -881,7 +871,7 @@ fn _serialize_triple(
                         state.cardinality = Some((min, Some("*".to_string())));
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 owl::MIN_QUALIFIED_CARDINALITY => {
                     {
@@ -897,11 +887,23 @@ fn _serialize_triple(
                         state.requires_filler = true;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 owl::NAMED_INDIVIDUAL => {
-                    let count = individual_count_literal(data_buffer, &triple)?;
-                    increment_individual_count(data_buffer, triple.subject_term_id, count)?;
+                    let Some(individual_term_id) = triple.object_term_id else {
+                        return Err(SerializationErrorKind::MissingObject(
+                            data_buffer.term_index.display_triple(&triple)?,
+                            "NamedIndividual triple is missing an individual target".to_string(),
+                        )
+                        .into());
+                    };
+
+                    increment_individual_count(
+                        data_buffer,
+                        triple.subject_term_id,
+                        Some(individual_term_id),
+                        1,
+                    )?;
                     return Ok(SerializationStatus::Serialized);
                 }
                 // owl::NEGATIVE_PROPERTY_ASSERTION => {}
@@ -911,11 +913,11 @@ fn _serialize_triple(
                 owl::OBJECT_PROPERTY => {
                     add_triple_to_element_buffer(
                         &data_buffer.term_index,
-                        &mut data_buffer.edge_element_buffer,
+                        &data_buffer.edge_element_buffer,
                         &triple,
                         ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
                     )?;
-                    check_unknown_buffer(data_buffer, &triple.subject_term_id)?;
+                    check_unknown_buffer(data_buffer, triple.subject_term_id)?;
                     return Ok(SerializationStatus::Serialized);
                 }
                 owl::ONE_OF => {
@@ -928,15 +930,12 @@ fn _serialize_triple(
                     };
 
                     let should_count_member = matches!(
-                        data_buffer.term_index.get(&raw_target)?.as_ref(),
+                        data_buffer.term_index.get(raw_target)?.as_ref(),
                         Term::NamedNode(_) | Term::BlankNode(_)
                     );
 
-                    let materialized_target = materialize_one_of_target(
-                        data_buffer,
-                        &triple.subject_term_id,
-                        &raw_target,
-                    )?;
+                    let materialized_target =
+                        materialize_one_of_target(data_buffer, triple.subject_term_id, raw_target)?;
 
                     let member_already_present = if should_count_member {
                         has_enumeration_member_edge(
@@ -958,7 +957,12 @@ fn _serialize_triple(
                     match insert_edge(data_buffer, edge_triple, ElementType::NoDraw, None)? {
                         Some(_) => {
                             if should_count_member && !member_already_present {
-                                increment_individual_count(data_buffer, triple.subject_term_id, 1)?;
+                                increment_individual_count(
+                                    data_buffer,
+                                    triple.subject_term_id,
+                                    Some(materialized_target),
+                                    1,
+                                )?;
                             }
                             return Ok(SerializationStatus::Serialized);
                         }
@@ -967,21 +971,20 @@ fn _serialize_triple(
                 }
                 owl::ONTOLOGY => {
                     let mut document_base = data_buffer.document_base.write()?;
-                    let base_term = data_buffer.term_index.get(&triple.subject_term_id)?;
+                    let base_term = data_buffer.term_index.get(triple.subject_term_id)?;
                     let base = trim_tag_circumfix(&base_term.to_string());
                     if let Some(base) = &*document_base {
                         let msg = format!(
-                            "Attempting to override document base '{base}' with new base '{}'. Skipping",
-                            base
+                            "Attempting to override document base '{base}' with new base '{base}'. Skipping"
                         );
-                        let e = SerializationErrorKind::SerializationWarning(msg.to_string());
+                        let e = SerializationErrorKind::SerializationWarning(msg.clone());
                         warn!("{msg}");
                         data_buffer
                             .failed_buffer
                             .write()?
                             .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
                     } else {
-                        info!("Using document base: '{}'", base);
+                        info!("Using document base: '{base}'");
                         *document_base = Some(base.into());
                     }
                 }
@@ -999,7 +1002,7 @@ fn _serialize_triple(
                         state.requires_filler = true;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 // owl::ON_DATATYPE => {}
                 // owl::ON_PROPERTIES => {}
@@ -1021,7 +1024,7 @@ fn _serialize_triple(
                         state.on_property = Some(target);
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
 
                 owl::PRIOR_VERSION => match triple.object_term_id {
@@ -1030,8 +1033,8 @@ fn _serialize_triple(
                         if let Some(term_id) = current_term_id {
                             let msg = format!(
                                 "Attempting to override existing priorVersion annotation '{}' with new annotation '{}'. Skipping",
-                                data_buffer.term_index.get(&term_id)?,
-                                data_buffer.term_index.get(&object_term_id)?
+                                data_buffer.term_index.get(term_id)?,
+                                data_buffer.term_index.get(object_term_id)?
                             );
                             warn!("{msg}");
                             return Err(SerializationErrorKind::SerializationWarningTriple(
@@ -1039,18 +1042,17 @@ fn _serialize_triple(
                                 msg,
                             )
                             .into());
-                        } else if is_ontology(&data_buffer.term_index.get(&triple.subject_term_id)?)
+                        } else if is_ontology(&data_buffer.term_index.get(triple.subject_term_id)?)
                         {
                             *data_buffer.metadata.prior_version.write()? = Some(object_term_id);
                             return Ok(SerializationStatus::Serialized);
-                        } else {
-                            let msg = "The usage of priorVersion annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
-                            return Err(SerializationErrorKind::SerializationFailedTriple(
-                                data_buffer.term_index.display_triple(&triple)?,
-                                msg,
-                            )
-                            .into());
                         }
+                        let msg = "The usage of priorVersion annotation property on entities other than ontologies is discouraged, according to: https://www.w3.org/TR/owl-syntax/#Ontology_Annotations".to_string();
+                        return Err(SerializationErrorKind::SerializationFailedTriple(
+                            data_buffer.term_index.display_triple(&triple)?,
+                            msg,
+                        )
+                        .into());
                     }
                     None => {
                         return Err(SerializationErrorKind::MissingObject(
@@ -1090,7 +1092,7 @@ fn _serialize_triple(
                         state.render_mode = RestrictionRenderMode::ValuesFrom;
                     }
 
-                    return try_materialize_restriction(data_buffer, &triple.subject_term_id);
+                    return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
                 // owl::SOURCE_INDIVIDUAL => {}
                 owl::SYMMETRIC_PROPERTY => {
@@ -1120,10 +1122,10 @@ fn _serialize_triple(
                     );
                 }
                 owl::UNION_OF => {
-                    if let Some(target) = triple.object_term_id.as_ref()
+                    if let Some(target) = triple.object_term_id
                         && should_skip_structural_operand(
                             data_buffer,
-                            &triple.subject_term_id,
+                            triple.subject_term_id,
                             target,
                             "owl:unionOf",
                         )?
@@ -1133,7 +1135,7 @@ fn _serialize_triple(
 
                     match insert_edge(data_buffer, triple, ElementType::NoDraw, None)? {
                         Some(edge) => {
-                            if !has_named_equivalent_aliases(data_buffer, &edge.domain_term_id)? {
+                            if !has_named_equivalent_aliases(data_buffer, edge.domain_term_id)? {
                                 upgrade_node_type(
                                     data_buffer,
                                     edge.domain_term_id,
@@ -1170,8 +1172,8 @@ fn _serialize_triple(
                         if let Some(term_id) = current_term_id {
                             let msg = format!(
                                 "Attempting to override existing versionIRI annotation '{}' with new annotation '{}'. Skipping",
-                                data_buffer.term_index.get(&term_id)?,
-                                data_buffer.term_index.get(&object_term_id)?
+                                data_buffer.term_index.get(term_id)?,
+                                data_buffer.term_index.get(object_term_id)?
                             );
                             warn!("{msg}");
                             return Err(SerializationErrorKind::SerializationWarningTriple(
@@ -1179,10 +1181,9 @@ fn _serialize_triple(
                                 msg,
                             )
                             .into());
-                        } else {
-                            *data_buffer.metadata.version_iri.write()? = Some(object_term_id);
-                            return Ok(SerializationStatus::Serialized);
                         }
+                        *data_buffer.metadata.version_iri.write()? = Some(object_term_id);
+                        return Ok(SerializationStatus::Serialized);
                     }
                     None => {
                         return Err(SerializationErrorKind::MissingObject(
@@ -1275,9 +1276,9 @@ fn _serialize_triple(
                                 ) => {
                                     trace!(
                                         "Resolving object property: range: {}, property: {}, domain: {}",
-                                        data_buffer.term_index.get(&range_term_id)?,
-                                        data_buffer.term_index.get(&property_term_id)?,
-                                        data_buffer.term_index.get(&domain_term_id)?
+                                        data_buffer.term_index.get(range_term_id)?,
+                                        data_buffer.term_index.get(property_term_id)?,
+                                        data_buffer.term_index.get(domain_term_id)?
                                     );
 
                                     (
@@ -1296,12 +1297,11 @@ fn _serialize_triple(
                                         data_buffer.term_index.display_triple(&triple)?
                                     );
 
-                                    let object_term =
-                                        data_buffer.term_index.get(&object_term_id)?;
+                                    let object_term = data_buffer.term_index.get(object_term_id)?;
                                     if *object_term == owl::THING.into() {
                                         let thing_term_id = get_or_create_domain_thing(
                                             data_buffer,
-                                            &domain_term_id,
+                                            domain_term_id,
                                         )?;
 
                                         (
@@ -1315,11 +1315,11 @@ fn _serialize_triple(
                                         )
                                     } else if *object_term == rdfs::LITERAL.into() {
                                         let property_term =
-                                            data_buffer.term_index.get(&property_term_id)?;
+                                            data_buffer.term_index.get(property_term_id)?;
                                         let target_iri =
                                             synthetic_iri(&property_term, SYNTH_LITERAL);
                                         let node = create_triple_from_iri(
-                                            &mut data_buffer.term_index,
+                                            &data_buffer.term_index,
                                             &target_iri,
                                             &rdfs::LITERAL.as_str().to_string(),
                                             None,
@@ -1337,11 +1337,11 @@ fn _serialize_triple(
                                     } else {
                                         // Register the property itself as an element so it can be resolved by characteristics
                                         let predicate_term =
-                                            data_buffer.term_index.get(&property_term_id)?;
+                                            data_buffer.term_index.get(property_term_id)?;
                                         if *predicate_term == owl::OBJECT_PROPERTY.into() {
                                             add_triple_to_element_buffer(
                                                 &data_buffer.term_index,
-                                                &mut data_buffer.edge_element_buffer,
+                                                &data_buffer.edge_element_buffer,
                                                 &triple,
                                                 ElementType::Owl(OwlType::Edge(
                                                     OwlEdge::ObjectProperty,
@@ -1349,13 +1349,13 @@ fn _serialize_triple(
                                             )?;
                                             check_unknown_buffer(
                                                 data_buffer,
-                                                &triple.subject_term_id,
+                                                triple.subject_term_id,
                                             )?;
                                             return Ok(SerializationStatus::Serialized);
                                         } else if *predicate_term == owl::DATATYPE_PROPERTY.into() {
                                             add_triple_to_element_buffer(
                                                 &data_buffer.term_index,
-                                                &mut data_buffer.edge_element_buffer,
+                                                &data_buffer.edge_element_buffer,
                                                 &triple,
                                                 ElementType::Owl(OwlType::Edge(
                                                     OwlEdge::DatatypeProperty,
@@ -1363,7 +1363,7 @@ fn _serialize_triple(
                                             )?;
                                             check_unknown_buffer(
                                                 data_buffer,
-                                                &triple.subject_term_id,
+                                                triple.subject_term_id,
                                             )?;
                                             return Ok(SerializationStatus::Serialized);
                                         }
@@ -1383,12 +1383,10 @@ fn _serialize_triple(
                                     );
 
                                     let subject_term =
-                                        data_buffer.term_index.get(&triple.subject_term_id)?;
+                                        data_buffer.term_index.get(triple.subject_term_id)?;
                                     if *subject_term == owl::THING.into() {
-                                        let thing_term_id = get_or_create_anchor_thing(
-                                            data_buffer,
-                                            &range_term_id,
-                                        )?;
+                                        let thing_term_id =
+                                            get_or_create_anchor_thing(data_buffer, range_term_id)?;
 
                                         (
                                             None,
@@ -1401,10 +1399,10 @@ fn _serialize_triple(
                                         )
                                     } else if *subject_term == rdfs::LITERAL.into() {
                                         let range_term =
-                                            data_buffer.term_index.get(&range_term_id)?;
+                                            data_buffer.term_index.get(range_term_id)?;
                                         let target_iri = synthetic_iri(&range_term, SYNTH_LITERAL);
                                         let node = create_triple_from_iri(
-                                            &mut data_buffer.term_index,
+                                            &data_buffer.term_index,
                                             &target_iri,
                                             &rdfs::LITERAL.as_str().to_string(),
                                             None,
@@ -1430,19 +1428,31 @@ fn _serialize_triple(
                                         data_buffer.term_index.display_triple(&triple)?
                                     );
 
+                                    if has_non_fallback_property_edge(
+                                        data_buffer,
+                                        property_term_id,
+                                    )? {
+                                        debug!(
+                                            "Skipping structural fallback for '{}': property already has a concrete edge",
+                                            data_buffer.term_index.get(property_term_id)?
+                                        );
+                                        return Ok(SerializationStatus::Serialized);
+                                    }
+
                                     let is_full_query_fallback = {
                                         if let Some(object_term_id) = triple.object_term_id {
                                             is_query_fallback_endpoint(
                                                 &data_buffer
                                                     .term_index
-                                                    .get(&triple.subject_term_id)?,
+                                                    .get(triple.subject_term_id)?,
                                             ) && is_query_fallback_endpoint(
-                                                &data_buffer.term_index.get(&object_term_id)?,
+                                                &data_buffer.term_index.get(object_term_id)?,
                                             )
                                         } else {
                                             false
                                         }
                                     };
+
                                     if !is_full_query_fallback {
                                         trace!(
                                             "Deferring property triple with unresolved structural domain/range: {}",
@@ -1468,12 +1478,12 @@ fn _serialize_triple(
                                             OwlEdge::DatatypeProperty,
                                         ))) => {
                                             let property_term =
-                                                data_buffer.term_index.get(&property_term_id)?;
+                                                data_buffer.term_index.get(property_term_id)?;
 
                                             let local_literal_iri =
                                                 synthetic_iri(&property_term, SYNTH_LOCAL_LITERAL);
                                             let literal_triple = create_triple_from_iri(
-                                                &mut data_buffer.term_index,
+                                                &data_buffer.term_index,
                                                 &local_literal_iri,
                                                 &rdfs::LITERAL.as_str().to_string(),
                                                 None,
@@ -1482,7 +1492,7 @@ fn _serialize_triple(
                                             let local_thing_iri =
                                                 synthetic_iri(&property_term, SYNTH_LOCAL_THING);
                                             let thing_triple = create_triple_from_iri(
-                                                &mut data_buffer.term_index,
+                                                &data_buffer.term_index,
                                                 &local_thing_iri,
                                                 &owl::THING.as_str().to_string(),
                                                 None,
@@ -1509,7 +1519,7 @@ fn _serialize_triple(
                                             };
                                             let thing_term_id = get_or_create_anchor_thing(
                                                 data_buffer,
-                                                &thing_anchor_term_id,
+                                                thing_anchor_term_id,
                                             )?;
 
                                             (
@@ -1545,34 +1555,29 @@ fn _serialize_triple(
                                 }
                             };
 
-                            match maybe_node_triples {
-                                Some(node_triples) => {
-                                    for node_triple in node_triples {
-                                        let predicate_term_id =
-                                            data_buffer.get_predicate(&node_triple)?;
+                            if let Some(node_triples) = maybe_node_triples {
+                                for node_triple in node_triples {
+                                    let predicate_term_id =
+                                        data_buffer.get_predicate(&node_triple)?;
 
-                                        let predicate_term =
-                                            data_buffer.term_index.get(&predicate_term_id)?;
-                                        if *predicate_term == owl::THING.into() {
-                                            insert_node(
-                                                data_buffer,
-                                                &node_triple,
-                                                ElementType::Owl(OwlType::Node(OwlNode::Thing)),
-                                            )?;
-                                        } else if *predicate_term == rdfs::LITERAL.into() {
-                                            insert_node(
-                                                data_buffer,
-                                                &node_triple,
-                                                ElementType::Rdfs(RdfsType::Node(
-                                                    RdfsNode::Literal,
-                                                )),
-                                            )?;
-                                        }
+                                    let predicate_term =
+                                        data_buffer.term_index.get(predicate_term_id)?;
+                                    if *predicate_term == owl::THING.into() {
+                                        insert_node(
+                                            data_buffer,
+                                            &node_triple,
+                                            ElementType::Owl(OwlType::Node(OwlNode::Thing)),
+                                        )?;
+                                    } else if *predicate_term == rdfs::LITERAL.into() {
+                                        insert_node(
+                                            data_buffer,
+                                            &node_triple,
+                                            ElementType::Rdfs(RdfsType::Node(RdfsNode::Literal)),
+                                        )?;
                                     }
                                 }
-                                None => {
-                                    // When subject/property/object are already resolved, no synthetic node is needed
-                                }
+                            } else {
+                                // When subject/property/object are already resolved, no synthetic node is needed
                             }
 
                             match edge_triple {
@@ -1580,20 +1585,26 @@ fn _serialize_triple(
                                     let edge_triple_predicate_term_id =
                                         data_buffer.get_predicate(&edge_triple)?;
                                     let property = {
-                                        match data_buffer
+                                        let value = data_buffer
                                             .edge_element_buffer
                                             .read()?
                                             .get(&edge_triple_predicate_term_id)
-                                            .copied()
-                                        {
-                                            Some(prop) => prop,
-                                            None => {
-                                                let msg = "Edge triple not present in edge_element_buffer".to_string();
-                                                let display_edge = data_buffer
-                                                    .term_index
-                                                    .display_triple(&edge_triple)?;
-                                                return Err(SerializationErrorKind::SerializationFailedTriple(display_edge, msg))?;
-                                            }
+                                            .copied();
+                                        if let Some(prop) = value {
+                                            prop
+                                        } else {
+                                            let msg =
+                                                "Edge triple not present in edge_element_buffer"
+                                                    .to_string();
+                                            let display_edge = data_buffer
+                                                .term_index
+                                                .display_triple(&edge_triple)?;
+                                            return Err(
+                                                SerializationErrorKind::SerializationFailedTriple(
+                                                    display_edge,
+                                                    msg,
+                                                ),
+                                            )?;
                                         }
                                     };
 
@@ -1606,58 +1617,52 @@ fn _serialize_triple(
                                     };
                                     let maybe_edge = insert_edge(
                                         data_buffer,
-                                        edge_triple.clone(),
+                                        edge_triple,
                                         property,
-                                        label,
+                                        label.flatten(),
                                     )?;
 
                                     if let Some(edge) = maybe_edge {
-                                        {
-                                            data_buffer
-                                                .property_edge_map
-                                                .write()?
-                                                .insert(edge_triple_predicate_term_id, edge);
-                                        }
-                                        {
+                                        let should_replace = !has_non_fallback_property_edge(
+                                            data_buffer,
+                                            edge_triple_predicate_term_id,
+                                        )?;
+
+                                        if should_replace {
+                                            data_buffer.property_edge_map.write()?.insert(
+                                                edge_triple_predicate_term_id,
+                                                edge.clone(),
+                                            );
+
+                                            data_buffer.property_domain_map.write()?.insert(
+                                                edge_triple_predicate_term_id,
+                                                HashSet::from([edge.domain_term_id]),
+                                            );
+
+                                            data_buffer.property_range_map.write()?.insert(
+                                                edge_triple_predicate_term_id,
+                                                HashSet::from([edge.range_term_id]),
+                                            );
+                                        } else {
                                             data_buffer
                                                 .property_domain_map
                                                 .write()?
                                                 .entry(edge_triple_predicate_term_id)
                                                 .or_default()
-                                                .insert(edge_triple.subject_term_id);
-                                        }
-                                        {
-                                            let object_term_id = {
-                                                match edge_triple.object_term_id {
-                                                    Some(id) => id,
-                                                    None => {
-                                                        let msg = "Failed to update range for edge"
-                                                            .to_string();
-                                                        let display_edge =
-                                                            data_buffer
-                                                                .term_index
-                                                                .display_triple(&edge_triple)?;
-                                                        return Err(
-                                                            SerializationErrorKind::MissingObject(
-                                                                display_edge,
-                                                                msg,
-                                                            ),
-                                                        )?;
-                                                    }
-                                                }
-                                            };
+                                                .insert(edge.domain_term_id);
+
                                             data_buffer
                                                 .property_range_map
                                                 .write()?
                                                 .entry(edge_triple_predicate_term_id)
                                                 .or_default()
-                                                .insert(object_term_id);
+                                                .insert(edge.range_term_id);
                                         }
-
-                                        // Re-evaluate any characteristics waiting for this edge to exist
-                                        check_unknown_buffer(
+                                        register_declared_property_endpoints(
                                             data_buffer,
-                                            &edge_triple_predicate_term_id,
+                                            edge_triple_predicate_term_id,
+                                            edge.domain_term_id,
+                                            edge.range_term_id,
                                         )?;
                                     }
                                 }
@@ -1682,5 +1687,5 @@ fn _serialize_triple(
             }
         }
     }
-    Ok(SerializationStatus::NotSupported)
+    Ok(SerializationStatus::Serialized)
 }

@@ -1,197 +1,19 @@
-#![expect(clippy::struct_field_names)]
+use crate::{
+    datastructures::{
+        ArcEdge, ArcLockRestrictionState, ArcTriple, graph_metadata_buffer::GraphMetadataBuffer,
+        index::TermIndex,
+    },
+    errors::{SerializationError, SerializationErrorKind},
+};
+use grapher::prelude::{Characteristic, ElementType, GraphDisplayData, OwlEdge, OwlType};
+use log::debug;
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
     mem::take,
     sync::{Arc, RwLock},
 };
-
-use grapher::prelude::{Characteristic, ElementType, GraphDisplayData, OwlEdge, OwlType};
 use vowlgrapher_util::prelude::{ErrorRecord, VOWLGrapherError};
-
-use crate::datastructures::{
-    ArcEdge, ArcLockRestrictionState, ArcTriple,
-    graph_metadata_buffer::GraphMetadataBuffer,
-    index::TermIndex,
-    metadata::GraphMetadata,
-    util::{PROPERTY_EDGE_TYPES, SYMMETRIC_EDGE_TYPES},
-};
-use log::debug;
-
-pub mod frontend;
-pub mod index;
-pub mod metadata;
-pub mod util;
-
-type ArcTerm = Arc<Term>;
-type ArcTriple = Arc<Triple>;
-type ArcEdge = Arc<Edge>;
-type ArcLockRestrictionState = Arc<RwLock<RestrictionState>>;
-
-#[derive(Debug, Hash, Clone, Eq, PartialEq)]
-pub struct Triple {
-    /// The subject.
-    subject_term_id: usize,
-    /// The predicate.
-    predicate_term_id: Option<usize>,
-    /// The object.
-    object_term_id: Option<usize>,
-}
-
-impl Display for Triple {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Triple{{ ")?;
-        write!(f, "{} - ", self.subject_term_id)?;
-        write!(
-            f,
-            "{}",
-            self.predicate_term_id
-                .as_ref()
-                .map(std::string::ToString::to_string)
-                .unwrap_or_default(),
-        )?;
-        write!(
-            f,
-            "{}",
-            self.object_term_id
-                .as_ref()
-                .map(std::string::ToString::to_string)
-                .unwrap_or_default(),
-        )?;
-        write!(f, "}}")
-    }
-}
-
-impl Triple {
-    pub const fn new(
-        subject_term_id: usize,
-        predicate_term_id: Option<usize>,
-        object_term_id: Option<usize>,
-    ) -> Self {
-        Self {
-            subject_term_id,
-            predicate_term_id,
-            object_term_id,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq)]
-pub struct Edge {
-    /// The domain of the edge.
-    ///
-    /// Also called the "source".
-    domain_term_id: usize,
-    /// The type of the edge, e.g., "Object Property".
-    edge_type: ElementType,
-    /// The range of the edge.
-    ///
-    /// Also called the "target".
-    range_term_id: usize,
-    /// The property.
-    property_term_id: Option<usize>,
-}
-
-impl Edge {
-    pub const fn new(
-        domain_term_id: usize,
-        edge_type: ElementType,
-        range_term_id: usize,
-        property_term_id: Option<usize>,
-    ) -> Self {
-        Self {
-            domain_term_id,
-            edge_type,
-            range_term_id,
-            property_term_id,
-        }
-    }
-}
-
-impl PartialEq for Edge {
-    fn eq(&self, other: &Self) -> bool {
-        // Element type and property must always match
-        if self.edge_type != other.edge_type || self.property_term_id != other.property_term_id {
-            return false;
-        }
-
-        // For symmetric relations, treat (A, B) and (B, A) as equal
-        if SYMMETRIC_EDGE_TYPES.contains(&self.edge_type) {
-            (self.domain_term_id == other.domain_term_id
-                && self.range_term_id == other.range_term_id)
-                || (self.domain_term_id == other.range_term_id
-                    && self.range_term_id == other.domain_term_id)
-        } else {
-            self.domain_term_id == other.domain_term_id && self.range_term_id == other.range_term_id
-        }
-    }
-}
-
-impl Hash for Edge {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        if SYMMETRIC_EDGE_TYPES.contains(&self.edge_type) {
-            // For symmetric relations, hash the sorted pair
-            let (first, second) =
-                if self.domain_term_id.to_string() <= self.range_term_id.to_string() {
-                    (&self.domain_term_id, &self.range_term_id)
-                } else {
-                    (&self.range_term_id, &self.domain_term_id)
-                };
-
-            first.hash(state);
-            second.hash(state);
-            self.edge_type.hash(state);
-        } else if PROPERTY_EDGE_TYPES.contains(&self.edge_type) {
-            self.domain_term_id.hash(state);
-            self.edge_type.hash(state);
-            self.range_term_id.hash(state);
-            self.property_term_id.hash(state);
-        } else {
-            self.domain_term_id.hash(state);
-            self.edge_type.hash(state);
-            self.range_term_id.hash(state);
-        }
-    }
-}
-
-impl Display for Edge {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Edge{{ {} - {:?} - {} }}",
-            self.domain_term_id, self.edge_type, self.range_term_id
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
-pub enum RestrictionRenderMode {
-    #[default]
-    Property,
-    ValuesFrom,
-    ExistingProperty,
-}
-
-impl RestrictionRenderMode {
-    pub const fn priority(self) -> u8 {
-        match self {
-            Self::Property => 0,
-            Self::ValuesFrom => 1,
-            Self::ExistingProperty => 2,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct RestrictionState {
-    pub on_property: Option<usize>,
-    pub filler: Option<usize>,
-    pub cardinality: Option<(String, Option<String>)>,
-    pub self_restriction: bool,
-    pub requires_filler: bool,
-    pub render_mode: RestrictionRenderMode,
-}
 
 /// An intermediate container for serialization data.
 ///
@@ -249,12 +71,12 @@ pub struct SerializationDataBuffer {
     ///
     /// This is used by owl:inverseOf resolution and should contain only query-level
     /// domain/range evidence, never endpoints inferred from rendered property edges.
-    declared_property_domain_map: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
+    pub declared_property_domain_map: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
     /// Stores declared ranges of a property, keyed by the property's corresponding id.
     ///
     /// This is used by owl:inverseOf resolution and should contain only query-level
     /// domain/range evidence, never endpoints inferred from rendered property edges.
-    declared_property_range_map: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
+    pub declared_property_range_map: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
     /// Stores labels of terms, keyed by the term's corresponding id.
     pub label_buffer: Arc<RwLock<HashMap<usize, Option<String>>>>,
     /// Stores labels of edges, keyed by the edge it belongs to.
@@ -268,7 +90,7 @@ pub struct SerializationDataBuffer {
     /// Maps from node term's corresponding id to its number of individuals.
     pub individual_count_buffer: Arc<RwLock<HashMap<usize, u32>>>,
     /// Maps from a class term id to the set of canonical individual term ids already counted for it.
-    counted_individual_members: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
+    pub counted_individual_members: Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
     /// Stores unresolved triples.
     ///
     /// This is a mapping of a term's corresponding id to the set of triples referencing it.
@@ -634,86 +456,5 @@ impl Display for SerializationDataBuffer {
         // writeln!(f, "\tfailed_buffer:")?;
         // writeln!(f, "{}", ErrorRecord::format_records(&self.failed_buffer))?;
         writeln!(f, "}}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashSet;
-
-    #[test]
-    fn test_disjoint_with_edge_symmetry() {
-        // Create two edges with swapped subject and object
-        let x = 1;
-        let y = 2;
-        let edge1 = Edge {
-            domain_term_id: x,
-            edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith)),
-            range_term_id: y,
-            property_term_id: None,
-        };
-
-        let edge2 = Edge {
-            domain_term_id: y,
-            edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::DisjointWith)),
-            range_term_id: x,
-            property_term_id: None,
-        };
-
-        // Test that they are equal
-        assert_eq!(
-            edge1, edge2,
-            "DisjointWith edges should be equal regardless of subject/object order"
-        );
-
-        // Test that they hash to the same value by inserting into a HashSet
-        let mut edge_set = HashSet::new();
-        edge_set.insert(edge1);
-        edge_set.insert(edge2);
-
-        assert_eq!(
-            edge_set.len(),
-            1,
-            "HashSet should only contain one edge when both are DisjointWith with swapped subject/object"
-        );
-    }
-
-    #[test]
-    fn test_non_symmetric_edge_distinction() {
-        // Create two edges with swapped subject and object for a non-symmetric relation
-        let x = 1;
-        let y = 2;
-        let prop1 = 3;
-        let edge1 = Edge {
-            domain_term_id: x,
-            edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
-            range_term_id: y,
-            property_term_id: Some(prop1),
-        };
-
-        let edge2 = Edge {
-            domain_term_id: y,
-            edge_type: ElementType::Owl(OwlType::Edge(OwlEdge::ObjectProperty)),
-            range_term_id: x,
-            property_term_id: Some(prop1),
-        };
-
-        // Test that they are NOT equal
-        assert_ne!(
-            edge1, edge2,
-            "Non-symmetric edges should NOT be equal when subject/object are swapped"
-        );
-
-        // Test that they both appear in the HashSet
-        let mut edge_set = HashSet::new();
-        edge_set.insert(edge1);
-        edge_set.insert(edge2);
-
-        assert_eq!(
-            edge_set.len(),
-            2,
-            "HashSet should contain both edges when they are non-symmetric"
-        );
     }
 }

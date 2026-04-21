@@ -52,10 +52,12 @@ pub struct GraphMetadataBuffer {
     /// As such, we notify the client if this is violated.
     pub backward_compatible_with: Arc<RwLock<Option<usize>>>,
     /// Maps from `owl:annotatedSource` to a hashmap, mapping `owl:annotatedProperty` to `owl:annotatedTarget`.
+    #[expect(unused, reason = "pending implementation")]
     pub annotations: Arc<RwLock<HashMap<usize, HashMap<usize, usize>>>>,
 }
 
 impl GraphMetadataBuffer {
+    #[expect(unused, reason = "pending implementation")]
     pub fn new() -> Self {
         Self::default()
     }

@@ -1,5 +1,3 @@
-use crate::errors::SerializationErrorKind;
-use crate::serializers::frontend::GraphDisplayDataSolutionSerializer;
 use futures::stream::{BoxStream, StreamExt};
 use grapher::prelude::GraphDisplayData;
 use log::{debug, info, warn};

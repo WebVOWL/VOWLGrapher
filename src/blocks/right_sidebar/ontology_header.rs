@@ -1,11 +1,10 @@
 use crate::components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext};
 use leptos::prelude::*;
 
+#[expect(unused, reason = "pending implementation")]
 #[component]
 pub fn OntologyHeader() -> impl IntoView {
     let GraphDataContext { graph_metadata, .. } = expect_context::<GraphDataContext>();
-
-    view! {}
 }
 
 #[component]

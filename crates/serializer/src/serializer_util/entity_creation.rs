@@ -51,7 +51,7 @@ pub fn create_term(term: &String) -> Result<Term, SerializationError> {
 ///
 /// The new terms are automatically registered in the term index.
 pub fn create_triple_from_iri(
-    term_index: &mut TermIndex,
+    term_index: &TermIndex,
     subject_iri: &String,
     predicate_iri: &String,
     object_iri: Option<&String>,
@@ -93,10 +93,10 @@ pub fn create_triple_from_id(
 
 pub fn get_or_create_domain_thing(
     data_buffer: &mut SerializationDataBuffer,
-    domain_term_id: &usize,
+    domain_term_id: usize,
 ) -> Result<usize, SerializationError> {
     {
-        if let Some(existing) = data_buffer.anchor_thing_map.read()?.get(domain_term_id) {
+        if let Some(existing) = data_buffer.anchor_thing_map.read()?.get(&domain_term_id) {
             return Ok(*existing);
         }
     }
@@ -104,7 +104,7 @@ pub fn get_or_create_domain_thing(
     let domain_term = data_buffer.term_index.get(domain_term_id)?;
     let thing_iri = synthetic_iri(&domain_term, SYNTH_THING);
     let thing_triple = create_triple_from_iri(
-        &mut data_buffer.term_index,
+        &data_buffer.term_index,
         &thing_iri,
         &owl::THING.as_str().to_string(),
         None,
@@ -117,23 +117,23 @@ pub fn get_or_create_domain_thing(
         data_buffer
             .label_buffer
             .write()?
-            .insert(thing_triple.subject_term_id, thing_element.to_string());
+            .insert(thing_triple.subject_term_id, None);
     }
     {
         data_buffer
             .anchor_thing_map
             .write()?
-            .insert(*domain_term_id, thing_triple.subject_term_id);
+            .insert(domain_term_id, thing_triple.subject_term_id);
     }
     Ok(thing_triple.subject_term_id)
 }
 
 pub fn get_or_create_anchor_thing(
     data_buffer: &mut SerializationDataBuffer,
-    anchor_term_id: &usize,
+    anchor_term_id: usize,
 ) -> Result<usize, SerializationError> {
     {
-        if let Some(existing) = data_buffer.anchor_thing_map.read()?.get(anchor_term_id) {
+        if let Some(existing) = data_buffer.anchor_thing_map.read()?.get(&anchor_term_id) {
             return Ok(*existing);
         }
     }
@@ -141,7 +141,7 @@ pub fn get_or_create_anchor_thing(
     let anchor_term = data_buffer.term_index.get(anchor_term_id)?;
     let thing_iri = synthetic_iri(&anchor_term, SYNTH_THING);
     let thing_triple = create_triple_from_iri(
-        &mut data_buffer.term_index,
+        &data_buffer.term_index,
         &thing_iri,
         &owl::THING.as_str().to_string(),
         None,
@@ -153,13 +153,13 @@ pub fn get_or_create_anchor_thing(
         data_buffer
             .label_buffer
             .write()?
-            .insert(thing_triple.subject_term_id, thing_element.to_string());
+            .insert(thing_triple.subject_term_id, None);
     }
     {
         data_buffer
             .anchor_thing_map
             .write()?
-            .insert(*anchor_term_id, thing_triple.subject_term_id);
+            .insert(anchor_term_id, thing_triple.subject_term_id);
     }
     Ok(thing_triple.subject_term_id)
 }

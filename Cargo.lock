@@ -3165,7 +3165,7 @@ dependencies = [
 [[package]]
 name = "grapher"
 version = "0.5.3"
-source = "git+https://github.com/WebVOWL/WasmGrapher?branch=metadata#d87b02bda01077caf1dc04ba7d74220cb30900e7"
+source = "git+https://github.com/WebVOWL/WasmGrapher#d9e088c88014d0a908ee96c80cff60433961c739"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -7513,7 +7513,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8c27177b12a6399ffc08b98f76f7c9a1f4fe9fc967c784c5a071fa8d93cf7e1"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

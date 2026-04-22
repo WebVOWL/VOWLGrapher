@@ -22,3 +22,15 @@ pub enum SerializationStatus {
     #[expect(unused, reason = "pending implementation")]
     NotSupported,
 }
+
+#[derive(Clone)]
+pub struct DocumentBase {
+    pub base_term: ArcTerm,
+    pub base: String,
+}
+
+impl DocumentBase {
+    pub const fn new(base_term: ArcTerm, base: String) -> Self {
+        Self { base_term, base }
+    }
+}

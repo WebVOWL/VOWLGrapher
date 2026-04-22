@@ -246,8 +246,8 @@ pub fn is_external(
     }
 
     let clean_term = trim_tag_circumfix(&term.to_string());
-    if let Some(base) = &*data_buffer.document_base.read()? {
-        Ok(!(iri_matches_document_base(base.as_ref(), &clean_term)
+    if let Some(docbase) = &*data_buffer.document_base.read()? {
+        Ok(!(iri_matches_document_base(&docbase.base, &clean_term)
             || is_reserved(term)
             || is_synthetic(term)))
     } else {

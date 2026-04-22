@@ -1,7 +1,7 @@
 //! Functions related to creating new entities, e.g., triples, edges etc.
 
 use grapher::prelude::{ElementType, OwlNode, OwlType};
-use log::debug;
+use log::trace;
 use oxrdf::{BlankNode, NamedNode, Term};
 
 use crate::{
@@ -23,7 +23,7 @@ pub fn create_edge_from_id(
     property_term_id: Option<usize>,
 ) -> Result<ArcEdge, SerializationError> {
     let edge = Edge::new(domain_term_id, edge_type, range_term_id, property_term_id).into();
-    debug!("Created new edge: {}", term_index.display_edge(&edge)?);
+    trace!("Created new edge: {}", term_index.display_edge(&edge)?);
     Ok(edge)
 }
 
@@ -84,7 +84,7 @@ pub fn create_triple_from_id(
     object_term_id: Option<usize>,
 ) -> Result<ArcTriple, SerializationError> {
     let triple = Triple::new(subject_term_id, predicate_term_id, object_term_id).into();
-    debug!(
+    trace!(
         "Created new triple: {}",
         term_index.display_triple(&triple)?
     );

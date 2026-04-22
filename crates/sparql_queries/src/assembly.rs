@@ -94,7 +94,11 @@ impl QueryAssembler {
             }}
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
-                    {{ {} }}
+                    {{ 
+                        SELECT * WHERE {{
+                            {}
+                        }}
+                    }}
 
                     ?s ?p ?o .
                     OPTIONAL {{ ?s rdf:type ?type }}

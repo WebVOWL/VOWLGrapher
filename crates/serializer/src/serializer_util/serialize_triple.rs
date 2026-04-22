@@ -10,7 +10,7 @@ use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
     datastructures::{
-        ArcTriple, SerializationStatus, restriction_data::RestrictionRenderMode,
+        ArcTriple, DocumentBase, SerializationStatus, restriction_data::RestrictionRenderMode,
         serialization_data_buffer::SerializationDataBuffer,
     },
     errors::{SerializationError, SerializationErrorKind},
@@ -961,21 +961,23 @@ fn internal_serialize_triple(
                 }
                 owl::ONTOLOGY => {
                     let mut document_base = data_buffer.document_base.write()?;
-                    let base_term = data_buffer.term_index.get(triple.subject_term_id)?;
-                    let base = trim_tag_circumfix(&base_term.to_string());
-                    if let Some(base) = &*document_base {
+                    let new_base_term = data_buffer.term_index.get(triple.subject_term_id)?;
+                    let new_base = trim_tag_circumfix(&new_base_term.to_string());
+                    if let Some(old_docbase) = &*document_base {
                         let msg = format!(
-                            "Attempting to override document base '{base}' with new base '{base}'. Skipping"
+                            "Attempting to override document base '{}' with new base '{new_base}'. Skipping",
+                            old_docbase.base
                         );
-                        let e = SerializationErrorKind::SerializationWarning(msg.clone());
                         warn!("{msg}");
+                        let e = SerializationErrorKind::SerializationWarning(msg);
                         data_buffer
                             .failed_buffer
                             .write()?
                             .push(<SerializationError as Into<ErrorRecord>>::into(e.into()));
                     } else {
-                        info!("Using document base: '{base}'");
-                        *document_base = Some(base.into());
+                        info!("Using document base: '{new_base}'");
+                        let new_docbase = DocumentBase::new(new_base_term, new_base);
+                        *document_base = Some(new_docbase);
                     }
                 }
 

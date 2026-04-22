@@ -7,7 +7,7 @@ use std::{
 };
 
 use grapher::prelude::{ElementType, OwlNode, OwlType};
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace};
 
 use crate::{
     datastructures::{
@@ -95,7 +95,7 @@ pub fn add_term_to_element_buffer(
 ) -> Result<(), SerializationError> {
     let value = element_buffer.write()?.insert(term_id, element_type);
     if let Some(element) = value {
-        warn!(
+        debug!(
             "Registered '{}' to subject '{}' already registered as '{}'",
             element_type,
             term_index.get(term_id)?,

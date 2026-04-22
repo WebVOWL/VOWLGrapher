@@ -67,7 +67,7 @@ pub struct GraphDataContext {
     pub element_counts: RwSignal<HashMap<ElementType, usize>>,
     pub element_checks: RwSignal<HashMap<ElementType, bool>>,
     pub active_graph_name: RwSignal<String>,
-    pub graph_metadata: RwSignal<GraphMetadata>,
+    pub graph_metadata: RwSignal<Arc<GraphMetadata>>,
 }
 
 impl GraphDataContext {
@@ -88,7 +88,7 @@ impl GraphDataContext {
             element_counts: RwSignal::new(element_counts),
             element_checks: RwSignal::new(element_checks),
             active_graph_name: RwSignal::new(graph_name),
-            graph_metadata: RwSignal::new(graph_metadata),
+            graph_metadata: RwSignal::new(graph_metadata.into()),
         }
     }
 }

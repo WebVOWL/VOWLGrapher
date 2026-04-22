@@ -18,5 +18,3 @@
 [dependencies]
     grapher={workspace=true}
     vowlr-util={path="../util"}
-    spargebra = "0.4.6"
-    regex = "1.12.3"

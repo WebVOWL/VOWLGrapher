@@ -2,9 +2,6 @@ use crate::snippets::SparqlSnippet;
 use crate::{prelude::GENERAL_SNIPPETS, snippets::void::VOID};
 use grapher::prelude::ElementType;
 use std::collections::HashMap;
-use spargebra::Query;
-use spargebra::SparqlParser;
-use regex::Regex;
 
 // TODO: Remove when automatic prefix fetching is implemented.
 pub const DEFAULT_PREFIXES: [&str; 6] = [
@@ -82,47 +79,21 @@ impl QueryAssembler {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let parser = SparqlParser::new();
-
-        let first_var_name = match parser.parse_query(user_query) {
-            Ok(query) => {
-                let sse = query.to_sse();
-                let re = Regex::new(r"\(project\s+(\?[a-zA-Z0-9_]+)").unwrap();
-                if let Some(cap) = re.captures(&sse){
-                    cap.get(1).unwrap().as_str().to_string()
-                } else {
-                    let fallback_re = Regex::new(r"\?([a-zA-Z0-9_]+)").unwrap();
-                    fallback_re.captures(user_query)
-                        .map(|c| c.get(1).unwrap().as_str().to_string())
-                        .unwrap_or_else(|| "id".to_string())
-                }
-            },
-            Err(_) => "s".to_string(),
-        };
-        
-        let bind_line = if first_var_name == "id" {
-            "".to_string()
-        } else {
-            format!("BIND(?{} AS ?id)", first_var_name)
-        };
-
         format!(
             r#"
             {}
             CONSTRUCT {{
-                ?id rdf:type ?nodeType .
-                ?id rdfs:label ?label .
-                ?id ?p ?target .
+                ?s ?p ?o .
+                ?s rdf:type ?type .
+                ?o rdf:type ?typeO .
             }}
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
                     {{ {} }}
 
-                    {}
-
-                    ?id rdf:type ?nodeType .
-                    OPTIONAL {{ ?id rdfs:label ?label }}
-                    OPTIONAL {{ ?id ?p ?target . FILTER(?p != rdf:type && ?p != rdfs:label) }}
+                    ?s ?p ?o .
+                    OPTIONAL {{ ?s rdf:type ?type }}
+                    OPTIONAL {{ ?o rdf:type ?typeO }}
                     BIND(
                         IF(?nodeType = owl:Ontology, 0,
                             IF(?nodeType = owl:Class, 1, 2)
@@ -134,9 +105,7 @@ impl QueryAssembler {
             ORDER BY ?weight
             "#,
             prefixes,
-            user_query,
-            bind_line
+            user_query
         )
     }
-
 }

@@ -185,7 +185,7 @@ fn internal_serialize_triple(
                     Some(object_term_id) => {
                         data_buffer
                             .metadata
-                            .comments
+                            .comment_buffer
                             .write()?
                             .insert(triple.subject_term_id, object_term_id);
                         return Ok(SerializationStatus::Serialized);
@@ -221,7 +221,7 @@ fn internal_serialize_triple(
                     Some(object_term_id) => {
                         data_buffer
                             .metadata
-                            .is_defined_by
+                            .defined_by_buffer
                             .write()?
                             .insert(triple.subject_term_id, object_term_id);
                         return Ok(SerializationStatus::Serialized);
@@ -272,7 +272,7 @@ fn internal_serialize_triple(
                     Some(object_term_id) => {
                         data_buffer
                             .metadata
-                            .see_also
+                            .see_also_buffer
                             .write()?
                             .entry(triple.subject_term_id)
                             .or_default()
@@ -1140,7 +1140,7 @@ fn internal_serialize_triple(
                     Some(object_term_id) => {
                         data_buffer
                             .metadata
-                            .version_info
+                            .version_info_buffer
                             .write()?
                             .insert(triple.subject_term_id, object_term_id);
                         return Ok(SerializationStatus::Serialized);

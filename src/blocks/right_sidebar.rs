@@ -1,9 +1,7 @@
 mod ontology_header;
 
 use crate::{
-    blocks::right_sidebar::ontology_header::{
-        Author, Description, DocumentBase, Language, OntologyHeader, Version,
-    },
+    blocks::right_sidebar::ontology_header::OntologyHeader,
     components::{
         accordion::Accordion, buttons::graph_interaction_buttons::GraphInteractionButtons,
     },

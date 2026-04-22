@@ -71,7 +71,10 @@ impl VOWLGrapherStore {
         query: String,
         graph_name: Option<String>,
     ) -> Result<(GraphDisplayData, Option<VOWLGrapherError>), VOWLGrapherError> {
-        debug!("Querying with graph_name: {graph_name:#?}");
+        debug!(
+            "Querying with graph_name: {}",
+            graph_name.clone().unwrap_or_else(|| "None".to_string())
+        );
         let user_query = graph_name.map_or_else(
             || query.replace("GRAPH <{GRAPH_IRI}>", ""),
             |name| {

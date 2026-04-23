@@ -55,17 +55,16 @@ pub fn serialize_triple(
         data_buffer.failed_buffer.write()?.push(e.into());
         Ok::<SerializationStatus, SerializationError>(SerializationStatus::Serialized)
     })? {
-        SerializationStatus::Serialized | SerializationStatus::Deferred => {}
-        SerializationStatus::NotSupported => {
-            let msg = format!("Serialization of {triple} is not supported");
-            data_buffer.failed_buffer.write()?.push(
-                SerializationErrorKind::SerialiationNotSupported(
-                    data_buffer.term_index.display_triple(triple)?,
-                    msg,
-                )
-                .into(),
-            );
-        }
+        SerializationStatus::Serialized | SerializationStatus::Deferred => {} // SerializationStatus::NotSupported => {
+                                                                              //     let msg = format!("Serialization of {triple} is not supported");
+                                                                              //     data_buffer.failed_buffer.write()?.push(
+                                                                              //         SerializationErrorKind::SerialiationNotSupported(
+                                                                              //             data_buffer.term_index.display_triple(triple)?,
+                                                                              //             msg,
+                                                                              //         )
+                                                                              //         .into(),
+                                                                              //     );
+                                                                              // }
     }
     Ok(())
 }

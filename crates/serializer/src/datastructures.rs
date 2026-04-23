@@ -19,7 +19,7 @@ pub type ArcLockRestrictionState = Arc<RwLock<RestrictionState>>;
 pub enum SerializationStatus {
     Serialized,
     Deferred,
-    NotSupported,
+    // NotSupported
 }
 
 #[derive(Clone)]

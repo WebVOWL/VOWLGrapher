@@ -1,8 +1,7 @@
 //! Shared SPARQL query strings for `VOWLGrapher`.
 //!
-//! This crate is intentionally dependency-free and WASM-safe so it can be used by:
-//! - the SSR/server side (via `vowlgrapher-database`)
-//! - the client/wasm side (via `vowlgrapher`)
+//! This crate is intentionally free of vowlgrapher-dependencies such
+//! that it may be used both server-side and client-side
 
 mod assembly;
 mod snippets;
@@ -20,6 +19,7 @@ pub mod prelude {
         COLLECTIONS, DOMAIN_RANGES, LABEL, NAMED_INDIVIDUAL_COUNTS, ONTOLOGY, OWL_DEPRECATED,
         XML_BASE,
     };
+    use crate::snippets::metadata::dcmi::{dc, dcterms};
     use crate::snippets::metadata::{
         BACKWARD_COMPATIBLE_WITH, COMMENT, INCOMPATIBLE_WITH, IS_DEFINED_BY, PRIOR_VERSION,
         SEE_ALSO, VERSION_INFO, VERSION_IRI,
@@ -38,7 +38,7 @@ pub mod prelude {
     ];
 
     /// SPARQL snippets fetching data not included in the graph visualization.
-    pub static METADATA_SNIPPETS: [&str; 8] = [
+    pub static METADATA_SNIPPETS: [&str; 38] = [
         COMMENT,
         IS_DEFINED_BY,
         SEE_ALSO,
@@ -47,6 +47,36 @@ pub mod prelude {
         PRIOR_VERSION,
         INCOMPATIBLE_WITH,
         BACKWARD_COMPATIBLE_WITH,
+        dc::CONTRIBUTOR,
+        dc::COVERAGE,
+        dc::CREATOR,
+        dc::DATE,
+        dc::DESCRIPTION,
+        dc::FORMAT,
+        dc::IDENTIFIER,
+        dc::LANGUAGE,
+        dc::PUBLISHER,
+        dc::RELATION,
+        dc::RIGHTS,
+        dc::SOURCE,
+        dc::SUBJECT,
+        dc::TITLE,
+        dc::TYPE,
+        dcterms::CONTRIBUTOR,
+        dcterms::COVERAGE,
+        dcterms::CREATOR,
+        dcterms::DATE,
+        dcterms::DESCRIPTION,
+        dcterms::FORMAT,
+        dcterms::IDENTIFIER,
+        dcterms::LANGUAGE,
+        dcterms::PUBLISHER,
+        dcterms::RELATION,
+        dcterms::RIGHTS,
+        dcterms::SOURCE,
+        dcterms::SUBJECT,
+        dcterms::TITLE,
+        dcterms::TYPE,
     ];
 
     // PERF: this could maybe be a thread_local instead?

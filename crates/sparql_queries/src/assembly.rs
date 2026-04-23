@@ -4,13 +4,15 @@ use grapher::prelude::ElementType;
 use std::collections::HashMap;
 
 // TODO: Remove when automatic prefix fetching is implemented.
-pub const DEFAULT_PREFIXES: [&str; 6] = [
+pub const DEFAULT_PREFIXES: [&str; 8] = [
+    "vowlgrapher: <http://www.example.com/iri#>",
     "owl: <http://www.w3.org/2002/07/owl#>",
     "rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
     "rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>",
     "xsd: <http://www.w3.org/2001/XMLSchema#>",
-    "vowlgrapher: <http://www.example.com/iri#>",
     "xml: <http://www.w3.org/XML/1998/namespace>",
+    "dc: <http://purl.org/dc/elements/1.1/>",
+    "dcterms: <http://purl.org/dc/terms/>",
 ];
 
 /// Compiles snippets of SPARQL code into full-fledged SPARQL queries.

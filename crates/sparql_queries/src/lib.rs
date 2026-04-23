@@ -21,8 +21,9 @@ pub mod prelude {
     };
     use crate::snippets::metadata::dcmi::{dc, dcterms};
     use crate::snippets::metadata::{
-        BACKWARD_COMPATIBLE_WITH, COMMENT, INCOMPATIBLE_WITH, IS_DEFINED_BY, PRIOR_VERSION,
-        SEE_ALSO, VERSION_INFO, VERSION_IRI,
+        ANNOTATED_PROPERTY, ANNOTATED_SOURCE, ANNOTATED_TARGET, AXIOM, BACKWARD_COMPATIBLE_WITH,
+        COMMENT, INCOMPATIBLE_WITH, IS_DEFINED_BY, PRIOR_VERSION, SEE_ALSO, VERSION_INFO,
+        VERSION_IRI,
     };
     use crate::snippets::snippets_from_enum;
 
@@ -38,7 +39,7 @@ pub mod prelude {
     ];
 
     /// SPARQL snippets fetching data not included in the graph visualization.
-    pub static METADATA_SNIPPETS: [&str; 38] = [
+    pub static METADATA_SNIPPETS: [&str; 42] = [
         COMMENT,
         IS_DEFINED_BY,
         SEE_ALSO,
@@ -77,6 +78,10 @@ pub mod prelude {
         dcterms::SUBJECT,
         dcterms::TITLE,
         dcterms::TYPE,
+        AXIOM,
+        ANNOTATED_SOURCE,
+        ANNOTATED_PROPERTY,
+        ANNOTATED_TARGET,
     ];
 
     // PERF: this could maybe be a thread_local instead?

@@ -47,3 +47,23 @@ pub const BACKWARD_COMPATIBLE_WITH: &str = r"{
             ?id owl:backwardCompatibleWith ?target .
             BIND(owl:backwardCompatibleWith as ?nodeType)
             }";
+
+pub const AXIOM: &str = r"{
+            ?id a owl:Axiom .
+            BIND(owl:Axiom as ?nodeType)
+            }";
+
+pub const ANNOTATED_SOURCE: &str = r"{
+            ?id owl:annotatedSource ?target .
+            BIND(owl:annotatedSource as ?nodeType)
+            }";
+
+pub const ANNOTATED_PROPERTY: &str = r"{
+            ?id owl:annotatedProperty ?target .
+            BIND(owl:annotatedProperty as ?nodeType)
+            }";
+
+pub const ANNOTATED_TARGET: &str = r"{
+            ?id owl:annotatedTarget ?target .
+            BIND(owl:annotatedTarget as ?nodeType)
+            }";

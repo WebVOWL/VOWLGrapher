@@ -182,6 +182,15 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                 ?id rdf:Property ?target
                 BIND(rdf:Property AS ?nodeType)
                 } UNION {
+                ?id a rdf:HTML .
+                BIND(rdf:HTML AS ?nodeType)
+                } UNION {
+                ?id a rdf:PlainLiteral .
+                BIND(rdf:PlainLiteral AS ?nodeType)
+                } UNION {
+                ?id a rdf:XMLLiteral .
+                BIND(rdf:XMLLiteral AS ?nodeType)
+                } UNION {
                 ?id a rdfs:Class .
                 FILTER(?id != owl:Class)
                 FILTER NOT EXISTS { ?id a owl:Class }
@@ -204,24 +213,30 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                 FILTER NOT EXISTS { ?target owl:disjointUnionOf ?d }
                 BIND(rdfs:subClassOf AS ?nodeType)
                 } UNION {
-                ?id a owl:TransitiveProperty
-                BIND(owl:TransitiveProperty AS ?nodeType)
-            } UNION {
-                ?id a owl:FunctionalProperty
-                BIND(owl:FunctionalProperty AS ?nodeType)
-            } UNION {
-                ?id a owl:InverseFunctionalProperty
-                BIND(owl:InverseFunctionalProperty AS ?nodeType)
-            } UNION {
-                ?id a owl:ReflexiveProperty
-                BIND(owl:ReflexiveProperty AS ?nodeType)
-            } UNION {
-                ?id a owl:IrreflexiveProperty
-                BIND(owl:IrreflexiveProperty AS ?nodeType)
-            } UNION {
-                ?id a owl:SymmetricProperty
-                BIND(owl:SymmetricProperty AS ?nodeType)
-            } UNION {
+                    ?id a owl:TransitiveProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:TransitiveProperty AS ?nodeType)
+                } UNION {
+                    ?id a owl:FunctionalProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:FunctionalProperty AS ?nodeType)
+                } UNION {
+                    ?id a owl:InverseFunctionalProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:InverseFunctionalProperty AS ?nodeType)
+                } UNION {
+                    ?id a owl:ReflexiveProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:ReflexiveProperty AS ?nodeType)
+                } UNION {
+                    ?id a owl:IrreflexiveProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:IrreflexiveProperty AS ?nodeType)
+                } UNION {
+                    ?id a owl:SymmetricProperty .
+                    FILTER(?id NOT IN (rdfs:subClassOf, rdfs:subPropertyOf))
+                    BIND(owl:SymmetricProperty AS ?nodeType)
+                } UNION {
                 ?id a owl:AsymmetricProperty
                 BIND(owl:AsymmetricProperty AS ?nodeType)
             } UNION {
@@ -237,23 +252,23 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
             BIND(xml:base AS ?nodeType)
             } UNION {
     {
-        ?owner owl:oneOf ?list .
+    ?id owl:oneOf ?list .
     }
     UNION
     {
-        ?owner ?connector ?expr .
+        ?owner ?connector ?id .
         FILTER(?connector IN (
             owl:equivalentClass,
             rdfs:subClassOf,
             rdfs:range
         ))
-        ?expr owl:oneOf ?list .
+        FILTER(!isIRI(?id))
+        ?id owl:oneOf ?list .
     }
 
     ?list rdf:rest*/rdf:first ?target .
     FILTER(?target != rdf:nil)
 
-    BIND(?owner AS ?id)
     BIND(owl:oneOf AS ?nodeType)
     } UNION {
         # Find the domain and range of any property, and restructure so they appear as singular triples
@@ -263,6 +278,13 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                 owl:DatatypeProperty
                 owl:ObjectProperty
                 rdf:Property
+                owl:FunctionalProperty
+                owl:InverseFunctionalProperty
+                owl:ReflexiveProperty
+                owl:IrreflexiveProperty
+                owl:SymmetricProperty
+                owl:AsymmetricProperty
+                owl:TransitiveProperty
             }
             ?nodeType a ?property .
             ?nodeType rdfs:range ?target .
@@ -273,6 +295,13 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                 owl:DatatypeProperty
                 owl:ObjectProperty
                 rdf:Property
+                owl:FunctionalProperty
+                owl:InverseFunctionalProperty
+                owl:ReflexiveProperty
+                owl:IrreflexiveProperty
+                owl:SymmetricProperty
+                owl:AsymmetricProperty
+                owl:TransitiveProperty
             }
             ?nodeType a ?property .
             ?nodeType rdfs:range ?target .
@@ -284,6 +313,13 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                 owl:DatatypeProperty
                 owl:ObjectProperty
                 rdf:Property
+                owl:FunctionalProperty
+                owl:InverseFunctionalProperty
+                owl:ReflexiveProperty
+                owl:IrreflexiveProperty
+                owl:SymmetricProperty
+                owl:AsymmetricProperty
+                owl:TransitiveProperty
             }
             ?nodeType a ?property .
             ?nodeType rdfs:domain ?id .
@@ -295,6 +331,13 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
                 owl:DatatypeProperty
                 owl:ObjectProperty
                 rdf:Property
+                owl:FunctionalProperty
+                owl:InverseFunctionalProperty
+                owl:ReflexiveProperty
+                owl:IrreflexiveProperty
+                owl:SymmetricProperty
+                owl:AsymmetricProperty
+                owl:TransitiveProperty
             }
             ?nodeType a ?property .
             FILTER NOT EXISTS { ?nodeType rdfs:range ?x }
@@ -308,19 +351,13 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
             FILTER(?target = "true"^^xsd:boolean || lcase(str(?target)) = "true")
             BIND(owl:deprecated AS ?nodeType)
             } UNION {
-    {
-        SELECT ?id (COUNT(DISTINCT ?individual) AS ?target)
-        WHERE {
-            ?individual a owl:NamedIndividual .
-            ?individual a ?id .
-            FILTER(isIRI(?id))
-            FILTER(?id != owl:NamedIndividual)
-        }
-        GROUP BY ?id
-    }
+    ?target a ?id .
+    FILTER(isIRI(?id))
+    FILTER(isIRI(?target))
+    FILTER(?id != owl:NamedIndividual)
 
     BIND(owl:NamedIndividual AS ?nodeType)
-} UNION {
+    } UNION {
             # Find labels for elements.
             OPTIONAL { ?id rdfs:label ?theLabel }
             OPTIONAL { ?id rdf:resource ?resLabel }
@@ -365,10 +402,22 @@ PREFIX xml: <http://www.w3.org/XML/1998/namespace>
             # Find backwardCompatibleWith for elements.
             ?id owl:backwardCompatibleWith ?target .
             BIND(owl:backwardCompatibleWith as ?nodeType)
+            } UNION {
+            ?id a owl:Axiom .
+            BIND(owl:Axiom as ?nodeType)
+            } UNION {
+            ?id owl:annotatedSource ?target .
+            BIND(owl:annotatedSource as ?nodeType)
+            } UNION {
+            ?id owl:annotatedProperty ?target .
+            BIND(owl:annotatedProperty as ?nodeType)
+            } UNION {
+            ?id owl:annotatedTarget ?target .
+            BIND(owl:annotatedTarget as ?nodeType)
             }
                     BIND(
                         IF(?nodeType = owl:Ontology, 0,
-                            IF(?nodeType = owl:Class, 1, 2)
+                            IF(?nodeType = owl:Class || ?target = owl:Axiom, 1, 2)
                         )
                         AS ?weight
                     )

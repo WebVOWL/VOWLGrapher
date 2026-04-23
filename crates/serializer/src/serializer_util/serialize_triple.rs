@@ -10,7 +10,8 @@ use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
     datastructures::{
-        ArcTriple, DocumentBase, SerializationStatus, restriction_data::RestrictionRenderMode,
+        ArcTriple, DocumentBase, SerializationStatus, graph_metadata_buffer::AxiomAnnotation,
+        restriction_data::RestrictionRenderMode,
         serialization_data_buffer::SerializationDataBuffer,
     },
     errors::{SerializationError, SerializationErrorKind},
@@ -83,6 +84,8 @@ fn internal_serialize_triple(
 ) -> Result<SerializationStatus, SerializationError> {
     let predicate_term_id = data_buffer.get_predicate(&triple)?;
     let predicate_term = data_buffer.term_index.get(predicate_term_id)?;
+
+    try_add_triple_to_axiom_annotation(data_buffer, &triple)?;
 
     match predicate_term.as_ref() {
         Term::BlankNode(bnode) => {
@@ -348,9 +351,75 @@ fn internal_serialize_triple(
                     return try_materialize_restriction(data_buffer, triple.subject_term_id);
                 }
 
-                // owl::ANNOTATED_PROPERTY => {},
-                // owl::ANNOTATED_SOURCE => {},
-                // owl::ANNOTATED_TARGET => {},
+                owl::ANNOTATED_PROPERTY => {
+                    let property = data_buffer.get_object(&triple)?;
+                    let mut annotations = data_buffer.metadata.axiom_annotations.write()?;
+                    let annotation = annotations.entry(triple.subject_term_id)
+                        .or_insert_with(|| {
+                            let Ok(term) = data_buffer.term_index.get(triple.subject_term_id)
+                            else {
+                                warn!("Annotation {} was not declared, and its term was not mapped. Synthesizing it.", triple.subject_term_id);
+                                return AxiomAnnotation::default();
+                            };
+                            warn!("Annotation {term} was not declared. Synthesizing it.");
+                            AxiomAnnotation::default()
+                        });
+                    if let Some(prev_property) = annotation.property.replace(property) {
+                        warn!(
+                            "Annotation {} already has annotated property {}. Overwriting it.",
+                            data_buffer.term_index.get(triple.subject_term_id)?,
+                            data_buffer.term_index.get(prev_property)?
+                        );
+                    }
+                    drop(annotations);
+                    return Ok(SerializationStatus::Serialized);
+                }
+                owl::ANNOTATED_SOURCE => {
+                    let source = data_buffer.get_object(&triple)?;
+                    let mut annotations = data_buffer.metadata.axiom_annotations.write()?;
+                    let annotation = annotations.entry(triple.subject_term_id)
+                        .or_insert_with(|| {
+                            let Ok(term) = data_buffer.term_index.get(triple.subject_term_id)
+                            else {
+                                warn!("Annotation {} was not declared, and its term was not mapped. Synthesizing it.", triple.subject_term_id);
+                                return AxiomAnnotation::default();
+                            };
+                            warn!("Annotation {term} was not declared. Synthesizing it.");
+                            AxiomAnnotation::default()
+                        });
+                    if let Some(prev_source) = annotation.source.replace(source) {
+                        warn!(
+                            "Annotation {} already has annotated source {}. Overwriting it.",
+                            data_buffer.term_index.get(triple.subject_term_id)?,
+                            data_buffer.term_index.get(prev_source)?
+                        );
+                    }
+                    drop(annotations);
+                    return Ok(SerializationStatus::Serialized);
+                }
+                owl::ANNOTATED_TARGET => {
+                    let target = data_buffer.get_object(&triple)?;
+                    let mut annotations = data_buffer.metadata.axiom_annotations.write()?;
+                    let annotation = annotations.entry(triple.subject_term_id)
+                        .or_insert_with(|| {
+                            let Ok(term) = data_buffer.term_index.get(triple.subject_term_id)
+                            else {
+                                warn!("Annotation {} was not declared, and its term was not mapped. Synthesizing it.", triple.subject_term_id);
+                                return AxiomAnnotation::default();
+                            };
+                            warn!("Annotation {term} was not declared. Synthesizing it.");
+                            AxiomAnnotation::default()
+                        });
+                    if let Some(prev_target) = annotation.target.replace(target) {
+                        warn!(
+                            "Annotation {} already has annotated target {}. Overwriting it.",
+                            data_buffer.term_index.get(triple.subject_term_id)?,
+                            data_buffer.term_index.get(prev_target)?
+                        );
+                    }
+                    drop(annotations);
+                    return Ok(SerializationStatus::Serialized);
+                }
                 // owl::ANNOTATION => {},
 
                 //TODO: OWL1
@@ -365,7 +434,20 @@ fn internal_serialize_triple(
                     );
                 }
 
-                // owl::AXIOM => {},
+                owl::AXIOM => {
+                    let previous_value = data_buffer
+                        .metadata
+                        .axiom_annotations
+                        .write()?
+                        .insert(triple.subject_term_id, AxiomAnnotation::default());
+                    if let Some(previous_value) = previous_value {
+                        warn!(
+                            "Axiom {} was inserted again in map. It has been overwritten. Old data: {previous_value:?}",
+                            data_buffer.term_index.get(triple.subject_term_id)?,
+                        );
+                    }
+                    return Ok(SerializationStatus::Serialized);
+                }
                 owl::BACKWARD_COMPATIBLE_WITH => match triple.object_term_id {
                     Some(object_term_id) => {
                         let current_term_id =
@@ -1947,4 +2029,32 @@ fn internal_serialize_triple(
         }
     }
     Ok(SerializationStatus::Serialized)
+}
+
+/// Add a triple to an axiom annotation, if the subject is an annotation.
+fn try_add_triple_to_axiom_annotation(
+    data_buffer: &SerializationDataBuffer,
+    triple: &ArcTriple,
+) -> Result<(), SerializationError> {
+    let mut annotations = data_buffer.metadata.axiom_annotations.write()?;
+    let Some(annotation) = annotations.get_mut(&triple.subject_term_id) else {
+        return Ok(());
+    };
+
+    let predicate_id = data_buffer.get_predicate(triple)?;
+    let predicate_term = data_buffer.term_index.get(predicate_id)?;
+    if let Term::NamedNode(ref named) = *predicate_term
+        && matches!(
+            named.as_ref(),
+            owl::ANNOTATED_SOURCE | owl::ANNOTATED_TARGET | owl::ANNOTATED_PROPERTY
+        )
+    {
+        return Ok(());
+    }
+
+    annotation
+        .annotations
+        .insert(predicate_id, data_buffer.get_object(triple)?);
+    drop(annotations);
+    Ok(())
 }

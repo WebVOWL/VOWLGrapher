@@ -35,7 +35,7 @@ impl QueryAssembler {
                     {}
                     BIND(
                         IF(?nodeType = owl:Ontology, 0,
-                            IF(?nodeType = owl:Class, 1, 2)
+                            IF(?nodeType = owl:Class || ?target = owl:Axiom, 1, 2)
                         )
                         AS ?weight
                     )

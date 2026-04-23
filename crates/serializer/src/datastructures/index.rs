@@ -187,4 +187,10 @@ impl TermIndex {
             domain, edge.edge_type, range,
         ))
     }
+
+    /// Returns a pretty-printed version of the term, falling back to the id if the id is invalid.
+    pub fn display_term(&self, term_id: usize) -> String {
+        self.get(term_id)
+            .map_or_else(|e| e.to_string(), |term| term.to_string())
+    }
 }

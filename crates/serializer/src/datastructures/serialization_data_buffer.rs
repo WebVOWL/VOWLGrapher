@@ -132,6 +132,19 @@ impl SerializationDataBuffer {
         }
     }
 
+    /// Unpack the object term id of the triple.
+    ///
+    /// Returns an error if the term id is None.
+    pub fn get_object(&self, triple: &ArcTriple) -> Result<usize, SerializationError> {
+        match triple.object_term_id {
+            Some(object_term_id) => Ok(object_term_id),
+            None => Err(SerializationErrorKind::MissingObject(
+                self.term_index.display_triple(triple)?,
+                "Cannot serialize a triple with a missing object".to_string(),
+            ))?,
+        }
+    }
+
     /// Converts [`self`] into [`GraphDisplayData`].
     ///
     /// Works like [`TryFrom`] except it also returns non-critical errors in [`Result::Ok`].

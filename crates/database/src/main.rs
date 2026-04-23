@@ -28,7 +28,10 @@ pub async fn main() {
         .await
         .expect("Error inserting file");
     store
-        .query(DEFAULT_QUERY.to_string(), None)
+        .query(
+            DEFAULT_QUERY.to_string(),
+            Some((*path.to_string_lossy()).to_owned()),
+        )
         .await
         .expect("querying the store should succeed");
 }

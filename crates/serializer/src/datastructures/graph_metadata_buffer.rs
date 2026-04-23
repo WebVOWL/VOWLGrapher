@@ -56,8 +56,8 @@ pub struct GraphMetadataBuffer {
     ///
     /// A term does not necessarily have metadata associated with it.
     pub element_metadata: Arc<RwLock<ElementTypeMetadata>>,
-    /// Maps from `owl:annotatedSource` to a hashmap, mapping `owl:annotatedProperty` to `owl:annotatedTarget`.
-    pub annotations: Arc<RwLock<HashMap<usize, HashMap<usize, usize>>>>,
+    /// Maps from annotation term (which is a blank node) to an [`AxiomAnnotation`]
+    pub axiom_annotations: Arc<RwLock<HashMap<usize, AxiomAnnotation>>>,
 }
 
 impl GraphMetadataBuffer {
@@ -158,10 +158,44 @@ impl GraphMetadataBuffer {
         {
             writeln!(
                 f,
-                "\t\t\t{}",
+                "\t\t\t{} - {}",
+                self.term_index.display_term(*term_id),
+                self.term_index.display_term(*comment_term_id)
+            )?;
+        }
+        writeln!(f, "\t\tAnnotations")?;
+        for (term_id, annotation) in self
+            .axiom_annotations
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+        {
+            writeln!(
+                f,
+                "\t\t\t{} - ({}, {}, {}) - {:?}",
                 self.term_index
                     .get(*term_id)
                     .map_or_else(|e| e.to_string(), |term| term.to_string()),
+                annotation.source.map_or_else(
+                    || "None".to_owned(),
+                    |term_id| self.term_index.display_term(term_id)
+                ),
+                annotation.property.map_or_else(
+                    || "None".to_owned(),
+                    |term_id| self.term_index.display_term(term_id)
+                ),
+                annotation.target.map_or_else(
+                    || "None".to_owned(),
+                    |term_id| self.term_index.display_term(term_id)
+                ),
+                annotation
+                    .annotations
+                    .iter()
+                    .map(|(k, v)| (
+                        self.term_index.display_term(*k),
+                        self.term_index.display_term(*v)
+                    ))
+                    .collect::<HashMap<_, _>>()
             )?;
             for object_term_id in object_term_ids {
                 writeln!(
@@ -210,4 +244,25 @@ impl Display for GraphMetadataBuffer {
         writeln!(f, "\t\t\t{:?}", self.annotations)?;
         writeln!(f, "\t}}")
     }
+}
+
+/// An annotation on an axiom
+///
+/// RDF represents these as the triples
+/// ```plaintext
+/// s p o   # The axiom itself
+/// _:x rdf:type owl:Axiom .
+/// _:x owl:annotatedSource s .
+/// _:x owl:annotatedProperty p .
+/// _:x owl:annotatedTarget o .
+/// _:x AP av   # AP is the annotation property, e.g. `rdfs:comment`, and av is the annotation value
+/// ```
+#[derive(Default, Debug)]
+pub struct AxiomAnnotation {
+    pub source: Option<usize>,
+    pub property: Option<usize>,
+    pub target: Option<usize>,
+    /// The annotation properties/values in the annotation.
+    /// Maps from id of annotation property to id of annotation value.
+    pub annotations: HashMap<usize, usize>,
 }

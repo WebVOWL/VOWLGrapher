@@ -4,26 +4,38 @@ use crate::{
     blocks::right_sidebar::ontology_header::OntologyHeader,
     components::{
         accordion::Accordion, buttons::graph_interaction_buttons::GraphInteractionButtons,
+        user_input::internal_sparql::GraphDataContext,
     },
+    events::EventContext,
 };
 use leptos::prelude::*;
 
 #[component]
-pub fn MetaData() -> impl IntoView {
-    let metadata = RwSignal::new("The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.".to_string());
-    view! {
-        <Accordion title="Metadata">
-            <p>{move || metadata.get()}</p>
-        </Accordion>
-    }
-}
-
-#[component]
 pub fn SelectionDetails() -> impl IntoView {
-    let selection_details = RwSignal::new("Select an element in the visualization.".to_string());
+    let GraphDataContext { graph_metadata, .. } = expect_context::<GraphDataContext>();
+    let EventContext { show_metadata } = expect_context::<EventContext>();
+
+    let comments = create_read_slice(graph_metadata, |graph_metadata| {
+        graph_metadata.comments.clone()
+    });
+
+    let comment = Memo::new(move |_| {
+        if let Some(idx) = *show_metadata.read() {
+            comments
+                .read()
+                .get(&idx)
+                .cloned()
+                .unwrap_or_else(|| "No".to_string())
+        } else {
+            "No ".to_string()
+        }
+    });
+
     view! {
         <Accordion title="Selection Details">
-            <p>{move || selection_details.get()}</p>
+            <Show when=move || show_metadata.get().is_some() fallback=|| view! { <p>"Select an element in the visualization."</p>}>
+            <p>"Comment: "{move || comment.get()}</p>
+            </Show>
         </Accordion>
     }
 }

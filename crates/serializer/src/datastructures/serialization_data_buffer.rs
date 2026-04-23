@@ -314,38 +314,13 @@ impl SerializationDataBuffer {
     ) -> Result<(), SerializationError> {
         let mut metadata = GraphMetadata::new();
 
-        metadata.document_base = self
+        metadata.graph_header.document_base = self
             .document_base
             .read()?
             .clone()
             .map_or_else(String::new, |docbase| docbase.base);
-        metadata.description = {
-            let value = self.document_base.read()?.clone();
-            if let Some(docbase) = value {
-                if let Ok(base_term_id) = self.term_index.get_id(&docbase.base_term) {
-                    self.metadata
-                        .comment_buffer
-                        .read()?
-                        .get(&base_term_id)
-                        .map_or_else(String::new, |comment_term_id| {
-                            self.term_index
-                                .get(*comment_term_id)
-                                .map_or_else(|e| e.to_string(), |term| term.to_string())
-                        })
-                } else {
-                    let msg = format!(
-                        "Failed to create ontology description: Term id for document base '{}' not found in term index",
-                        docbase.base_term
-                    );
-                    debug!("{msg}");
-                    failed.push(SerializationErrorKind::TermIndexError(msg.clone()).into());
-                    msg
-                }
-            } else {
-                String::new()
-            }
-        };
-        metadata.title = {
+        metadata.graph_header.title = {
+            // TODO: Add dc:title | dcterms:title for document base
             let value = self.document_base.read()?.clone();
             if let Some(docbase) = value {
                 if let Ok(base_term_id) = self.term_index.get_id(&docbase.base_term) {
@@ -382,11 +357,79 @@ impl SerializationDataBuffer {
                 String::new()
             }
         };
-        let mut author_buffer = self.metadata.author_buffer.write()?;
-        for (term_id, author) in take(&mut *author_buffer) {
-            // TODO: Implement
-        }
-        let mut comment_buffer = self.metadata.comment_buffer.write()?;
+        metadata.graph_header.description = {
+            // TODO: Add dc:description | dcterms:description for document base
+            let value = self.document_base.read()?.clone();
+            if let Some(docbase) = value {
+                if let Ok(base_term_id) = self.term_index.get_id(&docbase.base_term) {
+                    self.metadata
+                        .comment
+                        .read()?
+                        .get(&base_term_id)
+                        .map_or_else(String::new, |comment_term_id| {
+                            self.term_index
+                                .get(*comment_term_id)
+                                .map_or_else(|e| e.to_string(), |term| term.to_string())
+                        })
+                } else {
+                    let msg = format!(
+                        "Failed to create ontology description: Term id for document base '{}' not found in term index",
+                        docbase.base_term
+                    );
+                    debug!("{msg}");
+                    failed.push(SerializationErrorKind::TermIndexError(msg.clone()).into());
+                    msg
+                }
+            } else {
+                String::new()
+            }
+        };
+        metadata.graph_header.version_iri =
+            {
+                // TODO: Add versionInfo for document base
+                Some(self.metadata.version_iri.read()?.map_or_else(
+                    String::new,
+                    |version_term_id| {
+                        self.term_index
+                            .get(version_term_id)
+                            .map_or_else(|e| e.to_string(), |term| term.to_string())
+                    },
+                ))
+            };
+        metadata.graph_header.prior_version = Some(
+            self.metadata
+                .prior_version
+                .read()?
+                .map_or_else(String::new, |version_term_id| {
+                    self.term_index
+                        .get(version_term_id)
+                        .map_or_else(|e| e.to_string(), |term| term.to_string())
+                }),
+        );
+        metadata.graph_header.incompatible_with = Some(
+            self.metadata
+                .prior_version
+                .read()?
+                .map_or_else(String::new, |version_term_id| {
+                    self.term_index
+                        .get(version_term_id)
+                        .map_or_else(|e| e.to_string(), |term| term.to_string())
+                }),
+        );
+        metadata.graph_header.backward_compatible_with = Some(
+            self.metadata
+                .prior_version
+                .read()?
+                .map_or_else(String::new, |version_term_id| {
+                    self.term_index
+                        .get(version_term_id)
+                        .map_or_else(|e| e.to_string(), |term| term.to_string())
+                }),
+        );
+
+        let creator_buffer = self.metadata.creator.write()?;
+
+        let mut comment_buffer = self.metadata.comment.write()?;
         for (term_id, comment_term_id) in take(&mut *comment_buffer) {
             if let Some(term_idx) = iricache.get(&term_id) {
                 let comment = self
@@ -416,7 +459,7 @@ impl SerializationDataBuffer {
                 debug!("{msg}");
             }
         }
-        let mut defined_by_buffer = self.metadata.defined_by_buffer.write()?;
+        let mut defined_by_buffer = self.metadata.defined_by.write()?;
         for (term_id, defined_by_term_id) in take(&mut *defined_by_buffer) {
             let maybe_term_idx = iricache.get(&term_id);
             let maybe_defined_by_term = self.term_index.get(defined_by_term_id);
@@ -445,43 +488,10 @@ impl SerializationDataBuffer {
                 }
             }
         }
-        let mut see_also_buffer = self.metadata.see_also_buffer.write()?;
-        for (term_id, see_also) in take(&mut *see_also_buffer) {
-            // TODO: Implement
-        }
-        metadata.version_iri = Some(self.metadata.version_iri.read()?.map_or_else(
-            String::new,
-            |version_term_id| {
-                self.term_index
-                    .get(version_term_id)
-                    .map_or_else(|e| e.to_string(), |term| term.to_string())
-            },
-        ));
-        metadata.prior_version = Some(self.metadata.prior_version.read()?.map_or_else(
-            String::new,
-            |version_term_id| {
-                self.term_index
-                    .get(version_term_id)
-                    .map_or_else(|e| e.to_string(), |term| term.to_string())
-            },
-        ));
-        metadata.incompatible_with = Some(self.metadata.prior_version.read()?.map_or_else(
-            String::new,
-            |version_term_id| {
-                self.term_index
-                    .get(version_term_id)
-                    .map_or_else(|e| e.to_string(), |term| term.to_string())
-            },
-        ));
-        metadata.backward_compatible_with = Some(self.metadata.prior_version.read()?.map_or_else(
-            String::new,
-            |version_term_id| {
-                self.term_index
-                    .get(version_term_id)
-                    .map_or_else(|e| e.to_string(), |term| term.to_string())
-            },
-        ));
-
+        // let mut see_also_buffer = self.metadata.see_also.write()?;
+        // for (term_id, see_also) in take(&mut *see_also_buffer) {
+        //     // TODO: Implement
+        // }
         display_data.graph_metadata = metadata;
         Ok(())
     }

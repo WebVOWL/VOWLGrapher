@@ -4,6 +4,7 @@ mod export_menu;
 mod filter_menu;
 mod ontology_menu;
 mod options_menu;
+mod query_menu;
 
 // mod search_menu;1
 use crate::components::lists::{ListDetails, ListElement};
@@ -17,6 +18,7 @@ use filter_menu::FilterMenu;
 use leptos::prelude::*;
 use ontology_menu::OntologyMenu;
 use options_menu::OptionsMenu;
+use query_menu::QueryMenu;
 // use search_menu::SearchMenu;
 
 #[component]
@@ -55,6 +57,10 @@ pub fn NewWorkbench() -> impl IntoView {
             // <ListElement title="Search" icon=icondata::BiMenuRegular>
             // <SearchMenu />
             // </ListElement>
+
+            <ListElement title="Query" icon=icondata::BiMenuRegular>
+                <QueryMenu />
+            </ListElement>
 
             <ListElement title="Filter" icon=icondata::BiMenuRegular>
                 <FilterMenu />

@@ -37,6 +37,7 @@
     vowlgrapher-serializer={path="../serializer"}
     vowlgrapher-sparql-queries={path="../sparql_queries"}
     vowlgrapher-util={path="../util"}
+    uuid = {version = "1.0", features = ["v4"]}
     # strum.workspace=true
 
 [dev-dependencies]

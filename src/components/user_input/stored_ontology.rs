@@ -25,9 +25,14 @@ use vowlgrapher_util::prelude::manage_user_id;
 pub enum StoredOntology {
     /// Friend of a Friend (FOAF) vocabulary.
     ///
-    /// - Classes: 22
-    /// - Size: 13 kB
+    /// - Classes: 13
+    /// - Size: 23 kB
     FriendOfAFriend,
+    /// Ontology Visualization Benchmark (OntoViBe).
+    ///
+    /// - Classes 43
+    /// - Size: 13 kB
+    OntoViBe,
     /// Clinical Trials Ontology (CTO).
     ///
     /// - Classes: 273
@@ -49,6 +54,7 @@ impl StoredOntology {
     pub const fn path(&self) -> &'static str {
         match self {
             Self::FriendOfAFriend => "src/assets/data/foaf.ttl",
+            Self::OntoViBe => "src/assets/data/ontovibe.ttl",
             Self::ClinicalTrialsOntology => "src/assets/data/ClinicalTrialOntology-merged.owl",
             Self::RenderingBenchmark => "src/assets/data/vowlgrapher-benchmark-2500.ofn",
             Self::EnvironmentOntology => "src/assets/data/envo.owl",
@@ -60,7 +66,13 @@ impl Display for StoredOntology {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FriendOfAFriend => {
-                write!(f, "Friend of a Friend (FOAF) vocabulary (22 classes)")
+                write!(f, "Friend of a Friend (FOAF) vocabulary (13 classes)")
+            }
+            Self::OntoViBe => {
+                write!(
+                    f,
+                    "Ontology Visualization Benchmark (OntoViBe) (43 classes)"
+                )
             }
             Self::ClinicalTrialsOntology => {
                 write!(f, "Clinical Trials Ontology (CTO) (273 classes)")
@@ -80,7 +92,8 @@ impl TryFrom<&str> for StoredOntology {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "Friend of a Friend (FOAF) vocabulary (22 classes)" => Ok(Self::FriendOfAFriend),
+            "Friend of a Friend (FOAF) vocabulary (13 classes)" => Ok(Self::FriendOfAFriend),
+            "Ontology Visualization Benchmark (OntoViBe) (43 classes)" => Ok(Self::OntoViBe),
             "Clinical Trials Ontology (CTO) (273 classes)" => Ok(Self::ClinicalTrialsOntology),
             "Rendering Benchmark (2.5k classes)" => Ok(Self::RenderingBenchmark),
             "The Environment Ontology (6.9k classes)" => Ok(Self::EnvironmentOntology),

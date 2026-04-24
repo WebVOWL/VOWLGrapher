@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use grapher::prelude::{
     Characteristic, ElementType, OwlEdge, OwlNode, OwlType, RdfsNode, RdfsType,
 };
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
@@ -372,7 +372,7 @@ pub fn insert_characteristic(
     };
 
     if let Some(edge) = maybe_edge {
-        debug!(
+        trace!(
             "Inserting edge characteristic: {} -> {}",
             data_buffer.term_index.get(resolved_property_term_id)?,
             characteristic

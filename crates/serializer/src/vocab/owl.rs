@@ -230,7 +230,7 @@ pub const VERSION_INFO: NamedNodeRef<'_> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#versionInfo");
 /// The property that identifies the version IRI of an ontology.
 pub const VERSION_IRI: NamedNodeRef<'_> =
-    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owlversionIRI#");
+    NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#versionIRI");
 /// The property that determines the collection of facet-value pairs that define a datatype restriction.
 pub const WITH_RESTRICTIONS: NamedNodeRef<'_> =
     NamedNodeRef::new_unchecked("http://www.w3.org/2002/07/owl#withRestrictions");

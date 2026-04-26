@@ -731,6 +731,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-channel"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "924ed96dd52d1b75e9c1a3e6275715fd320f5f9439fb5a4a11fa51f4221158d2"
+dependencies = [
+ "concurrent-queue",
+ "event-listener-strategy",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3165,9 +3177,10 @@ dependencies = [
 [[package]]
 name = "grapher"
 version = "0.5.3"
-source = "git+https://github.com/WebVOWL/WasmGrapher#3d6d117abf236208236ef90c0df360daa09b2c70"
+source = "git+https://github.com/WebVOWL/WasmGrapher?branch=async_events#d8a5495363dbb2f6bffefc7c54a3abcb473d0049"
 dependencies = [
  "anyhow",
+ "async-channel",
  "bytemuck",
  "console_error_panic_hook",
  "flume",
@@ -8265,6 +8278,7 @@ dependencies = [
  "futures",
  "grapher",
  "log",
+ "oxilangtag",
  "oxrdf",
  "rayon",
  "rdf-fusion",

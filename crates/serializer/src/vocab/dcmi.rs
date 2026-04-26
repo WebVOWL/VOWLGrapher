@@ -1,6 +1,6 @@
 //! [DCMI Metadata Terms](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/) vocabularies.
 
-mod dc {
+pub mod dc {
     //! [Dublin Core](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/) vocabulary.
     //!
     //! The original fifteen-element Dublin Core namespace.
@@ -104,7 +104,7 @@ mod dc {
         NamedNodeRef::new_unchecked("http://purl.org/dc/elements/1.1/type");
 }
 
-mod dcterms {
+pub mod dcterms {
     //! [Dublin Core terms](https://www.dublincore.org/specifications/dublin-core/dcmi-terms/) vocabulary.
     //!
     //! Extends the Dublin Core namespace. However, Dublin Core is duplicated in this vocabulary.

@@ -19,7 +19,6 @@ pub struct TermIndex {
 }
 
 impl TermIndex {
-    #[expect(unused)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -81,6 +80,21 @@ impl TermIndex {
             })?
             .clone();
         Ok(term)
+    }
+
+    /// Returns a reference to the id corresponding to the term.
+    ///
+    /// # Errors
+    /// Returns an error if no id corresponding to the term was found in the index.
+    ///
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn get_id(&self, term: &ArcTerm) -> Result<usize, SerializationError> {
+        let term_id = *self.str_index.read()?.get(term).ok_or_else(|| {
+            SerializationErrorKind::TermIndexError(format!(
+                "Failed to find id with with term '{term}' in the term index"
+            ))
+        })?;
+        Ok(term_id)
     }
 
     /// Returns true if the term corresponding to the id exists and is a named node.

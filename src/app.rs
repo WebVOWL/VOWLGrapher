@@ -1,4 +1,5 @@
 use crate::errors::{ClientErrorKind, ErrorLogContext};
+use crate::events::{EventContext, EventHandler};
 use crate::pages::home::Home;
 use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation;
@@ -18,6 +19,10 @@ pub fn App() -> impl IntoView {
     let error_context = ErrorLogContext::default();
     provide_context(error_context);
 
+    // Initialize event context
+    let event_context = EventContext::new();
+    provide_context(event_context);
+
     // Try to fetch environment from server. Use the defaults on failure.
     spawn_local_scoped_with_cancellation(async move {
         let environ = match environ().await {
@@ -35,6 +40,9 @@ pub fn App() -> impl IntoView {
         };
         provide_context(environ);
     });
+
+    // Initiate the event handler
+    spawn_local_scoped_with_cancellation(async move { EventHandler::handle_event().await });
 
     view! {
         <Stylesheet id="vowlgrapher" href="/pkg/vowlgrapher.css" />

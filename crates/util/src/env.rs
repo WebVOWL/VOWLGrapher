@@ -69,7 +69,7 @@ impl VOWLGrapherEnviron {
     pub fn new() -> Self {
         let max_input_size_bytes =
             Self::parse_environment("VOWLGRAPHER_MAX_INPUT_SIZE_BYTES", ByteSize::mb(50));
-        let resolve_imports = Self::parse_environment("VOWLGRAPHER_RESOLVE_IMPORTS", true);
+        let resolve_imports = Self::parse_environment("VOWLGRAPHER_RESOLVE_IMPORTS", false);
         Self {
             max_input_size_bytes,
             resolve_imports,

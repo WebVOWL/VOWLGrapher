@@ -18,7 +18,7 @@ use crate::{
         edges::{follow_redirection, restrictions::retry_restrictions},
         entity_creation::create_triple_from_id,
         is_external,
-        labels::extract_label,
+        labels::insert_label,
         nodes::insert_node,
         serialize_triple::serialize_triple,
         try_resolve_reserved,
@@ -190,7 +190,10 @@ pub fn check_all_unknowns(
         pass += 1;
 
         let pending_before: usize = pending.values().map(std::collections::HashSet::len).sum();
-        info!("Unknown resolution pass {pass} ({pending_before} triples pending)");
+        info!(
+            "Unknown resolution pass {pass} ({pending_before} triple{} pending)",
+            if pending_before == 1 { "" } else { "s" }
+        );
 
         retry_restrictions(data_buffer)?;
         let current = pending;
@@ -199,7 +202,7 @@ pub fn check_all_unknowns(
             let term = data_buffer.term_index.get(term_id)?;
 
             if !data_buffer.label_buffer.read()?.contains_key(&term_id) {
-                extract_label(data_buffer, None, &term, term_id)?;
+                insert_label(data_buffer, None, &term, term_id)?;
             }
 
             if is_external(data_buffer, &term)? {
@@ -246,7 +249,8 @@ pub fn check_all_unknowns(
 
         if pending_after >= pending_before || pending_after == 0 {
             info!(
-                "Unknown resolution reached fixpoint after pass {pass} ({pending_after} triples still pending)"
+                "Unknown resolution reached fixpoint after pass {pass} ({pending_after} triple{} still pending)",
+                if pending_after == 1 { "" } else { "s" }
             );
             break;
         }

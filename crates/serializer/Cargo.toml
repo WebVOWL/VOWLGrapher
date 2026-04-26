@@ -20,6 +20,7 @@
     futures={workspace=true}
     grapher={workspace=true}
     log={workspace=true}
+    oxilangtag.workspace=true
     oxrdf="0.3.1"
     rayon.workspace=true
     rdf-fusion={workspace=true}

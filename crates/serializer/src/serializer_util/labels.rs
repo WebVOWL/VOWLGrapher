@@ -1,7 +1,7 @@
 //! Functions related to labels of terms.
 
 use fluent_uri::Iri;
-use log::{debug, trace};
+use log::{debug, error, trace};
 use oxrdf::Term;
 use unescape_zero_copy::unescape_default;
 
@@ -12,9 +12,9 @@ use crate::{
 
 /// Extract label info from the query solution and store until
 /// they can be mapped to their [`ElementType`].
-pub fn extract_label(
+pub fn insert_label(
     data_buffer: &SerializationDataBuffer,
-    maybe_label: Option<&Term>,
+    maybe_label_term: Option<&Term>,
     term: &Term,
     term_id: usize,
 ) -> Result<(), SerializationError> {
@@ -23,34 +23,61 @@ pub fn extract_label(
         return Ok(());
     }
 
-    if let Some(label) = maybe_label {
-        let str_label = label.to_string();
+    if let Some(label) = extract_label(maybe_label_term, term) {
+        // TODO: Refactor label_buffer to handle language tags
+        data_buffer
+            .label_buffer
+            .write()?
+            .insert(term_id, Some(label));
+    }
 
-        // Handle cases where label is: "Some Label"@en or contains "
-        let split_label = str_label.split_inclusive('"').collect::<Vec<_>>();
-        let clean_label = if split_label.len() > 2 {
-            let joined_label = split_label[0..split_label.len() - 1].join("");
-            let stripped_label = joined_label
-                .strip_prefix("\"")
-                .and_then(|sub_str| sub_str.strip_suffix("\""))
-                .unwrap_or_else(|| &joined_label);
+    Ok(())
+}
 
-            // Unescape string sequences like "\"" into """
-            unescape_default(stripped_label)
-                .unwrap_or_default()
-                .to_string()
-        } else {
-            str_label
+/// Returns the label extracted from the term or None if no label was found.
+///
+/// Labels are extracted with the following priority:
+///
+/// 1. Use `maybe_label_term` if it's Some().
+/// 2. Use the fragment component of the term, if it exist.
+/// 3. Use the path component of the term, if it exist.
+pub fn extract_label(maybe_label_term: Option<&Term>, term: &Term) -> Option<String> {
+    if let Some(label_term) = maybe_label_term {
+        // Handle language tags and cases where label contains "
+        let stripped_label = trim_tag_circumfix(&label_term.to_string())
+            .trim_start_matches("\"")
+            .trim_end_matches("\"")
+            .to_string();
+        let (label, lang_tag) = {
+            stripped_label
+                .rsplit_once("@")
+                .map(|(label, lang_tag)| {
+                    (
+                        label.trim_start_matches("\"").trim_end_matches("\""),
+                        lang_tag,
+                    )
+                })
+                .unwrap_or_else(|| (&stripped_label, ""))
         };
+        let clean_label = unescape_default(label).map_or_else(
+            |_| label.to_string(),
+            |escaped_label| escaped_label.to_string(),
+        );
+        error!("Debug check label: '{clean_label}'");
 
         if clean_label.is_empty() {
             debug!("Empty label detected for term '{term}'");
         } else {
-            trace!("Inserting label '{clean_label}' for term '{term}'");
-            data_buffer
-                .label_buffer
-                .write()?
-                .insert(term_id, Some(clean_label));
+            trace!(
+                "Inserting {}label '{clean_label}' for term '{term}'",
+                if lang_tag.is_empty() {
+                    "".to_string()
+                } else {
+                    format!("{lang_tag} ")
+                }
+            );
+
+            return Some(clean_label);
         }
     } else {
         let iri = term.to_string();
@@ -59,23 +86,16 @@ pub fn extract_label(
             Ok(parsed_iri) => {
                 if let Some(frag) = parsed_iri.fragment() {
                     trace!("Inserting fragment '{frag}' as label for iri '{term}'");
-                    data_buffer
-                        .label_buffer
-                        .write()?
-                        .insert(term_id, Some(frag.to_string()));
-                } else {
-                    debug!("No fragment found in iri '{iri}'");
-                    match parsed_iri.path().rsplit_once('/') {
-                        Some(path) => {
-                            trace!("Inserting path '{}' as label for iri '{}'", path.1, term);
-                            data_buffer
-                                .label_buffer
-                                .write()?
-                                .insert(term_id, Some(path.1.to_string()));
-                        }
-                        None => {
-                            debug!("No path found in iri '{iri}'");
-                        }
+                    return Some(frag.to_string());
+                }
+                debug!("No fragment found in iri '{iri}'");
+                match parsed_iri.path().rsplit_once('/') {
+                    Some(path) => {
+                        trace!("Inserting path '{}' as label for iri '{}'", path.1, term);
+                        return Some(path.1.to_string());
+                    }
+                    None => {
+                        debug!("No path found in iri '{iri}'");
                     }
                 }
             }
@@ -85,7 +105,7 @@ pub fn extract_label(
             }
         }
     }
-    Ok(())
+    None
 }
 
 pub fn merge_optional_labels(left: Option<&String>, right: Option<&String>) -> Option<String> {

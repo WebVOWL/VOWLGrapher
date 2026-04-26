@@ -1,3 +1,5 @@
+pub mod dcmi;
+
 pub const COMMENT: &str = r"{
             # Find comments for elements.
             ?id rdfs:comment ?target .

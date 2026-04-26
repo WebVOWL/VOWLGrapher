@@ -67,11 +67,12 @@
         futures="0.3.31"
         grapher={features=[
             "webgl",
-        ], git="https://github.com/WebVOWL/WasmGrapher"}
+        ], git="https://github.com/WebVOWL/WasmGrapher", branch="async_events"}
         horned-owl={git="https://github.com/phillord/horned-owl", tag="v1.4.0"}
         leptos={version="0.8.16", features=["nightly", "multipart", "rkyv"]}
         leptos_actix="0.8.7"
         log="0.4"
+        oxilangtag="0.1.5"
         rayon="1.10"
         rdf-fusion="0.1.0"
         rkyv="0.8.12"

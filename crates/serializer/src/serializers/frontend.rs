@@ -4,7 +4,7 @@ use crate::{
     datastructures::serialization_data_buffer::SerializationDataBuffer,
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
-        buffers::check_all_unknowns, entity_creation::create_triple_from_id, labels::extract_label,
+        buffers::check_all_unknowns, entity_creation::create_triple_from_id, labels::insert_label,
         serialize_triple::serialize_triple,
     },
 };
@@ -121,7 +121,7 @@ impl GraphDisplayDataSolutionSerializer {
         }
 
         let all_errors =
-            Self::post_serialization_cleanup(data, &data_buffer, start_time, query_time, count)
+            Self::post_serialization_cleanup(data, data_buffer, start_time, query_time, count)
                 .map_err(<SerializationError as Into<VOWLGrapherError>>::into)?;
 
         Ok(all_errors)
@@ -204,7 +204,7 @@ impl GraphDisplayDataSolutionSerializer {
         }
 
         let all_errors =
-            Self::post_serialization_cleanup(data, &data_buffer, start_time, query_time, count)
+            Self::post_serialization_cleanup(data, data_buffer, start_time, query_time, count)
                 .map_err(<SerializationError as Into<VOWLGrapherError>>::into)?;
 
         Ok(all_errors)
@@ -221,7 +221,7 @@ impl GraphDisplayDataSolutionSerializer {
 
         // Label must be extracted between getting id and nodeType from solutions due to "continue" in the else clause.
         let subject_term_id = data_buffer.term_index.insert(subject_term.to_owned())?;
-        extract_label(
+        insert_label(
             data_buffer,
             solution.get("label"),
             subject_term,
@@ -257,7 +257,7 @@ impl GraphDisplayDataSolutionSerializer {
     /// Must be called exactly once in any serialization implementation.
     fn post_serialization_cleanup(
         data: &mut GraphDisplayData,
-        data_buffer: &SerializationDataBuffer,
+        data_buffer: SerializationDataBuffer,
         start_time: Instant,
         query_time: Option<Instant>,
         count: u64,
@@ -298,7 +298,7 @@ impl GraphDisplayDataSolutionSerializer {
                     .into_iter()
                     .chain(take(&mut ce.records))
                     .collect::<Vec<_>>();
-                Some(<Vec<ErrorRecord> as Into<VOWLGrapherError>>::into(ue))
+                Some(ue.into())
             }
             (Some(e), None) => Some(e),
             (None, Some(ce)) => Some(ce),

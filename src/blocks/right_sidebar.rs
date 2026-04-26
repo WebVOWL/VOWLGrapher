@@ -1,32 +1,11 @@
 mod ontology_header;
+mod selection_details;
 
 use crate::{
-    blocks::right_sidebar::ontology_header::{Author, Description, Language, OntologyIri, Version},
-    components::{
-        accordion::Accordion, buttons::graph_interaction_buttons::GraphInteractionButtons,
-    },
+    blocks::right_sidebar::{ontology_header::OntologyHeader, selection_details::SelectionDetails},
+    components::buttons::graph_interaction_buttons::GraphInteractionButtons,
 };
 use leptos::prelude::*;
-
-#[component]
-pub fn MetaData() -> impl IntoView {
-    let metadata = RwSignal::new("The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.The Friend of a Friend (FOAF) RDF vocabulary, described using W3C RDF Schema and the Web Ontology Language.".to_string());
-    view! {
-        <Accordion title="Metadata">
-            <p>{move || metadata.get()}</p>
-        </Accordion>
-    }
-}
-
-#[component]
-pub fn SelectionDetails() -> impl IntoView {
-    let selection_details = RwSignal::new("Select an element in the visualization.".to_string());
-    view! {
-        <Accordion title="Selection Details">
-            <p>{move || selection_details.get()}</p>
-        </Accordion>
-    }
-}
 
 #[component]
 pub fn RightSidebar() -> impl IntoView {
@@ -48,16 +27,7 @@ pub fn RightSidebar() -> impl IntoView {
                 class=("w-[22%]", move || is_open.get())
                 class=("w-0", move || !is_open.get())
             >
-
-                <p class="py-4 font-thin text-center text-gray-500 text-[1.5em]">
-                    "Friend of a Friend (FOAF) vocabulary"
-                </p>
-                <OntologyIri />
-                <Version />
-                <Author />
-                <Language />
-                <Description />
-                <MetaData />
+                <OntologyHeader />
                 <SelectionDetails />
             </div>
             <GraphInteractionButtons is_sidebar_open=is_open />

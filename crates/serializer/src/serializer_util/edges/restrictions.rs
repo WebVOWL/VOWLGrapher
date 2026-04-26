@@ -20,7 +20,7 @@ use crate::{
             create_edge_from_id, create_term, create_triple_from_id, create_triple_from_iri,
             get_or_create_domain_thing,
         },
-        labels::extract_label,
+        labels::insert_label,
         nodes::{insert_node, is_query_fallback_endpoint},
         synthetic::{SYNTH_LITERAL, SYNTH_LITERAL_VALUE},
         synthetic_iri, try_resolve_reserved,
@@ -325,7 +325,7 @@ pub fn materialize_one_of_target(
                 .read()?
                 .contains_key(&target_term_id)
             {
-                extract_label(data_buffer, None, &target_term, target_term_id)?;
+                insert_label(data_buffer, None, &target_term, target_term_id)?;
             }
 
             let node_exists = {
@@ -816,7 +816,7 @@ pub fn materialize_named_value_target(
             };
             if !target_has_label {
                 let target_term = data_buffer.term_index.get(target_term_id)?;
-                extract_label(data_buffer, None, &target_term, target_term_id)?;
+                insert_label(data_buffer, None, &target_term, target_term_id)?;
             }
 
             let node_exists = {
@@ -853,7 +853,7 @@ pub fn materialize_named_value_target(
             };
             if !target_has_label {
                 let target_term = data_buffer.term_index.get(target_term_id)?;
-                extract_label(data_buffer, None, &target_term, target_term_id)?;
+                insert_label(data_buffer, None, &target_term, target_term_id)?;
             }
 
             let node_exists = {

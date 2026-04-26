@@ -48,16 +48,20 @@ pub fn Version(
 }
 
 #[component]
-pub fn Author(#[prop(into)] authors: Signal<Vec<String>>) -> impl IntoView {
+pub fn Author(
+    #[prop(into)] creators: Signal<Vec<String>>,
+    #[prop(into)] contributors: Signal<Vec<String>>,
+) -> impl IntoView {
     view! {
         <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            Author(s): {move || authors.get()}
+            Author(s): {move || creators.get()} <br />Contributor(s):
+            {move || contributors.get()}
         </p>
     }
 }
 
 #[component]
-pub fn Language() -> impl IntoView {
+pub fn Language(#[prop(into)] lang: Signal<Vec<String>>) -> impl IntoView {
     let ontologylanguages = RwSignal::new(vec![
         "english".to_string(),
         "german".to_string(),
@@ -80,7 +84,7 @@ pub fn Language() -> impl IntoView {
 }
 
 #[component]
-pub fn Description(#[prop(into)] desc: Signal<String>) -> impl IntoView {
+pub fn Description(#[prop(into)] desc: Signal<Vec<String>>) -> impl IntoView {
     view! {
         <Accordion title="Description">
             <p>{move || desc.get()}</p>
@@ -93,28 +97,31 @@ pub fn OntologyHeader() -> impl IntoView {
     let GraphDataContext { graph_metadata, .. } = expect_context::<GraphDataContext>();
 
     let document_base = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.document_base.clone()
+        graph_metadata.graph_header.document_base.clone()
     });
     let title = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.title.clone()
+        graph_metadata.graph_header.title.clone()
     });
     let description = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.description.clone()
+        graph_metadata.graph_header.description.clone()
     });
-    let authors = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.authors.clone()
+    let creators = create_read_slice(graph_metadata, |graph_metadata| {
+        graph_metadata.graph_header.creator.clone()
+    });
+    let contributors = create_read_slice(graph_metadata, |graph_metadata| {
+        graph_metadata.graph_header.contributor.clone()
     });
     let version_iri = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.version_iri.clone()
+        graph_metadata.graph_header.version_iri.clone()
     });
     let prior_version = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.prior_version.clone()
+        graph_metadata.graph_header.prior_version.clone()
     });
     let incompatible_with = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.incompatible_with.clone()
+        graph_metadata.graph_header.incompatible_with.clone()
     });
     let backward_compatible_with = create_read_slice(graph_metadata, |graph_metadata| {
-        graph_metadata.backward_compatible_with.clone()
+        graph_metadata.graph_header.backward_compatible_with.clone()
     });
 
     view! {
@@ -127,8 +134,8 @@ pub fn OntologyHeader() -> impl IntoView {
                 incompatible_with=incompatible_with
                 backward_compatible_with=backward_compatible_with
             />
-            <Author authors=authors />
-            <Language />
+            <Author creators=creators contributors=contributors />
+            <Language lang=Vec::new() />
             <Description desc=description />
         </div>
     }

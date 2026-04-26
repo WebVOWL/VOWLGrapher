@@ -18,7 +18,7 @@ use crate::{
         edges::{follow_redirection, restrictions::retry_restrictions},
         entity_creation::create_triple_from_id,
         is_external,
-        labels::extract_label,
+        labels::insert_label,
         nodes::insert_node,
         serialize_triple::serialize_triple,
         try_resolve_reserved,
@@ -202,7 +202,7 @@ pub fn check_all_unknowns(
             let term = data_buffer.term_index.get(term_id)?;
 
             if !data_buffer.label_buffer.read()?.contains_key(&term_id) {
-                extract_label(data_buffer, None, &term, term_id)?;
+                insert_label(data_buffer, None, &term, term_id)?;
             }
 
             if is_external(data_buffer, &term)? {

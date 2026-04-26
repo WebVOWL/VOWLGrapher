@@ -55,6 +55,7 @@ pub enum VOWLGrapherStoreErrorKind {
 }
 
 impl From<VOWLGrapherStoreErrorKind> for VOWLGrapherError {
+    #[track_caller]
     fn from(value: VOWLGrapherStoreErrorKind) -> Self {
         <VOWLGrapherStoreError as Into<Self>>::into(value.into())
     }

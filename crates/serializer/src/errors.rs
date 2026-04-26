@@ -87,12 +87,14 @@ pub enum SerializationErrorKind {
 }
 
 impl From<SerializationErrorKind> for VOWLGrapherError {
+    #[track_caller]
     fn from(value: SerializationErrorKind) -> Self {
         <SerializationError as Into<Self>>::into(value.into())
     }
 }
 
 impl From<SerializationErrorKind> for ErrorRecord {
+    #[track_caller]
     fn from(value: SerializationErrorKind) -> Self {
         <SerializationError as Into<Self>>::into(value.into())
     }

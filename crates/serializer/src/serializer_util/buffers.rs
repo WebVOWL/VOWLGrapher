@@ -190,7 +190,10 @@ pub fn check_all_unknowns(
         pass += 1;
 
         let pending_before: usize = pending.values().map(std::collections::HashSet::len).sum();
-        info!("Unknown resolution pass {pass} ({pending_before} triples pending)");
+        info!(
+            "Unknown resolution pass {pass} ({pending_before} triple{} pending)",
+            if pending_before == 1 { "" } else { "s" }
+        );
 
         retry_restrictions(data_buffer)?;
         let current = pending;
@@ -246,7 +249,8 @@ pub fn check_all_unknowns(
 
         if pending_after >= pending_before || pending_after == 0 {
             info!(
-                "Unknown resolution reached fixpoint after pass {pass} ({pending_after} triples still pending)"
+                "Unknown resolution reached fixpoint after pass {pass} ({pending_after} triple{} still pending)",
+                if pending_after == 1 { "" } else { "s" }
             );
             break;
         }

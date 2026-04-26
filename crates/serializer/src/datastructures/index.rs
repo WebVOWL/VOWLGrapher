@@ -91,7 +91,7 @@ impl TermIndex {
     pub fn get_id(&self, term: &ArcTerm) -> Result<usize, SerializationError> {
         let term_id = *self.str_index.read()?.get(term).ok_or_else(|| {
             SerializationErrorKind::TermIndexError(format!(
-                "Failed to find id with with '{term}' in the term index"
+                "Failed to find id with with term '{term}' in the term index"
             ))
         })?;
         Ok(term_id)

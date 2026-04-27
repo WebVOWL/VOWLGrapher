@@ -68,9 +68,6 @@ ENV LEPTOS_SITE_ADDR="0.0.0.0:8080"
 # Set directory to serve files from by the server
 ENV LEPTOS_SITE_ROOT=./site
 
-# VOWLGrapher settings
-ENV VOWLGRAPHER_MAX_INPUT_SIZE_BYTES=52428800
-
 # Depends on the port you choose
 EXPOSE 8080
 

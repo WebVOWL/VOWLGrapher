@@ -521,13 +521,11 @@ enum ImportBase {
 
 impl ImportBase {
     fn from_path(path: &Path) -> Self {
-        Url::from_file_path(path)
-            .map(Self::Url)
-            .unwrap_or(Self::Unknown)
+        Url::from_file_path(path).map_or(Self::Unknown, Self::Url)
     }
 
     fn from_user_input(input: &str) -> Self {
-        Url::parse(input).map(Self::Url).unwrap_or(Self::Unknown)
+        Url::parse(input).map_or(Self::Unknown, Self::Url)
     }
 
     fn resolve(&self, import_iri: &str) -> Result<Url, VOWLGrapherStoreError> {

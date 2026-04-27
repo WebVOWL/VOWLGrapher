@@ -1,7 +1,7 @@
 [toolchain]
-    channel="nightly-2025-09-22"
+    channel="nightly-2026-04-21"
     components=[
-        "rust-src", # Makes the source code of the standard library available for compilation
+        "rust-src",      # Makes the source code of the standard library available for compilation
         "rustfmt",
         "rustc",
         "rust-std",

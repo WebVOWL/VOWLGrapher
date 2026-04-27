@@ -16,7 +16,7 @@ RUN apk update && apk upgrade --no-cache && apk add --no-cache \
     mold 
 
 # Install a prebuilt binary of cargo-leptos matching version in README.md
-RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.5/cargo-leptos-installer.sh | sh
+RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.6/cargo-leptos-installer.sh | sh
 
 
 WORKDIR /build

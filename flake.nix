@@ -26,7 +26,7 @@
               ./rust-toolchain.toml)
             leptosfmt
             cargo-leptos
-            wasm-bindgen-cli_0_2_100
+            wasm-bindgen-cli_0_2_118
             clang
             mold
             sass

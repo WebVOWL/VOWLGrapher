@@ -1,4 +1,6 @@
-#![allow(non_snake_case)]
+// Leptos' view macro tends to be heavy on recursion, especially with many nested views.
+#![recursion_limit = "256"]
+// For JS naming compatibility
 
 use actix_files::Files;
 use actix_session::{SessionMiddleware, storage::CookieSessionStore};

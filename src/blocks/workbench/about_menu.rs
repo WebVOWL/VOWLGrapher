@@ -3,7 +3,7 @@ use crate::components::icon::Icon;
 use leptos::prelude::*;
 
 pub fn VOWLGrapherDesc() -> impl IntoView {
-    let description = include_str!("../../assets/about_description.txt");
+    let description = include_str!("../../../public/about_description.txt");
     view! {
         <p>{description}</p>
         <div class="flex gap-4">

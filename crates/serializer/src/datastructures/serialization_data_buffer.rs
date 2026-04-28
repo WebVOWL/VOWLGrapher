@@ -1,6 +1,6 @@
 use crate::{
     datastructures::{
-        ArcEdge, ArcLockRestrictionState, ArcTerm, ArcTriple, DocumentBase, TermID,
+        ArcEdge, ArcLockRestrictionState, ArcTerm, TermID,
         graph_metadata_buffer::GraphMetadataBuffer, index::TermIndex,
     },
     errors::{SerializationError, SerializationErrorKind},
@@ -10,7 +10,7 @@ use crate::{
 use grapher::prelude::{
     Characteristic, ElementType, GraphDisplayData, GraphMetadata, OwlEdge, OwlType,
 };
-use log::debug;
+use log::{debug, warn};
 use oxrdf::Term;
 use std::{
     collections::{HashMap, HashSet},
@@ -41,7 +41,7 @@ pub struct SerializationDataBuffer {
     ///
     /// The key is a term's corresponding id.
     ///
-    /// The value is a term's type, e.g., "Owl Class".
+    /// The value is a term's type, e.g., "Object Properrty".
     pub edge_element_buffer: Arc<RwLock<HashMap<TermID, ElementType>>>,
     /// Keeps track of edges that should point to a node different
     /// from their definition.
@@ -160,13 +160,17 @@ impl SerializationDataBuffer {
         // Maps an RDF term's corresponding id to a [`GraphDisplayData`] index.
         let mut inverse_edge_indices: HashMap<usize, usize> = HashMap::new();
 
+        // Maps an edge in the form of `(subject, verb, object)` to a [`GraphDisplayData`] index.
+        let mut edge_map: HashMap<(usize, usize, usize), usize> = HashMap::new();
+
         self.convert_graph_data(
             &mut display_data,
             &mut failed,
             &mut iricache,
             &mut inverse_edge_indices,
+            &mut edge_map,
         )?;
-        self.convert_metadata(&mut display_data, &mut failed, &iricache)?;
+        self.convert_metadata(&mut display_data, &mut failed, &iricache, &edge_map)?;
 
         if failed.is_empty() {
             Ok((display_data, None))
@@ -185,6 +189,7 @@ impl SerializationDataBuffer {
         failed: &mut Vec<ErrorRecord>,
         iricache: &mut HashMap<usize, usize>,
         inverse_edge_indices: &mut HashMap<usize, usize>,
+        edge_map: &mut HashMap<(usize, usize, usize), usize>,
     ) -> Result<(), SerializationError> {
         let mut label_buffer = self.label_buffer.write()?;
         let mut node_element_buffer = self.node_element_buffer.write()?;
@@ -246,6 +251,17 @@ impl SerializationDataBuffer {
                     display_data
                         .edges
                         .push([*subject_idx, edge_idx, *object_idx]);
+                    if let Some(property_term) = edge.property_term_id {
+                        edge_map.insert(
+                            (edge.domain_term_id, property_term, edge.range_term_id),
+                            edge_idx,
+                        );
+                    } else {
+                        warn!(
+                            "edge {} has to property term",
+                            self.term_index.display_edge(edge)?
+                        );
+                    }
 
                     if let Some(characteristics) = characteristics {
                         display_data
@@ -326,6 +342,7 @@ impl SerializationDataBuffer {
         display_data: &mut GraphDisplayData,
         failed: &mut Vec<ErrorRecord>,
         iricache: &HashMap<usize, usize>,
+        edge_map: &HashMap<(usize, usize, usize), usize>,
     ) -> Result<(), SerializationError> {
         let mut metadata_buffer = GraphMetadata::new();
 

@@ -19,6 +19,7 @@ pub fn VOWLGrapherDesc() -> impl IntoView {
             >
                 <Icon icon=icondata::IoMail />
             // TODO - Insert the email we can be contacted on.
+            // FIXME: Insert valid email that will last at least a year from now
             </a>
         </div>
     }

@@ -53,11 +53,11 @@ pub enum StoredOntology {
 impl StoredOntology {
     pub const fn path(&self) -> &'static str {
         match self {
-            Self::FriendOfAFriend => "public/data/foaf.ttl",
-            Self::OntoViBe => "public/data/ontovibe.ttl",
-            Self::ClinicalTrialsOntology => "public/data/ClinicalTrialOntology-merged.owl",
-            Self::RenderingBenchmark => "public/data/vowlgrapher-benchmark-2500.ofn",
-            Self::EnvironmentOntology => "public/data/envo.owl",
+            Self::FriendOfAFriend => "target/site/data/foaf.ttl",
+            Self::OntoViBe => "target/site/data/ontovibe.ttl",
+            Self::ClinicalTrialsOntology => "target/site/data/ClinicalTrialOntology-merged.owl",
+            Self::RenderingBenchmark => "target/site/data/vowlgrapher-benchmark-2500.ofn",
+            Self::EnvironmentOntology => "target/site/data/envo.owl",
         }
     }
 }

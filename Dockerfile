@@ -97,7 +97,8 @@ WORKDIR /app
 
 # Import VOWLGrapher from the build stage
 COPY --chown=10001 --from=builder /build/target/x86_64-unknown-linux-musl/release/vowlgrapher /app/
-COPY --chown=10001 --from=builder /build/target/site /app/site
+COPY --chown=10001 --from=builder --exclude=/data/* /build/target/site /app/site
+COPY --chown=10001 --from=builder /build/target/site /app/target/site/data
 
 # Import the CAcertificates from the build stage to enable HTTPS
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/

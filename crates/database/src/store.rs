@@ -128,6 +128,7 @@ impl VOWLGrapherStore {
                 query.replace("{GRAPH_IRI}", &graph_name)
             },
         );
+        info!("{user_query}");
 
         let solution_serializer = GraphDisplayDataSolutionSerializer::new();
         let query_stream = self
@@ -158,7 +159,9 @@ impl VOWLGrapherStore {
 
                 while let Some(maybe_triple) = _query_triple_stream.next().await {
                     let t = maybe_triple.map_err(|e| {
-                        <VOWLRStoreError as Into<VOWLRError>>::into(VOWLRStoreError::from(e))
+                        <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(
+                            VOWLGrapherStoreError::from(e),
+                        )
                     })?;
                     let line = format!("{} {} {} .\n", t.subject, t.predicate, t.object);
                     buffer.extend_from_slice(line.as_bytes());
@@ -167,20 +170,19 @@ impl VOWLGrapherStore {
                 let start_time = Instant::now();
                 let cursor = std::io::Cursor::new(buffer);
 
-                let prepared = vowlr_parser::parser_util::parser_from_reader(
+                let prepared = vowlgrapher_parser::parser_util::parser_from_reader(
                     cursor,
-                    Path::new("temp.nt"),
+                    Path::new("temp.nt").into(),
                     false,
-                    &temp_graph_iri,
+                    &temp_graph_name,
                 )
-                .map_err(|e| <VOWLRStoreError as Into<VOWLRError>>::into(e))?;
+                .map_err(|e| <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e))?;
 
-                self.session
-                    .load_from_reader(prepared.parser, prepared.input.as_slice())
-                    .await
-                    .map_err(|e| {
-                        <VOWLRStoreError as Into<VOWLRError>>::into(VOWLRStoreError::from(e))
-                    })?;
+                self.session.extend(prepared).await.map_err(|e| {
+                    <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(
+                        VOWLGrapherStoreError::from(e),
+                    )
+                })?;
 
                 debug!(
                     "Loaded {} quad in {} s",
@@ -191,7 +193,8 @@ impl VOWLGrapherStore {
                         .as_secs_f32()
                 );
 
-                let default_query_logic = vowlr_sparql_queries::prelude::DEFAULT_QUERY.clone();
+                let default_query_logic =
+                    vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY.clone();
 
                 let (display_data, errors) =
                     Box::pin(self.query(default_query_logic, Some(temp_graph_iri))).await?;

@@ -1,7 +1,7 @@
 use crate::components::user_input::internal_sparql::load_graph;
 use super::WorkbenchMenuItems;
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
-use vowlr_sparql_queries::prelude::QueryAssembler;
+use vowlgrapher_sparql_queries::prelude::QueryAssembler;
 use web_sys::HtmlInputElement;
 
 #[component]

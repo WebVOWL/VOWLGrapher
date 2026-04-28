@@ -19,6 +19,7 @@
 #
 # "-Clinker-plugin-lto"
 # "-flto"
+# "-Clto"
 # Allows for deferring the LTO optimization to the actual linking step, which in turn allows for performing
 # interprocedural optimizations across programming language boundaries if all the object files being linked
 # were created by LLVM based toolchains. The prime example here would be linking Rust code together with
@@ -56,8 +57,9 @@
     linker="clang"
     rustflags=[
         "-Ctarget-feature=+crt-static",
-        "-Clinker-plugin-lto",
         "-Clink-arg=-fuse-ld=mold",
+        "-Clto=thin",
+        "-Clinker-plugin-lto",
         "-Clink-arg=-flto",
         "-Zpre-link-args=link_libs/mimalloc.o",
     ]

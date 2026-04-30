@@ -22,25 +22,25 @@ pub type ArcLockRestrictionState = Arc<RwLock<RestrictionState>>;
 /// The corresponding ID of a [`Term`].
 ///
 /// Created by the [`TermIndex`](crate::datastructures::index::TermIndex).
-type TermID = usize;
+pub type TermID = usize;
 /// A language tag, e.g., `en`.
-type LanguageTag = String;
+pub type LanguageTag = String;
 /// A term's corresponding id specific for metadata, e.g., `<http://www.w3.org/2000/01/rdf-schema#comment>`
-type MetadataTermID = usize;
+pub type MetadataTermID = usize;
 /// The metadata content term's corresponding id, e.g., the data of `rdfs:comment`.
-type MetadataContent = HashSet<TermID>;
+pub type MetadataContent = HashSet<TermID>;
 /// Stores the metadata associated with a language tag.
 ///
 /// The same metadata can be written in multiple languages.
-type TaggedMetadata = HashMap<LanguageTag, MetadataContent>;
+pub type TaggedMetadata = HashMap<Option<LanguageTag>, MetadataContent>;
 /// Stores the metadata associated with a metadata type.
 ///
 /// There exist many types of metadata, e.g., `rdfs:comment`, `dc:creator`.
-type MetadataType = HashMap<MetadataTermID, TaggedMetadata>;
+pub type MetadataType = HashMap<MetadataTermID, TaggedMetadata>;
 /// Stores the metadata of a term's corresponding id.
 ///
 /// A term does not necessarily have metadata associated with it.
-type ElementTypeMetadata = HashMap<TermID, MetadataType>;
+pub type ElementTypeMetadata = HashMap<TermID, MetadataType>;
 // /// Stores language-tagged labels.
 // ///
 // /// The same label can be written in multiple languages.

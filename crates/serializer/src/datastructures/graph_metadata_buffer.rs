@@ -4,17 +4,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use oxrdf::Term;
-
 use crate::{
     datastructures::{
-        ArcTerm, ElementTypeMetadata, LanguageTag, MetadataContent, MetadataTermID,
-        index::TermIndex,
+        ArcTerm, ArcTriple, ElementTypeMetadata, LanguageTag, MetadataContent, MetadataType,
+        TermID, index::TermIndex,
     },
-    errors::SerializationError,
+    errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
-        labels::{extract_label, insert_label},
-        trim_tag_circumfix,
+        fmt_langtag, labels::extract_label, translate_metadata_content, trim_tag_circumfix,
     },
 };
 
@@ -27,7 +24,7 @@ pub struct GraphMetadataBuffer {
     /// The term's corresponding id which describes the version of an ontology.
     ///
     /// owl:versionIRI
-    pub version_iri: Arc<RwLock<Option<usize>>>,
+    pub version_iri: Arc<RwLock<Option<TermID>>>,
     /// The term's corresponding id which describes the prior version of an ontology.
     ///
     /// owl:priorVersion
@@ -35,7 +32,7 @@ pub struct GraphMetadataBuffer {
     /// ## Note
     /// The usage of this annotation property on entities other than ontologies is [discouraged](https://www.w3.org/TR/owl-syntax/#Ontology_Annotations).
     /// As such, we should notify the client if this is violated.
-    pub prior_version: Arc<RwLock<Option<usize>>>,
+    pub prior_version: Arc<RwLock<Option<TermID>>>,
     /// The term's cooresponding id which describes the prior version of the ontology that is incompatible with the current version, i.e., [`Self::version_iri`]-
     ///
     /// owl:incompatibleWith
@@ -43,7 +40,7 @@ pub struct GraphMetadataBuffer {
     /// ## Note
     /// The usage of this annotation property on entities other than ontologies is [discouraged](https://www.w3.org/TR/owl-syntax/#Ontology_Annotations).
     /// As such, we should notify the client if this is violated.
-    pub incompatible_with: Arc<RwLock<Option<usize>>>,
+    pub incompatible_with: Arc<RwLock<Option<TermID>>>,
     /// The term's cooresponding id which describes the prior version of the ontology that is compatible with the current version, i.e., [`Self::version_iri`]-
     ///
     /// owl:backwardCompatibleWith
@@ -51,13 +48,13 @@ pub struct GraphMetadataBuffer {
     /// ## Note
     /// The usage of this annotation property on entities other than ontologies is [discouraged](https://www.w3.org/TR/owl-syntax/#Ontology_Annotations).
     /// As such, we should notify the client if this is violated.
-    pub backward_compatible_with: Arc<RwLock<Option<usize>>>,
+    pub backward_compatible_with: Arc<RwLock<Option<TermID>>>,
     /// Stores the general metadata of a term's corresponding id.
     ///
     /// A term does not necessarily have metadata associated with it.
     pub element_metadata: Arc<RwLock<ElementTypeMetadata>>,
     /// Maps from annotation term (which is a blank node) to an [`AxiomAnnotation`]
-    pub axiom_annotations: Arc<RwLock<HashMap<usize, AxiomAnnotation>>>,
+    pub axiom_annotations: Arc<RwLock<HashMap<TermID, AxiomAnnotation>>>,
 }
 
 impl GraphMetadataBuffer {
@@ -68,11 +65,15 @@ impl GraphMetadataBuffer {
         }
     }
 
-    pub fn get_general_metadata(
+    /// Returns the language-tagged metadata associated with the subject term's corresponding id.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn get_element_metadata(
         &self,
-        subject_term_id: usize,
+        subject_term_id: TermID,
         metadata_term: &ArcTerm,
-        language_tag: LanguageTag,
+        language_tag: Option<LanguageTag>,
     ) -> Result<Option<MetadataContent>, SerializationError> {
         if let Ok(metadata_term_id) = self.term_index.get_id(metadata_term) {
             if let Some(metadata_type) = self.element_metadata.read()?.get(&subject_term_id) {
@@ -86,12 +87,107 @@ impl GraphMetadataBuffer {
         Ok(None)
     }
 
+    /// Returns the language-tagged metadata associated with the subject term's corresponding id.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn get_element_metadata2(
+        &self,
+        subject_term_id: TermID,
+        metadata_term_id: TermID,
+        language_tag: Option<LanguageTag>,
+    ) -> Result<Option<MetadataContent>, SerializationError> {
+        if let Some(metadata_type) = self.element_metadata.read()?.get(&subject_term_id) {
+            return Ok(metadata_type
+                .get(&metadata_term_id)
+                .map(|tagged_metadata| tagged_metadata.get(&language_tag))
+                .flatten()
+                .cloned());
+        }
+
+        Ok(None)
+    }
+
+    /// Returns the contents of a metadata type, translated to term strings.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn get_element_metadata_content(
+        &self,
+        metadata_type: &MetadataType,
+        metadata_term_id: TermID,
+    ) -> Option<HashMap<String, Vec<String>>> {
+        metadata_type.get(&metadata_term_id).map(|tagged_metadata| {
+            HashMap::from_iter(tagged_metadata.iter().map(|(lang_tag, content)| {
+                (
+                    fmt_langtag(lang_tag.clone()),
+                    translate_metadata_content(&self.term_index, content),
+                )
+            }))
+        })
+    }
+
+    /// Adds a language-tagged metadata triple to the metadata buffer.
+    ///
+    /// # Errors
+    /// Returns an error if the triple does not contain subject, predicate, and object.
+    ///
+    /// Returns an error if the underlying lock is poisoned when accessed.
+    pub fn insert_element_metadata(
+        &self,
+        triple: &ArcTriple,
+        language: Option<LanguageTag>,
+    ) -> Result<(), SerializationError> {
+        match (triple.predicate_term_id, triple.object_term_id) {
+            (Some(predicate_term_id), Some(object_term_id)) => {
+                self.element_metadata
+                    .write()?
+                    .entry(triple.subject_term_id)
+                    .or_default()
+                    .entry(predicate_term_id)
+                    .or_default()
+                    .entry(language)
+                    .or_default()
+                    .insert(object_term_id);
+            }
+            (None, Some(_)) => {
+                return Err(SerializationErrorKind::MissingPredicate(
+                    self.term_index.display_triple(triple)?,
+                    format!(
+                        "Failed to insert metadata for element '{}': triple is missing a predicate",
+                        self.term_index.display_term(triple.subject_term_id)
+                    ),
+                ))?;
+            }
+            (Some(_), None) => {
+                return Err(SerializationErrorKind::MissingObject(
+                    self.term_index.display_triple(triple)?,
+                    format!(
+                        "Failed to insert metadata for element '{}': triple is missing an object",
+                        self.term_index.display_term(triple.subject_term_id)
+                    ),
+                ))?;
+            }
+            (None, None) => {
+                return Err(SerializationErrorKind::MissingObject(
+                    self.term_index.display_triple(triple)?,
+                    format!(
+                        "Failed to insert metadata for element '{}': triple is missing both predicate and object",
+                        self.term_index.display_term(triple.subject_term_id)
+                    ),
+                ))?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn fmt_element_metadata(
         &self,
         f: &mut std::fmt::Formatter<'_>,
         element_metadata: &Arc<RwLock<ElementTypeMetadata>>,
     ) -> std::fmt::Result {
-        let mut map: HashMap<usize, HashMap<usize, Vec<String>>> = HashMap::new();
+        let mut map: HashMap<TermID, HashMap<TermID, Vec<String>>> = HashMap::new();
 
         // Prepare data for display
         for (term_id, metadata_types) in element_metadata
@@ -109,7 +205,8 @@ impl GraphMetadataBuffer {
                             .iter()
                             .map(|content_term_id| {
                                 format!(
-                                    "\t\t\t{lang_tag} - {}",
+                                    "\t\t\t{} - {}",
+                                    fmt_langtag(lang_tag.clone()),
                                     self.term_index
                                         .get(*content_term_id)
                                         .map_or_else(|e| e.to_string(), |term| term.to_string())
@@ -149,7 +246,7 @@ impl GraphMetadataBuffer {
     fn fmt_hashset_hashmap(
         &self,
         f: &mut std::fmt::Formatter<'_>,
-        map: &Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
+        map: &Arc<RwLock<HashMap<TermID, HashSet<TermID>>>>,
     ) -> std::fmt::Result {
         for (term_id, object_term_ids) in map
             .read()
@@ -158,12 +255,55 @@ impl GraphMetadataBuffer {
         {
             writeln!(
                 f,
-                "\t\t\t{} - {}",
-                self.term_index.display_term(*term_id),
-                self.term_index.display_term(*comment_term_id)
+                "\t\t\t{}",
+                self.term_index
+                    .get(*term_id)
+                    .map_or_else(|e| e.to_string(), |term| term.to_string()),
             )?;
+            for object_term_id in object_term_ids {
+                writeln!(
+                    f,
+                    "\t\t\t\t{}",
+                    self.term_index
+                        .get(*object_term_id)
+                        .map_or_else(|e| e.to_string(), |term| term.to_string())
+                )?;
+            }
         }
-        writeln!(f, "\t\tAnnotations")?;
+        write!(f, "")
+    }
+
+    fn fmt_option_usize(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        title: &str,
+        value: &Arc<RwLock<Option<TermID>>>,
+    ) -> std::fmt::Result {
+        writeln!(
+            f,
+            "\t\t\t{title}: {}",
+            value
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .map_or_else(String::new, |term_id| {
+                    self.term_index
+                        .get(term_id)
+                        .map_or_else(|e| e.to_string(), |term| term.to_string())
+                })
+        )
+    }
+}
+
+impl Display for GraphMetadataBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "\tGraphMetadataBuffer {{")?;
+        writeln!(f, "\t\tOntology")?;
+        self.fmt_option_usize(f, "version_iri", &self.version_iri)?;
+        self.fmt_option_usize(f, "prior_version", &self.prior_version)?;
+        self.fmt_option_usize(f, "incompatible_with", &self.incompatible_with)?;
+        self.fmt_option_usize(f, "backward_compatible_wit", &self.backward_compatible_with)?;
+        self.fmt_element_metadata(f, &self.element_metadata)?;
+        writeln!(f, "\t\tAnnotations:")?;
         for (term_id, annotation) in self
             .axiom_annotations
             .read()
@@ -197,51 +337,7 @@ impl GraphMetadataBuffer {
                     ))
                     .collect::<HashMap<_, _>>()
             )?;
-            for object_term_id in object_term_ids {
-                writeln!(
-                    f,
-                    "\t\t\t\t{}",
-                    self.term_index
-                        .get(*object_term_id)
-                        .map_or_else(|e| e.to_string(), |term| term.to_string())
-                )?;
-            }
         }
-        write!(f, "")
-    }
-
-    fn fmt_option_usize(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-        title: &str,
-        value: &Arc<RwLock<Option<usize>>>,
-    ) -> std::fmt::Result {
-        writeln!(
-            f,
-            "\t\t\t{title}: {}",
-            value
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .map_or_else(String::new, |term_id| {
-                    self.term_index
-                        .get(term_id)
-                        .map_or_else(|e| e.to_string(), |term| term.to_string())
-                })
-        )
-    }
-}
-
-impl Display for GraphMetadataBuffer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "\tGraphMetadataBuffer {{")?;
-        writeln!(f, "\t\tOntology")?;
-        self.fmt_option_usize(f, "version_iri", &self.version_iri)?;
-        self.fmt_option_usize(f, "prior_version", &self.prior_version)?;
-        self.fmt_option_usize(f, "incompatible_with", &self.incompatible_with)?;
-        self.fmt_option_usize(f, "backward_compatible_wit", &self.backward_compatible_with)?;
-        self.fmt_element_metadata(f, &self.element_metadata)?;
-        writeln!(f, "\t\tAnnotations:")?;
-        writeln!(f, "\t\t\t{:?}", self.annotations)?;
         writeln!(f, "\t}}")
     }
 }
@@ -259,10 +355,10 @@ impl Display for GraphMetadataBuffer {
 /// ```
 #[derive(Default, Debug)]
 pub struct AxiomAnnotation {
-    pub source: Option<usize>,
-    pub property: Option<usize>,
-    pub target: Option<usize>,
+    pub source: Option<TermID>,
+    pub property: Option<TermID>,
+    pub target: Option<TermID>,
     /// The annotation properties/values in the annotation.
     /// Maps from id of annotation property to id of annotation value.
-    pub annotations: HashMap<usize, usize>,
+    pub annotations: HashMap<TermID, TermID>,
 }

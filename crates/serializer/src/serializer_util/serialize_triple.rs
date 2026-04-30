@@ -186,23 +186,12 @@ fn internal_serialize_triple(
                     return Ok(SerializationStatus::Serialized);
                 }
 
-                rdfs::COMMENT => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .comment
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
+                rdfs::COMMENT => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
 
                 // rdfs::CONTAINER => {}
                 // rdfs::CONTAINER_MEMBERSHIP_PROPERTY => {}
@@ -222,23 +211,12 @@ fn internal_serialize_triple(
                     .into());
                 }
 
-                rdfs::IS_DEFINED_BY => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .defined_by
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
+                rdfs::IS_DEFINED_BY => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
 
                 // Is handled by [`extract_label`]
                 rdfs::LABEL => {
@@ -273,25 +251,12 @@ fn internal_serialize_triple(
                     )?;
                     return Ok(SerializationStatus::Serialized);
                 }
-                rdfs::SEE_ALSO => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .see_also
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
+                rdfs::SEE_ALSO => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
                 rdfs::SUB_CLASS_OF => {
                     // TODO: Some cases of owl:Thing self-subclass triple are not handled here.
                     // Particularly if we haven't seen subject in the element buffer.
@@ -1220,23 +1185,12 @@ fn internal_serialize_triple(
                         }
                     }
                 }
-                owl::VERSION_INFO => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .version_info
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
+                owl::VERSION_INFO => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
                 owl::VERSION_IRI => match triple.object_term_id {
                     Some(object_term_id) => {
                         let current_term_id = { *data_buffer.metadata.version_iri.read()? };
@@ -1332,273 +1286,96 @@ fn internal_serialize_triple(
                     )?;
                     return Ok(SerializationStatus::Serialized);
                 }
-                dc::CONTRIBUTOR | dcterms::CONTRIBUTOR => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .contributor
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::COVERAGE | dcterms::COVERAGE => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .coverage
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::CREATOR | dcterms::CREATOR => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .creator
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::DATE | dcterms::DATE => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .date
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::DESCRIPTION | dcterms::DESCRIPTION => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .description
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::FORMAT | dcterms::FORMAT => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .format
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::IDENTIFIER | dcterms::IDENTIFIER => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .identifier
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::LANGUAGE | dcterms::LANGUAGE => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .language
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::PUBLISHER | dcterms::PUBLISHER => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .publisher
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::RELATION | dcterms::RELATION => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .relation
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::RIGHTS | dcterms::RIGHTS => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .rights
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::SOURCE | dcterms::SOURCE => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .source
-                            .write()?
-                            .entry(triple.subject_term_id)
-                            .or_default()
-                            .insert(object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::SUBJECT | dcterms::SUBJECT => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .subject
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::TITLE | dcterms::TITLE => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .title
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
-                dc::TYPE | dcterms::TYPE => match triple.object_term_id {
-                    Some(object_term_id) => {
-                        data_buffer
-                            .metadata
-                            .r#type
-                            .write()?
-                            .insert(triple.subject_term_id, object_term_id);
-                        return Ok(SerializationStatus::Serialized);
-                    }
-                    None => {
-                        return Err(SerializationErrorKind::MissingObject(
-                            data_buffer.term_index.display_triple(&triple)?,
-                            "Triple has no object".to_string(),
-                        )
-                        .into());
-                    }
-                },
+                dc::CONTRIBUTOR | dcterms::CONTRIBUTOR => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::COVERAGE | dcterms::COVERAGE => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::CREATOR | dcterms::CREATOR => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::DATE | dcterms::DATE => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::DESCRIPTION | dcterms::DESCRIPTION => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::FORMAT | dcterms::FORMAT => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::IDENTIFIER | dcterms::IDENTIFIER => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::LANGUAGE | dcterms::LANGUAGE => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::PUBLISHER | dcterms::PUBLISHER => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::RELATION | dcterms::RELATION => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::RIGHTS | dcterms::RIGHTS => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::SOURCE | dcterms::SOURCE => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::SUBJECT | dcterms::SUBJECT => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::TITLE | dcterms::TITLE => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
+                dc::TYPE | dcterms::TYPE => {
+                    data_buffer
+                        .metadata
+                        .insert_element_metadata(&triple, None)?;
+                    return Ok(SerializationStatus::Serialized);
+                }
                 _ => {
                     match triple.object_term_id {
                         Some(object_term_id) => {

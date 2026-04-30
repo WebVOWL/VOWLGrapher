@@ -11,11 +11,15 @@ use grapher::prelude::{
     ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType,
 };
 use log::warn;
-use oxrdf::TermRef;
+
+use oxrdf::{NamedNodeRef, Term, TermRef};
 use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
-    datastructures::{ArcTerm, serialization_data_buffer::SerializationDataBuffer},
+    datastructures::{
+        ArcTerm, LanguageTag, MetadataContent, TermID, index::TermIndex,
+        serialization_data_buffer::SerializationDataBuffer,
+    },
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::synthetic::{
         SYNTH_LITERAL, SYNTH_LITERAL_VALUE, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING,
@@ -263,4 +267,36 @@ pub fn is_external(
         }
         Ok(false)
     }
+}
+
+/// Translates the term ids of metadata content into term strings.
+pub fn translate_metadata_content(
+    term_index: &TermIndex,
+    content: &MetadataContent,
+) -> Vec<String> {
+    content
+        .iter()
+        .map(|content_term_id| translate_term_with_fallback(term_index, *content_term_id))
+        .collect()
+}
+
+/// Translates a term_id into a term string, consuming any error as part of the returned string.
+///
+/// Use only in infallible contexts.
+pub fn translate_term_with_fallback(term_index: &TermIndex, term_id: TermID) -> String {
+    term_index
+        .get(term_id)
+        .map_or_else(|e| e.to_string(), |term| term.to_string())
+}
+
+/// Converts a NamedNodeRef into a term.
+///
+/// This is useful for converting vocabulary constructs into terms for use in serialization.
+pub fn named_node_to_term(node: NamedNodeRef) -> ArcTerm {
+    <Term as Into<ArcTerm>>::into(node.into())
+}
+
+/// Formats a language tag, handling None in a standardized way.
+pub fn fmt_langtag(lang_tag: Option<LanguageTag>) -> String {
+    lang_tag.unwrap_or_else(|| "None".to_string())
 }

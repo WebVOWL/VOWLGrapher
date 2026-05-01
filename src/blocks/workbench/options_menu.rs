@@ -12,7 +12,7 @@ pub fn SimulatorSettings() -> impl IntoView {
     let gravity_force = RwSignal::new(GravityForce::default().0.into());
     let delta_time = RwSignal::new(DeltaTime::default().0.into());
     let damping = RwSignal::new(Damping::default().0.into());
-    let quadtree_theta = RwSignal::new(QuadTreeTheta::default().0.into());
+    let quadtree_theta: RwSignal<f64> = RwSignal::new(QuadTreeTheta::default().0.into());
     let freeze_thresh = RwSignal::new(FreezeThreshold::default().0.into());
 
     #[expect(
@@ -27,7 +27,7 @@ pub fn SimulatorSettings() -> impl IntoView {
             SimulatorEvent::GravityForceUpdated(gravity_force.get() as f32),
             SimulatorEvent::DeltaTimeUpdated(delta_time.get() as f32),
             SimulatorEvent::DampingUpdated(damping.get() as f32),
-            SimulatorEvent::QuadTreeThetaUpdated(quadtree_theta.get() as f32),
+            SimulatorEvent::QuadTreeThetaUpdated((quadtree_theta.get() as f32).abs()),
             SimulatorEvent::FreezeThresholdUpdated(freeze_thresh.get() as f32),
         ];
         for msg in messages {
@@ -92,8 +92,8 @@ pub fn SimulatorSettings() -> impl IntoView {
                 <Slider
                     label="Simulation Accuracy"
                     value=quadtree_theta
-                    min="0.1"
-                    max="1.0"
+                    min="-10.0"
+                    max="-0.1"
                     step="0.1"
                 ></Slider>
 

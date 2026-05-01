@@ -100,17 +100,19 @@ pub fn Language(
 
     let shown_languages = move || {
         once(selected_language.0.get().map_or_else(
-            || {
-                view! {
-                    <option value="None"
-                        .to_string()>{"None".to_string()}</option>
-                }
-                .into_any()
-            },
+            || view! { <option value="None".to_string()>{"None".to_string()}</option> }.into_any(),
             |_| ().into_any(),
         ))
         .chain(language_tags.get().into_iter().map(|tag| {
-            view! { <option value=tag.unwrap_or_else(|| "None".to_string())>{tag.clone().unwrap_or_else(|| "None".to_string())}</option> }.into_any()
+            view! {
+                <option value=tag
+                    .unwrap_or_else(|| {
+                        "None".to_string()
+                    })>
+                    {tag.clone().unwrap_or_else(|| "None".to_string())}
+                </option>
+            }
+            .into_any()
         }))
         .collect_view()
     };
@@ -118,9 +120,13 @@ pub fn Language(
     view! {
         <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
             "Languages:"
-            <select class="py-1 px-2 text-sm text-gray-500 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none w-[100px] h-[30px]"
-            prop:value=selected_language.0.get().map_or_else(|| "None".to_string(), |tag| tag)
-            on:change=update_selected_language
+            <select
+                class="py-1 px-2 text-sm text-gray-500 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none w-[100px] h-[30px]"
+                prop:value=selected_language
+                    .0
+                    .get()
+                    .unwrap_or_else(|| "None".to_string())
+                on:change=update_selected_language
             >
                 {shown_languages()}
             </select>
@@ -181,7 +187,10 @@ pub fn OntologyHeader() -> impl IntoView {
 
     view! {
         <div>
-            <Title selected_language=selected_language_tag.clone() title=title />
+            <Title
+                selected_language=selected_language_tag.clone()
+                title=title
+            />
             <DocumentBase base=document_base />
             <Version
                 version_iri=version_iri
@@ -189,9 +198,19 @@ pub fn OntologyHeader() -> impl IntoView {
                 incompatible_with=incompatible_with
                 backward_compatible_with=backward_compatible_with
             />
-            <Author selected_language=selected_language_tag.clone() creators=creators contributors=contributors />
-            <Language selected_language=selected_language_tag.clone() language_tags=language_tags />
-            <Description selected_language=selected_language_tag desc=description />
+            <Author
+                selected_language=selected_language_tag.clone()
+                creators=creators
+                contributors=contributors
+            />
+            <Language
+                selected_language=selected_language_tag.clone()
+                language_tags=language_tags
+            />
+            <Description
+                selected_language=selected_language_tag
+                desc=description
+            />
         </div>
     }
 }

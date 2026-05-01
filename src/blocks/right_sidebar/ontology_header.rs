@@ -1,11 +1,24 @@
-use crate::components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext};
+use std::{collections::HashMap, iter::once};
+
+use crate::{
+    blocks::right_sidebar::{
+        LanguageSelection, default_metadata_value_signal, metadata_value_signal,
+    },
+    components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext},
+};
 use leptos::prelude::*;
+use web_sys::{Event, HtmlInputElement};
 
 #[component]
-pub fn Title(#[prop(into)] title: Signal<String>) -> impl IntoView {
+pub fn Title(
+    #[prop(into)] selected_language: LanguageSelection,
+    #[prop(into)] title: Signal<HashMap<String, Vec<String>>>,
+) -> impl IntoView {
+    let default_title = Memo::new(move |_| default_metadata_value_signal(title));
+    let shown_title = metadata_value_signal(title, default_title, selected_language.0);
     view! {
         <p class="py-4 font-thin text-center text-gray-500 text-[1.5em]">
-            {move || title.get()}
+            {move || shown_title.get()}
         </p>
     }
 }
@@ -49,45 +62,83 @@ pub fn Version(
 
 #[component]
 pub fn Author(
-    #[prop(into)] creators: Signal<Vec<String>>,
-    #[prop(into)] contributors: Signal<Vec<String>>,
+    #[prop(into)] selected_language: LanguageSelection,
+    #[prop(into)] creators: Signal<HashMap<String, Vec<String>>>,
+    #[prop(into)] contributors: Signal<HashMap<String, Vec<String>>>,
 ) -> impl IntoView {
+    let default_creator = Memo::new(move |_| default_metadata_value_signal(creators));
+    let shown_creator = metadata_value_signal(creators, default_creator, selected_language.0);
+    let default_contributor = Memo::new(move |_| default_metadata_value_signal(contributors));
+    let shown_contributor =
+        metadata_value_signal(contributors, default_contributor, selected_language.0);
     view! {
         <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            Author(s): {move || creators.get()} <br />Contributor(s):
-            {move || contributors.get()}
+            Author(s): {move || { shown_creator.get() }} <br />Contributor(s):
+            {move || shown_contributor.get()}
         </p>
     }
 }
 
 #[component]
-pub fn Language(#[prop(into)] lang: Signal<Vec<String>>) -> impl IntoView {
-    let ontologylanguages = RwSignal::new(vec![
-        "english".to_string(),
-        "german".to_string(),
-        "french".to_string(),
-    ]);
+pub fn Language(
+    #[prop(into)] selected_language: LanguageSelection,
+    #[prop(into)] language_tags: Signal<Vec<Option<String>>>,
+) -> impl IntoView {
+    let update_selected_language = move |ev: Event| {
+        let target: HtmlInputElement = event_target::<HtmlInputElement>(&ev);
+        let name = target.value();
+        if name.is_empty() {
+            return;
+        }
+
+        let tag = match name.as_str() {
+            "None" => None,
+            _ => Some(name),
+        };
+        selected_language.0.update(|lan_tag| *lan_tag = tag);
+    };
+
+    let shown_languages = move || {
+        once(selected_language.0.get().map_or_else(
+            || {
+                view! {
+                    <option value="None"
+                        .to_string()>{"None".to_string()}</option>
+                }
+                .into_any()
+            },
+            |_| ().into_any(),
+        ))
+        .chain(language_tags.get().into_iter().map(|tag| {
+            view! { <option value=tag.unwrap_or_else(|| "None".to_string())>{tag.clone().unwrap_or_else(|| "None".to_string())}</option> }.into_any()
+        }))
+        .collect_view()
+    };
+
     view! {
         <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            "Language(s):"
-            <select class="py-1 px-2 text-sm text-gray-500 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none w-[100px] h-[30px]">
-                {move || {
-                    ontologylanguages
-                        .get()
-                        .into_iter()
-                        .map(|lang| view! { <option>{lang}</option> })
-                        .collect_view()
-                }}
+            "Languages:"
+            <select class="py-1 px-2 text-sm text-gray-500 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none w-[100px] h-[30px]"
+            prop:value=selected_language.0.get().map_or_else(|| "None".to_string(), |tag| tag)
+            on:change=update_selected_language
+            >
+                {shown_languages()}
             </select>
         </p>
     }
 }
 
 #[component]
-pub fn Description(#[prop(into)] desc: Signal<Vec<String>>) -> impl IntoView {
+pub fn Description(
+    #[prop(into)] selected_language: LanguageSelection,
+    #[prop(into)] desc: Signal<HashMap<String, Vec<String>>>,
+) -> impl IntoView {
+    let default_desc = Memo::new(move |_| default_metadata_value_signal(desc));
+    let shown_desc = metadata_value_signal(desc, default_desc, selected_language.0);
+
     view! {
         <Accordion title="Description">
-            <p>{move || desc.get()}</p>
+            <p>{move || shown_desc.get()}</p>
         </Accordion>
     }
 }
@@ -95,9 +146,13 @@ pub fn Description(#[prop(into)] desc: Signal<Vec<String>>) -> impl IntoView {
 #[component]
 pub fn OntologyHeader() -> impl IntoView {
     let GraphDataContext { graph_metadata, .. } = expect_context::<GraphDataContext>();
+    let selected_language_tag = expect_context::<LanguageSelection>();
 
     let document_base = create_read_slice(graph_metadata, |graph_metadata| {
         graph_metadata.graph_header.document_base.clone()
+    });
+    let language_tags = create_read_slice(graph_metadata, |graph_metadata| {
+        graph_metadata.languages.clone()
     });
     let title = create_read_slice(graph_metadata, |graph_metadata| {
         graph_metadata.graph_header.title.clone()
@@ -126,7 +181,7 @@ pub fn OntologyHeader() -> impl IntoView {
 
     view! {
         <div>
-            <Title title=title />
+            <Title selected_language=selected_language_tag.clone() title=title />
             <DocumentBase base=document_base />
             <Version
                 version_iri=version_iri
@@ -134,9 +189,9 @@ pub fn OntologyHeader() -> impl IntoView {
                 incompatible_with=incompatible_with
                 backward_compatible_with=backward_compatible_with
             />
-            <Author creators=creators contributors=contributors />
-            <Language lang=Vec::new() />
-            <Description desc=description />
+            <Author selected_language=selected_language_tag.clone() creators=creators contributors=contributors />
+            <Language selected_language=selected_language_tag.clone() language_tags=language_tags />
+            <Description selected_language=selected_language_tag desc=description />
         </div>
     }
 }

@@ -17,21 +17,30 @@ pub fn SelectionDetails() -> impl IntoView {
 
     let shown_selection_data = move || {
         if let Some(idx) = *show_metadata.read() {
-            selection_data.read().get(&idx).cloned().map_or_else(
-                Vec::new,
-                |metadata_types| {
+            selection_data
+                .read()
+                .get(&idx)
+                .cloned()
+                .map_or_else(Vec::new, |metadata_types| {
                     metadata_types
                         .into_iter()
                         .map(|(metadata_type_literal, metadata_type_map)| {
                             let value = metadata_type_map.clone();
-                            let default_value = Memo::new(move |_| {default_metadata_value(value.clone())});
+                            let default_value =
+                                Memo::new(move |_| default_metadata_value(value.clone()));
                             view! {
-                                 <p>{move || {metadata_type_literal.as_ref().clone()}}": "{move || metadata_value(metadata_type_map.clone(), default_value, selected_language.0)}</p>
+                                <p>
+                                    {move || { metadata_type_literal.as_ref().clone() }}": "
+                                    {move || metadata_value(
+                                        metadata_type_map.clone(),
+                                        default_value,
+                                        selected_language.0,
+                                    )}
+                                </p>
                             }
                         })
                         .collect_view()
-                },
-            )
+                })
         } else {
             vec![]
         }
@@ -45,19 +54,19 @@ pub fn SelectionDetails() -> impl IntoView {
                     view! { <p>"Select an element in the visualization."</p> }
                 }
             >
-    {move ||
-        let data = shown_selection_data();
-        if data.is_empty() {
-            Either::Left(
-                view! {
-                    <p>"No supported selection details to display."</p>
-                }
-            )
-        } else {
-            data
-        }
-    }
-        </Show>
+                {move || {
+                    let data = shown_selection_data();
+                    if data.is_empty() {
+                        Either::Left(
+                            view! {
+                                <p>"No supported selection details to display."</p>
+                            },
+                        )
+                    } else {
+                        Either::Right(data)
+                    }
+                }}
+            </Show>
         </Accordion>
     }
 }

@@ -17,6 +17,9 @@ use vowlgrapher_util::prelude::VOWLGrapherEnviron;
 use web_sys::Event;
 use web_sys::HtmlInputElement;
 
+#[derive(Copy, Clone)]
+struct ActiveMenuTask(RwSignal<&'static str>);
+
 #[component]
 pub fn SelectStaticInput() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
@@ -24,21 +27,41 @@ pub fn SelectStaticInput() -> impl IntoView {
         active_graph_name, ..
     } = expect_context::<GraphDataContext>();
 
+    let selected_ontology: RwSignal<Option<StoredOntology>> = RwSignal::new(None);
+    let stored_stage: RwSignal<Option<&'static str>> = RwSignal::new(None);
+
+    let active_task = expect_context::<ActiveMenuTask>().0;
+
+    Effect::new(move || {
+        if active_task.get() != "stored" {
+            if stored_stage.get_untracked() == Some("Done") {
+                stored_stage.set(None);
+            }
+            if selected_ontology.get_untracked().is_some() {
+                selected_ontology.set(None);
+            }
+        }
+    });
     let selected_ontology: RwSignal<Option<StoredOntology>> =
         RwSignal::new(Some(StoredOntology::FriendOfAFriend));
 
     let stored_res = LocalResource::new(move || async move {
         if let Some(stored) = selected_ontology.get() {
+            active_task.set("stored");
+            stored_stage.set(Some("Loading"));
             active_graph_name.set(stored.path().to_string());
             match load_stored_ontology(stored).await {
                 Ok(warning) => {
                     if let Some(e) = warning {
                         error_context.extend(e.records);
                     }
+                    stored_stage.set(Some("Serializing"));
                     load_graph(DEFAULT_QUERY.to_string(), true).await;
+                    stored_stage.set(Some("Done"));
                 }
                 Err(e) => {
                     error_context.extend(e.records);
+                    stored_stage.set(None);
                 }
             }
         }
@@ -82,7 +105,7 @@ pub fn SelectStaticInput() -> impl IntoView {
             <label class="block mb-1">"Premade Ontology:"</label>
             <select
                 class="p-1 w-full text-sm bg-gray-200 rounded border-b-0"
-                prop:value=selected_ontology
+                prop:value=move || selected_ontology
                     .read()
                     .map_or_else(
                         || "Select an ontology".to_string(),
@@ -99,6 +122,26 @@ pub fn SelectStaticInput() -> impl IntoView {
                     stored_res.await;
                 })}
             </Suspense>
+            {move || {
+                match stored_stage.get() {
+                    Some("Done") => view! {
+                        <p class="mt-1 text-sm font-bold text-center">
+                            "Loading done"
+                        </p>
+                    }.into_any(),
+                    Some(stage) => view! {
+                        <p class="mt-1 text-sm text-center">
+                            <span class="relative inline-flex items-center">
+                                <span>{stage}</span>
+                                <span class="absolute left-full text-left loading-dots-anim">
+                                    "......"
+                                </span>
+                            </span>
+                        </p>
+                    }.into_any(),
+                    None => ().into_any(),
+                }
+            }}
         </div>
     }
 }
@@ -112,16 +155,56 @@ pub fn UploadInput() -> impl IntoView {
     let upload = FileUpload::new();
     let local_loading_done = upload.local_action.value();
     let remote_loading_done = upload.remote_action.value();
-    let upload_progress = upload.tracker.upload_progress;
-    let parsing_status = upload.tracker.parsing_status;
-    let parsing_done = upload.tracker.parsing_done;
+    let local_pending = upload.local_action.pending();
+    let remote_pending = upload.remote_action.pending();
     let tracker_url = upload.tracker.clone();
     let tracker_file = upload.tracker.clone();
     let file_name = upload.tracker.filename;
     let url_name = upload.tracker.url_name;
 
+    let file_stage: RwSignal<Option<&'static str>> = RwSignal::new(None);
+    let url_stage: RwSignal<Option<&'static str>> = RwSignal::new(None);
+
+    let url_input_val = RwSignal::new(String::new());
+    let file_input_ref = NodeRef::<leptos::html::Input>::new();
+
+    let active_task = expect_context::<ActiveMenuTask>().0;
+
+    Effect::new(move || {
+        if active_task.get() != "file" {
+            if file_stage.get_untracked() == Some("Done") {
+                file_stage.set(None);
+            }
+            if !file_name.get_untracked().is_empty() {
+                file_name.set(String::new());
+            }
+            if let Some(input) = file_input_ref.get() {
+                input.set_value("");
+            }
+        }
+    });
+
+    Effect::new(move || {
+        if active_task.get() != "url" {
+            if url_stage.get_untracked() == Some("Done") {
+                url_stage.set(None);
+            }
+            if !url_input_val.get_untracked().is_empty() {
+                url_input_val.set(String::new());
+            }
+        }
+    });
+
+    Effect::new(move || {
+        if local_pending.get() {
+            active_task.set("file");
+            file_stage.set(Some("Uploading"));
+        }
+    });
+
     Effect::new(move || {
         if let Some(value) = local_loading_done.get() {
+            file_stage.set(Some("Serializing"));
             active_graph_name.set(file_name.get_untracked());
 
             match value {
@@ -129,19 +212,30 @@ pub fn UploadInput() -> impl IntoView {
                     if let Some(e) = warning {
                         error_context.extend(e.records);
                     }
+                    let stage = file_stage;
                     spawn_local_scoped_with_cancellation(async move {
                         load_graph(DEFAULT_QUERY.to_string(), true).await;
+                        stage.set(Some("Done"));
                     });
                 }
                 Err(e) => {
                     error_context.extend(e.records);
+                    file_stage.set(None);
                 }
             }
         }
     });
 
     Effect::new(move || {
+        if remote_pending.get() {
+            active_task.set("url");
+            url_stage.set(Some("Uploading"));
+        }
+    });
+
+    Effect::new(move || {
         if let Some(value) = remote_loading_done.get() {
+            url_stage.set(Some("Serializing"));
             active_graph_name.set(url_name.get_untracked());
 
             match value {
@@ -149,12 +243,15 @@ pub fn UploadInput() -> impl IntoView {
                     if let Some(e) = warning {
                         error_context.extend(e.records);
                     }
+                    let stage = url_stage;
                     spawn_local_scoped_with_cancellation(async move {
                         load_graph(DEFAULT_QUERY.to_string(), true).await;
+                        stage.set(Some("Done"));
                     });
                 }
                 Err(e) => {
                     error_context.extend(e.records);
+                    url_stage.set(None);
                 }
             }
         }
@@ -204,9 +301,11 @@ pub fn UploadInput() -> impl IntoView {
             <input
                 class="p-1 w-full bg-gray-200 rounded border-b-0"
                 placeholder="Enter input URL"
+                prop:value=url_input_val
                 on:input=move |ev| {
                     let target: HtmlInputElement = event_target(&ev);
                     let url = target.value();
+                    url_input_val.set(url.clone());
                     tracker_url
                         .upload_url(
                             &url,
@@ -217,12 +316,38 @@ pub fn UploadInput() -> impl IntoView {
                         );
                 }
             />
+            {move || {
+                match url_stage.get() {
+                    Some("Done") => view! {
+                        <div class="mt-2">
+                            <p class="mt-1 text-sm font-bold text-center">
+                                "Loading done"
+                            </p>
+                        </div>
+                    }.into_any(),
+                    Some(stage) => view! {
+                        <div class="mt-2">
+                            <LoadingCircle />
+                            <p class="mt-1 text-sm text-center">
+                                <span class="relative inline-flex items-center">
+                                    <span>{stage}</span>
+                                    <span class="absolute left-full text-left loading-dots-anim">
+                                        "......"
+                                    </span>
+                                </span>
+                            </p>
+                        </div>
+                    }.into_any(),
+                    None => ().into_any(),
+                }
+            }}
         </div>
 
         <div class="mb-2">
             <label class="block mb-1">"From File:"</label>
             <div class="relative">
                 <input
+                    node_ref=file_input_ref
                     id="file-upload"
                     type="file"
                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -244,49 +369,28 @@ pub fn UploadInput() -> impl IntoView {
                 </label>
             </div>
             {move || {
-                let progress = upload_progress.get();
-                let parsing = parsing_status.get();
-                let done = parsing_done.get();
-                if progress > 0 {
-                    // let msg = message.get();
-                    // (!msg.is_empty()).then(|| view! {<p class="mt-1 text-green">{msg}</p>})
-
-                    view! {
+                match file_stage.get() {
+                    Some("Done") => view! {
                         <div class="mt-2">
-                            <div class="mt-2 w-full h-2.5 bg-gray-200 rounded-full dark:bg-gray-700">
-                                <div
-                                    class="h-2.5 bg-blue-500 rounded-full transition-all duration-300"
-                                    style=format!("width: {}%", std::cmp::min(progress, 100))
-                                ></div>
-                            </div>
-                            {if progress >= 100 {
-                                view! {
-                                    <div class="mt-1 text-sm font-bold text-center">
-                                        "Upload done"
-                                    </div>
-                                    {if done {
-                                        view! {
-                                            <div class="mt-1 text-sm font-bold text-center">
-                                                "Parsing done"
-                                            </div>
-                                        }
-                                            .into_any()
-                                    } else {
-                                        view! {
-                                            <div class="mt-1 text-sm text-center">{parsing}</div>
-                                        }
-                                            .into_any()
-                                    }}
-                                }
-                                    .into_any()
-                            } else {
-                                ().into_any()
-                            }}
+                            <p class="mt-1 text-sm font-bold text-center">
+                                "Loading done"
+                            </p>
                         </div>
-                    }
-                        .into_any()
-                } else {
-                    ().into_any()
+                    }.into_any(),
+                    Some(stage) => view! {
+                        <div class="mt-2">
+                            <LoadingCircle />
+                            <p class="mt-1 text-sm text-center">
+                                <span class="relative inline-flex items-center">
+                                    <span>{stage}</span>
+                                    <span class="absolute left-full text-left loading-dots-anim">
+                                        "......"
+                                    </span>
+                                </span>
+                            </p>
+                        </div>
+                    }.into_any(),
+                    None => ().into_any(),
                 }
             }}
         </div>
@@ -402,7 +506,7 @@ pub fn Sparql() -> impl IntoView {
                                         class="h-2.5 bg-blue-500 rounded-full transition-all duration-300"
                                         style=format!("width: {}%", std::cmp::min(progress, 100))
                                     ></div>
-                                </div>
+                            </div>
                                 {if progress >= 100 {
                                     view! {
                                         <div class="mt-1 text-sm font-bold text-center">
@@ -440,7 +544,26 @@ pub fn Sparql() -> impl IntoView {
 
 #[component]
 pub fn OntologyMenu() -> impl IntoView {
+    let active_task = ActiveMenuTask(RwSignal::new(""));
+    provide_context(active_task);
+
     view! {
+        <style>
+            "
+            .loading-dots-anim {
+                display: inline-block;
+                overflow: hidden;
+                vertical-align: bottom;
+                white-space: nowrap;
+                font-family: monospace;
+                animation: loading-dots 3s steps(7, end) infinite;
+            }
+            @keyframes loading-dots {
+                0% { width: 0ch; }
+                100% { width: 7ch; }
+            }
+            "
+        </style>
         <WorkbenchMenuItems title="Load Ontology">
             <SelectStaticInput />
             <UploadInput />

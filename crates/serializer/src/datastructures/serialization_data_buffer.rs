@@ -264,7 +264,7 @@ impl SerializationDataBuffer {
                         );
                     } else {
                         warn!(
-                            "edge {} has to property term",
+                            "edge {} is missing its property term",
                             self.term_index.display_edge(edge)?
                         );
                     }

@@ -27,7 +27,8 @@ pub fn SelectStaticInput() -> impl IntoView {
         active_graph_name, ..
     } = expect_context::<GraphDataContext>();
 
-    let selected_ontology: RwSignal<Option<StoredOntology>> = RwSignal::new(None);
+    let selected_ontology: RwSignal<Option<StoredOntology>> =
+        RwSignal::new(Some(StoredOntology::FriendOfAFriend));
     let stored_stage: RwSignal<Option<&'static str>> = RwSignal::new(None);
 
     let active_task = expect_context::<ActiveMenuTask>().0;
@@ -105,12 +106,14 @@ pub fn SelectStaticInput() -> impl IntoView {
             <label class="block mb-1">"Premade Ontology:"</label>
             <select
                 class="p-1 w-full text-sm bg-gray-200 rounded border-b-0"
-                prop:value=move || selected_ontology
-                    .read()
-                    .map_or_else(
-                        || "Select an ontology".to_string(),
-                        |ontology| ontology.to_string(),
-                    )
+                prop:value=move || {
+                    selected_ontology
+                        .read()
+                        .map_or_else(
+                            || "Select an ontology".to_string(),
+                            |ontology| ontology.to_string(),
+                        )
+                }
                 on:change=update_selected_ontology
             >
                 {ontologies()}
@@ -124,21 +127,27 @@ pub fn SelectStaticInput() -> impl IntoView {
             </Suspense>
             {move || {
                 match stored_stage.get() {
-                    Some("Done") => view! {
-                        <p class="mt-1 text-sm font-bold text-center">
-                            "Loading done"
-                        </p>
-                    }.into_any(),
-                    Some(stage) => view! {
-                        <p class="mt-1 text-sm text-center">
-                            <span class="relative inline-flex items-center">
-                                <span>{stage}</span>
-                                <span class="absolute left-full text-left loading-dots-anim">
-                                    "......"
+                    Some("Done") => {
+                        view! {
+                            <p class="mt-1 text-sm font-bold text-center">
+                                "Loading done"
+                            </p>
+                        }
+                            .into_any()
+                    }
+                    Some(stage) => {
+                        view! {
+                            <p class="mt-1 text-sm text-center">
+                                <span class="inline-flex relative items-center">
+                                    <span>{stage}</span>
+                                    <span class="absolute left-full text-left loading-dots-anim">
+                                        "......"
+                                    </span>
                                 </span>
-                            </span>
-                        </p>
-                    }.into_any(),
+                            </p>
+                        }
+                            .into_any()
+                    }
                     None => ().into_any(),
                 }
             }}
@@ -318,26 +327,32 @@ pub fn UploadInput() -> impl IntoView {
             />
             {move || {
                 match url_stage.get() {
-                    Some("Done") => view! {
-                        <div class="mt-2">
-                            <p class="mt-1 text-sm font-bold text-center">
-                                "Loading done"
-                            </p>
-                        </div>
-                    }.into_any(),
-                    Some(stage) => view! {
-                        <div class="mt-2">
-                            <LoadingCircle />
-                            <p class="mt-1 text-sm text-center">
-                                <span class="relative inline-flex items-center">
-                                    <span>{stage}</span>
-                                    <span class="absolute left-full text-left loading-dots-anim">
-                                        "......"
+                    Some("Done") => {
+                        view! {
+                            <div class="mt-2">
+                                <p class="mt-1 text-sm font-bold text-center">
+                                    "Loading done"
+                                </p>
+                            </div>
+                        }
+                            .into_any()
+                    }
+                    Some(stage) => {
+                        view! {
+                            <div class="mt-2">
+                                <LoadingCircle />
+                                <p class="mt-1 text-sm text-center">
+                                    <span class="inline-flex relative items-center">
+                                        <span>{stage}</span>
+                                        <span class="absolute left-full text-left loading-dots-anim">
+                                            "......"
+                                        </span>
                                     </span>
-                                </span>
-                            </p>
-                        </div>
-                    }.into_any(),
+                                </p>
+                            </div>
+                        }
+                            .into_any()
+                    }
                     None => ().into_any(),
                 }
             }}
@@ -370,26 +385,32 @@ pub fn UploadInput() -> impl IntoView {
             </div>
             {move || {
                 match file_stage.get() {
-                    Some("Done") => view! {
-                        <div class="mt-2">
-                            <p class="mt-1 text-sm font-bold text-center">
-                                "Loading done"
-                            </p>
-                        </div>
-                    }.into_any(),
-                    Some(stage) => view! {
-                        <div class="mt-2">
-                            <LoadingCircle />
-                            <p class="mt-1 text-sm text-center">
-                                <span class="relative inline-flex items-center">
-                                    <span>{stage}</span>
-                                    <span class="absolute left-full text-left loading-dots-anim">
-                                        "......"
+                    Some("Done") => {
+                        view! {
+                            <div class="mt-2">
+                                <p class="mt-1 text-sm font-bold text-center">
+                                    "Loading done"
+                                </p>
+                            </div>
+                        }
+                            .into_any()
+                    }
+                    Some(stage) => {
+                        view! {
+                            <div class="mt-2">
+                                <LoadingCircle />
+                                <p class="mt-1 text-sm text-center">
+                                    <span class="inline-flex relative items-center">
+                                        <span>{stage}</span>
+                                        <span class="absolute left-full text-left loading-dots-anim">
+                                            "......"
+                                        </span>
                                     </span>
-                                </span>
-                            </p>
-                        </div>
-                    }.into_any(),
+                                </p>
+                            </div>
+                        }
+                            .into_any()
+                    }
                     None => ().into_any(),
                 }
             }}
@@ -506,7 +527,7 @@ pub fn Sparql() -> impl IntoView {
                                         class="h-2.5 bg-blue-500 rounded-full transition-all duration-300"
                                         style=format!("width: {}%", std::cmp::min(progress, 100))
                                     ></div>
-                            </div>
+                                </div>
                                 {if progress >= 100 {
                                     view! {
                                         <div class="mt-1 text-sm font-bold text-center">

@@ -38,31 +38,32 @@ pub fn insert_label(
 ///
 /// Labels are extracted with the following priority:
 ///
-/// 1. Use `maybe_label_term` if it's Some().
+/// 1. Use `maybe_label_term` if it's [`Some`].
 /// 2. Use the fragment component of the term, if it exist.
 /// 3. Use the path component of the term, if it exist.
 pub fn extract_label(maybe_label_term: Option<&Term>, term: &Term) -> Option<String> {
     if let Some(label_term) = maybe_label_term {
         // Handle language tags and cases where label contains "
         let stripped_label = trim_tag_circumfix(&label_term.to_string())
-            .trim_start_matches("\"")
-            .trim_end_matches("\"")
+            .trim_start_matches('"')
+            .trim_end_matches('"')
             .to_string();
         let (label, lang_tag) = {
-            stripped_label
-                .rsplit_once("@")
-                .map(|(label, lang_tag)| {
+            stripped_label.rsplit_once('@').map_or_else(
+                || (stripped_label.clone(), ""),
+                |(label, lang_tag)| {
                     (
-                        label.trim_start_matches("\"").trim_end_matches("\""),
+                        label
+                            .trim_start_matches('"')
+                            .trim_end_matches('"')
+                            .to_string(),
                         lang_tag,
                     )
-                })
-                .unwrap_or_else(|| (&stripped_label, ""))
+                },
+            )
         };
-        let clean_label = unescape_default(label).map_or_else(
-            |_| label.to_string(),
-            |escaped_label| escaped_label.to_string(),
-        );
+        let clean_label = unescape_default(&label)
+            .map_or_else(|_| label.clone(), |escaped_label| escaped_label.to_string());
         error!("Debug check label: '{clean_label}'");
 
         if clean_label.is_empty() {
@@ -71,7 +72,7 @@ pub fn extract_label(maybe_label_term: Option<&Term>, term: &Term) -> Option<Str
             trace!(
                 "Inserting {}label '{clean_label}' for term '{term}'",
                 if lang_tag.is_empty() {
-                    "".to_string()
+                    String::new()
                 } else {
                     format!("{lang_tag} ")
                 }

@@ -280,7 +280,7 @@ pub fn translate_metadata_content(
         .collect()
 }
 
-/// Translates a term_id into a term string, consuming any error as part of the returned string.
+/// Translates a term id into a term string, consuming any error as part of the returned string.
 ///
 /// Use only in infallible contexts.
 pub fn translate_term_with_fallback(term_index: &TermIndex, term_id: TermID) -> String {
@@ -289,7 +289,7 @@ pub fn translate_term_with_fallback(term_index: &TermIndex, term_id: TermID) -> 
         .map_or_else(|e| e.to_string(), |term| term.to_string())
 }
 
-/// Converts a NamedNodeRef into a term.
+/// Converts a [`NamedNodeRef`] into a term.
 ///
 /// This is useful for converting vocabulary constructs into terms for use in serialization.
 pub fn named_node_to_term(node: NamedNodeRef) -> ArcTerm {

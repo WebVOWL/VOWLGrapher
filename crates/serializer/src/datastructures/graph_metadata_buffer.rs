@@ -1,18 +1,17 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    sync::{Arc, RwLock},
-};
-
 use crate::{
     datastructures::{
-        ArcTerm, ArcTriple, ElementTypeMetadata, LanguageTag, MetadataContent, MetadataType,
-        TermID, index::TermIndex,
+        ArcTriple, ElementTypeMetadata, LanguageTag, MetadataType, TermID, index::TermIndex,
     },
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
         fmt_langtag, labels::extract_label, translate_metadata_content, trim_tag_circumfix,
     },
+};
+use std::fmt::Write;
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    sync::{Arc, RwLock},
 };
 
 #[derive(Default)]
@@ -65,49 +64,6 @@ impl GraphMetadataBuffer {
         }
     }
 
-    /// Returns the language-tagged metadata associated with the subject term's corresponding id.
-    ///
-    /// # Errors
-    /// Returns an error if the underlying lock is poisoned when accessed.
-    pub fn get_element_metadata(
-        &self,
-        subject_term_id: TermID,
-        metadata_term: &ArcTerm,
-        language_tag: Option<LanguageTag>,
-    ) -> Result<Option<MetadataContent>, SerializationError> {
-        if let Ok(metadata_term_id) = self.term_index.get_id(metadata_term) {
-            if let Some(metadata_type) = self.element_metadata.read()?.get(&subject_term_id) {
-                return Ok(metadata_type
-                    .get(&metadata_term_id)
-                    .map(|tagged_metadata| tagged_metadata.get(&language_tag))
-                    .flatten()
-                    .cloned());
-            }
-        }
-        Ok(None)
-    }
-
-    /// Returns the language-tagged metadata associated with the subject term's corresponding id.
-    ///
-    /// # Errors
-    /// Returns an error if the underlying lock is poisoned when accessed.
-    pub fn get_element_metadata2(
-        &self,
-        subject_term_id: TermID,
-        metadata_term_id: TermID,
-        language_tag: Option<LanguageTag>,
-    ) -> Result<Option<MetadataContent>, SerializationError> {
-        if let Some(metadata_type) = self.element_metadata.read()?.get(&subject_term_id) {
-            return Ok(metadata_type
-                .get(&metadata_term_id)
-                .map(|tagged_metadata| tagged_metadata.get(&language_tag))
-                .flatten()
-                .cloned());
-        }
-
-        Ok(None)
-    }
-
     /// Returns the contents of a metadata type, translated to term strings.
     ///
     /// # Errors
@@ -118,12 +74,15 @@ impl GraphMetadataBuffer {
         metadata_term_id: TermID,
     ) -> Option<HashMap<String, Vec<String>>> {
         metadata_type.get(&metadata_term_id).map(|tagged_metadata| {
-            HashMap::from_iter(tagged_metadata.iter().map(|(lang_tag, content)| {
-                (
-                    fmt_langtag(lang_tag.clone()),
-                    translate_metadata_content(&self.term_index, content),
-                )
-            }))
+            tagged_metadata
+                .iter()
+                .map(|(lang_tag, content)| {
+                    (
+                        fmt_langtag(lang_tag.clone()),
+                        translate_metadata_content(&self.term_index, content),
+                    )
+                })
+                .collect::<HashMap<_, _>>()
         })
     }
 
@@ -203,16 +162,19 @@ impl GraphMetadataBuffer {
                     .extend(tagged_metadata.iter().map(|(lang_tag, content)| {
                         content
                             .iter()
-                            .map(|content_term_id| {
-                                format!(
+                            .fold(String::new(), |mut buffer, content_term_id| {
+                                // SAFETY: writing strings is infallible
+                                // https://doc.rust-lang.org/stable/src/alloc/string.rs.html#2879
+                                let _ = write!(
+                                    buffer,
                                     "\t\t\t{} - {}",
                                     fmt_langtag(lang_tag.clone()),
                                     self.term_index
                                         .get(*content_term_id)
                                         .map_or_else(|e| e.to_string(), |term| term.to_string())
-                                )
+                                );
+                                buffer
                             })
-                            .collect()
                     }));
             }
         }
@@ -238,36 +200,6 @@ impl GraphMetadataBuffer {
                 for item in content {
                     writeln!(f, "\t\t\t\t{item}")?;
                 }
-            }
-        }
-        write!(f, "")
-    }
-
-    fn fmt_hashset_hashmap(
-        &self,
-        f: &mut std::fmt::Formatter<'_>,
-        map: &Arc<RwLock<HashMap<TermID, HashSet<TermID>>>>,
-    ) -> std::fmt::Result {
-        for (term_id, object_term_ids) in map
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .iter()
-        {
-            writeln!(
-                f,
-                "\t\t\t{}",
-                self.term_index
-                    .get(*term_id)
-                    .map_or_else(|e| e.to_string(), |term| term.to_string()),
-            )?;
-            for object_term_id in object_term_ids {
-                writeln!(
-                    f,
-                    "\t\t\t\t{}",
-                    self.term_index
-                        .get(*object_term_id)
-                        .map_or_else(|e| e.to_string(), |term| term.to_string())
-                )?;
             }
         }
         write!(f, "")

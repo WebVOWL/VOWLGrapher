@@ -8,7 +8,10 @@ use crate::{
         fmt_langtag, named_node_to_term, translate_metadata_content, translate_term_with_fallback,
         trim_tag_circumfix,
     },
-    vocab::dcmi::{dc, dcterms},
+    vocab::{
+        dcmi::{dc, dcterms},
+        owl, rdfs,
+    },
 };
 use grapher::prelude::{
     Characteristic, ElementType, GraphDisplayData, GraphMetadata, OwlEdge, OwlType,
@@ -173,7 +176,7 @@ impl SerializationDataBuffer {
             &mut inverse_edge_indices,
             &mut edge_map,
         )?;
-        self.convert_metadata(&mut display_data, &mut failed, &iricache, &edge_map)?;
+        self.convert_metadata(&mut display_data, &mut failed, &iricache)?;
 
         if failed.is_empty() {
             Ok((display_data, None))
@@ -345,7 +348,6 @@ impl SerializationDataBuffer {
         display_data: &mut GraphDisplayData,
         failed: &mut Vec<ErrorRecord>,
         iricache: &HashMap<usize, usize>,
-        edge_map: &HashMap<(usize, usize, usize), usize>,
     ) -> Result<(), SerializationError> {
         let mut metadata_buffer = GraphMetadata::new();
 
@@ -363,57 +365,40 @@ impl SerializationDataBuffer {
             .unwrap_or_default()
         };
         metadata_buffer.graph_header.description = {
-            let value = self.document_base.read()?.clone();
-            if let Some(docbase) = value {
+            if let Some(docbase) = self.document_base.read()?.clone() {
+                self.extract_header_description(&docbase, failed)?
             } else {
-                HashMap::new()
+                None
             }
+            .unwrap_or_default()
         };
         metadata_buffer.graph_header.creator = {
-            let maybe_docbase = self.document_base.read()?.clone();
-            match maybe_docbase {
-                Some(docbase) => {
-                    let base_term_id = self.term_index.get_id(&docbase.base_term)?;
-                    self.metadata
-                        .creator
-                        .write()?
-                        .remove(&base_term_id)
-                        .map_or_else(Vec::new, |creators| {
-                            creators
-                                .iter()
-                                .map(|creator_term_id| {
-                                    self.term_index
-                                        .get(*creator_term_id)
-                                        .map_or_else(|e| e.to_string(), |term| term.to_string())
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                }
-                None => Vec::new(),
+            if let Some(docbase) = self.document_base.read()?.clone() {
+                self.get_metadata_element(
+                    &docbase,
+                    &[dcterms::CREATOR, dc::CREATOR],
+                    "creator",
+                    failed,
+                )
+                .map(|(_, map)| map)?
+            } else {
+                None
             }
+            .unwrap_or_default()
         };
         metadata_buffer.graph_header.contributor = {
-            let maybe_docbase = self.document_base.read()?.clone();
-            match maybe_docbase {
-                Some(docbase) => {
-                    let base_term_id = self.term_index.get_id(&docbase.base_term)?;
-                    self.metadata
-                        .contributor
-                        .write()?
-                        .remove(&base_term_id)
-                        .map_or_else(Vec::new, |contributors| {
-                            contributors
-                                .iter()
-                                .map(|contributor_term_id| {
-                                    self.term_index
-                                        .get(*contributor_term_id)
-                                        .map_or_else(|e| e.to_string(), |term| term.to_string())
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                }
-                None => Vec::new(),
+            if let Some(docbase) = self.document_base.read()?.clone() {
+                self.get_metadata_element(
+                    &docbase,
+                    &[dcterms::CONTRIBUTOR, dc::CONTRIBUTOR],
+                    "creator",
+                    failed,
+                )
+                .map(|(_, map)| map)?
+            } else {
+                None
             }
+            .unwrap_or_default()
         };
         metadata_buffer.graph_header.version_iri = {
             /// Try getting version iri from version iri buffer
@@ -421,117 +406,73 @@ impl SerializationDataBuffer {
                 self_metadata: &GraphMetadataBuffer,
                 self_term_index: &TermIndex,
             ) -> Result<Option<String>, SerializationError> {
-                let version_iri = Some(self_metadata.version_iri.read()?.map_or_else(
-                    String::new,
-                    |version_term_id| {
-                        self_term_index
-                            .get(version_term_id)
-                            .map_or_else(|e| e.to_string(), |term| term.to_string())
-                    },
-                ));
-                Ok(version_iri)
+                let a = self_metadata
+                    .version_iri
+                    .read()?
+                    .and_then(|version_term_id| {
+                        Some(translate_term_with_fallback(
+                            self_term_index,
+                            version_term_id,
+                        ))
+                    });
+                Ok(a)
             }
 
-            let value = self.document_base.read()?.clone();
-            match value {
-                Some(docbase) => match self.term_index.get_id(&docbase.base_term) {
-                    Ok(base_term_id) => {
-                        // Try getting version iri from version info buffer first
-                        match self.metadata.version_info.write()?.remove(&base_term_id) {
-                            Some(version_infos) => {
-                                let version_info = version_infos
-                                    .into_iter()
-                                    .map(|version_info_term_id| {
-                                        self.term_index
-                                            .get(version_info_term_id)
-                                            .map_or_else(|e| e.to_string(), |term| term.to_string())
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join("\n");
-                                Some(version_info)
-                            }
-                            None => get_version_iri(&self.metadata, &self.term_index)?,
-                        }
+            match self.document_base.read()?.clone() {
+                Some(docbase) => {
+                    // Try getting version iri from version info buffer first
+                    let maybe_version_info = self.get_metadata_element(
+                        &docbase,
+                        &[owl::VERSION_INFO],
+                        "version_info",
+                        failed,
+                    )?;
+                    match maybe_version_info {
+                        (_, Some(version_infos)) => version_infos
+                            .values()
+                            .take(1)
+                            .map(|info_vec| info_vec.first().cloned())
+                            .collect(),
+                        (_, None) => get_version_iri(&self.metadata, &self.term_index)?,
                     }
-                    Err(e) => {
-                        let msg = format!(
-                            "Failed to create ontology version_iri from version_info using document base '{}': {e}",
-                            docbase.base_term
-                        );
-                        debug!("{msg}");
-                        get_version_iri(&self.metadata, &self.term_index)?
-                    }
-                },
+                }
                 None => get_version_iri(&self.metadata, &self.term_index)?,
             }
         };
-        metadata_buffer.graph_header.prior_version =
-            Some(self.metadata.prior_version.read()?.map_or_else(
-                String::new,
-                |prior_version_term_id| {
-                    translate_term_with_fallback(&self.term_index, prior_version_term_id)
-                },
-            ));
-        metadata_buffer.graph_header.incompatible_with =
-            Some(self.metadata.incompatible_with.read()?.map_or_else(
-                String::new,
-                |incompatible_with_term_id| {
-                    translate_term_with_fallback(&self.term_index, incompatible_with_term_id)
-                },
-            ));
-        metadata_buffer.graph_header.backward_compatible_with =
-            Some(self.metadata.backward_compatible_with.read()?.map_or_else(
-                String::new,
+        metadata_buffer.graph_header.prior_version = {
+            self.metadata
+                .prior_version
+                .read()?
+                .and_then(|prior_version_term_id| {
+                    Some(translate_term_with_fallback(
+                        &self.term_index,
+                        prior_version_term_id,
+                    ))
+                })
+        };
+        metadata_buffer.graph_header.incompatible_with = {
+            self.metadata
+                .incompatible_with
+                .read()?
+                .and_then(|incompatible_with_term_id| {
+                    Some(translate_term_with_fallback(
+                        &self.term_index,
+                        incompatible_with_term_id,
+                    ))
+                })
+        };
+        metadata_buffer.graph_header.backward_compatible_with = {
+            self.metadata.backward_compatible_with.read()?.and_then(
                 |backward_compatible_with_term_id| {
-                    translate_term_with_fallback(&self.term_index, backward_compatible_with_term_id)
+                    Some(translate_term_with_fallback(
+                        &self.term_index,
+                        backward_compatible_with_term_id,
+                    ))
                 },
-            ));
+            )
+        };
         self.convert_element_metadata(&mut metadata_buffer, iricache, failed)?;
         display_data.graph_metadata = metadata_buffer;
-        Ok(())
-    }
-
-    #[expect(
-        clippy::significant_drop_tightening,
-        reason = "this method runs single-threaded"
-    )]
-    fn convert_hashset_hashmap(
-        &self,
-        seralization_buffer: &Arc<RwLock<HashMap<usize, HashSet<usize>>>>,
-        data_buffer: &mut HashMap<usize, Vec<String>>,
-        iricache: &HashMap<usize, usize>,
-        failed: &mut Vec<ErrorRecord>,
-        data_type: &str,
-    ) -> Result<(), SerializationError> {
-        let mut buffer = seralization_buffer.write()?;
-        for (term_id, term_id_set) in take(&mut *buffer) {
-            if let Some(term_idx) = iricache.get(&term_id) {
-                data_buffer.insert(
-                    *term_idx,
-                    term_id_set
-                        .into_iter()
-                        .map(|term_id_in_set| {
-                            translate_term_with_fallback(&self.term_index, term_id_in_set)
-                        })
-                        .collect(),
-                );
-            } else {
-                let msg = self.term_index.get(term_id).map_or_else(
-                    |e| {
-                        format!(
-                            "Failed to map {data_type}: Subject term '{e}' not found in iricache"
-                        )
-                    },
-                    |term| {
-                        format!(
-                            "Failed to map {data_type}: Subject term '{term}' not found in iricache"
-                        )
-                    },
-                );
-                debug!("{msg}");
-                failed.push(SerializationErrorKind::SerializationWarning(msg).into());
-            }
-        }
         Ok(())
     }
 
@@ -600,47 +541,49 @@ impl SerializationDataBuffer {
         Ok(())
     }
 
-    fn extract_header_element(
+    /// Returns the content of an element type from [`GraphMetadataBuffer::element_metadata`].
+    ///
+    /// The content's term ids are translated to term strings.
+    ///
+    /// The content returned is the first found in the `element_types` array.
+    ///
+    /// `element_name` is the name of the `element_type`. Used for error logging.
+    #[expect(clippy::type_complexity)]
+    fn get_metadata_element(
         &self,
         document_base: &DocumentBase,
-        dcmi_element_type: (NamedNodeRef, NamedNodeRef),
+        element_types: &[NamedNodeRef],
         element_name: &str,
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<(Option<TermID>, Option<HashMap<String, Vec<String>>>), SerializationError> {
         if let Ok(base_term_id) = self.term_index.get_id(&document_base.base_term) {
-            // Try getting title from title buffer first
-            let maybe_element = match self
+            let maybe_element = self
                 .metadata
                 .element_metadata
-                .write()?
-                .remove(&base_term_id)
-            {
-                Some(metadata_type) => {
+                .read()?
+                .get(&base_term_id)
+                .map_or((Some(base_term_id), None), |metadata_type| {
                     let maybe_metadata_term_id = {
-                        self.term_index
-                            .get_id(&named_node_to_term(dcmi_element_type.0))
-                            .ok()
-                            .map_or_else(
-                                || {
-                                    self.term_index
-                                        .get_id(&named_node_to_term(dcmi_element_type.1))
-                                        .ok()
-                                },
-                                |term_id| Some(term_id),
-                            )
+                        let mut current_term_id = None;
+                        for element_type in element_types {
+                            if current_term_id.is_some() {
+                                break;
+                            }
+                            current_term_id = self
+                                .term_index
+                                .get_id(&named_node_to_term(*element_type))
+                                .ok();
+                        }
+                        current_term_id
                     };
 
-                    if let Some(metadata_term_id) = maybe_metadata_term_id {
+                    maybe_metadata_term_id.map_or((Some(base_term_id), None), |metadata_term_id| {
                         let content = self
                             .metadata
-                            .get_element_metadata_content(&metadata_type, metadata_term_id);
+                            .get_element_metadata_content(metadata_type, metadata_term_id);
                         (Some(base_term_id), content)
-                    } else {
-                        (Some(base_term_id), None)
-                    }
-                }
-                None => (Some(base_term_id), None),
-            };
+                    })
+                });
             return Ok(maybe_element);
         }
         let msg = format!(
@@ -648,7 +591,7 @@ impl SerializationDataBuffer {
             document_base.base_term
         );
         debug!("{msg}");
-        failed.push(SerializationErrorKind::TermIndexError(msg.clone()).into());
+        failed.push(SerializationErrorKind::TermIndexError(msg).into());
 
         Ok((None, None))
     }
@@ -659,38 +602,36 @@ impl SerializationDataBuffer {
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<Option<HashMap<String, Vec<String>>>, SerializationError> {
         // Try getting title from title buffer first
-        let maybe_title = self.extract_header_element(
+        let maybe_title = self.get_metadata_element(
             document_base,
-            (dcterms::TITLE, dc::TITLE),
+            &[dcterms::TITLE, dc::TITLE],
             "title",
             failed,
         )?;
 
         match maybe_title {
-            (_, Some(titles)) => return Ok(Some(titles)),
+            (_, Some(titles)) => Ok(Some(titles)),
             (Some(base_term_id), None) => {
                 // Try getting title from label buffer
                 match self.label_buffer.read()?.get(&base_term_id) {
                     Some(Some(label)) => {
                         let mut map = HashMap::new();
-                        map.insert("".to_string(), vec![label.clone()]);
-                        return Ok(Some(map));
+                        map.insert(String::new(), vec![label.clone()]);
+                        Ok(Some(map))
                     }
                     Some(None) => {
                         // No label declared
                         let msg = "Ontology title not found in ontology.".to_string();
                         debug!("{msg}");
-                        failed
-                            .push(SerializationErrorKind::SerializationWarning(msg.clone()).into());
-                        return Ok(None);
+                        failed.push(SerializationErrorKind::SerializationWarning(msg).into());
+                        Ok(None)
                     }
                     None => {
                         // No label found in buffer
                         let msg = "Ontology title not found in label buffer".to_string();
                         debug!("{msg}");
-                        failed
-                            .push(SerializationErrorKind::SerializationWarning(msg.clone()).into());
-                        return Ok(None);
+                        failed.push(SerializationErrorKind::SerializationWarning(msg).into());
+                        Ok(None)
                     }
                 }
             }
@@ -704,34 +645,20 @@ impl SerializationDataBuffer {
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<Option<HashMap<String, Vec<String>>>, SerializationError> {
         // Try getting description from description buffer first
-        let maybe_desc = self.extract_header_element(
+        let maybe_desc = self.get_metadata_element(
             document_base,
-            (dcterms::DESCRIPTION, dc::DESCRIPTION),
+            &[dcterms::DESCRIPTION, dc::DESCRIPTION],
             "description",
             failed,
         )?;
 
         match maybe_desc {
-            Some(descriptions) => return Ok(Some(descriptions)),
-            (Some(base_term_id), None) => {
+            (_, Some(descriptions)) => Ok(Some(descriptions)),
+            (_, None) => {
                 // Try getting description from comment buffer
-
-                self.metadata
-                    .comment
-                    .write()?
-                    .remove(&base_term_id)
-                    .map_or_else(Vec::new, |comments| {
-                        comments
-                            .into_iter()
-                            .map(|comment_term_id| {
-                                self.term_index
-                                    .get(comment_term_id)
-                                    .map_or_else(|e| e.to_string(), |term| term.to_string())
-                            })
-                            .collect::<Vec<_>>()
-                    })
+                self.get_metadata_element(document_base, &[rdfs::COMMENT], "comment", failed)
+                    .map(|(_, map)| map)
             }
-            _ => Ok(None),
         }
     }
 }

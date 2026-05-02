@@ -29,16 +29,16 @@ async fn main() {
             .expect("Error inserting file");
 
         let (_data, _) = store
-            .query(DEFAULT_QUERY.to_string(), None)
+            .query(DEFAULT_QUERY.to_string(), Some(args[1].clone()))
             .await
             .expect("querying the store should succeed");
 
         // Uncomment to enable rendering
-        // EVENT_DISPATCHER
-        //     .rend_write_chan
-        //     .send(RenderEvent::LoadGraph(_data))
-        //     .expect("sending events should succeed");
+        EVENT_DISPATCHER
+            .rend_write_chan
+            .send(RenderEvent::LoadGraph(Box::new(_data)))
+            .expect("sending events should succeed");
     }
     // Uncomment to enable rendering
-    // run().expect("rendering graph should succeed");
+    run().expect("rendering graph should succeed");
 }

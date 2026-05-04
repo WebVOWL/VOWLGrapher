@@ -52,6 +52,8 @@ pub enum VOWLGrapherStoreErrorKind {
     UnsupportedQueryType(String),
     /// Seralizer error
     SerializerError(Box<SerializerError>),
+    /// The upload limit was exceeded while loading
+    UploadLimitExceeded(String),
 }
 
 impl From<VOWLGrapherStoreErrorKind> for VOWLGrapherError {
@@ -65,7 +67,7 @@ impl From<VOWLGrapherStoreErrorKind> for VOWLGrapherError {
 #[derive(Debug)]
 pub struct VOWLGrapherStoreError {
     /// The contained error type.
-    inner: VOWLGrapherStoreErrorKind,
+    pub inner: VOWLGrapherStoreErrorKind,
     /// The error's location in the source code.
     location: &'static Location<'static>,
     /// When the error occurred.
@@ -200,7 +202,8 @@ impl std::error::Error for VOWLGrapherStoreError {
             | VOWLGrapherStoreErrorKind::IncorrectFileExtension(_)
             | VOWLGrapherStoreErrorKind::ImportResolutionError(_)
             | VOWLGrapherStoreErrorKind::RemoteFetchError(_)
-            | VOWLGrapherStoreErrorKind::UnsupportedQueryType(_) => None,
+            | VOWLGrapherStoreErrorKind::UnsupportedQueryType(_)
+            | VOWLGrapherStoreErrorKind::UploadLimitExceeded(_) => None,
             VOWLGrapherStoreErrorKind::LoaderError(e) => Some(e),
             VOWLGrapherStoreErrorKind::QueryEvaluationError(e) => Some(e),
             VOWLGrapherStoreErrorKind::JoinError(e) => Some(e),
@@ -263,6 +266,11 @@ impl From<VOWLGrapherStoreError> for ErrorRecord {
                 serializer_error.to_string(),
                 ErrorSeverity::Critical,
                 ErrorType::Parser,
+            ),
+            VOWLGrapherStoreErrorKind::UploadLimitExceeded(name) => (
+                format!("Upload limit was exceeded while loading {name}"),
+                ErrorSeverity::Critical,
+                ErrorType::Database,
             ),
         };
 

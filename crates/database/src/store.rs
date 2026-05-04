@@ -10,6 +10,9 @@ use std::path::Path;
 use std::time::Duration;
 use std::time::Instant;
 use strum::IntoEnumIterator;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, BufReader};
+use tokio::sync::Mutex;
 use vowlgrapher_parser::errors::{VOWLGrapherStoreError, VOWLGrapherStoreErrorKind};
 use vowlgrapher_parser::parser_util::{
     format_from_resource_type, parse_quads_to_format, parser_from_bytes, parser_from_path,
@@ -27,25 +30,30 @@ pub struct VOWLGrapherStore {
     /// The unique ID for the current user.
     pub user_id: Option<String>,
     upload_handle: Option<tempfile::NamedTempFile>,
+    /// The uploading limits of this session
+    pub upload_limit: Mutex<UploadLimit>,
 }
 
 impl VOWLGrapherStore {
     /// Create a new database instance.
-    pub const fn new(session: Store) -> Self {
+    pub fn new(session: Store) -> Self {
         Self {
             session,
             user_id: None,
             upload_handle: None,
+            upload_limit: Mutex::new(UploadLimit::Unlimited),
         }
     }
 
     /// Create a new database instance with a user id.
     pub fn new_for_user(user_id: String) -> Self {
         let session = GLOBAL_STORE.get_or_init(Store::default).clone();
+        let max_upload_size = VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.0;
         Self {
             session,
             user_id: Some(user_id),
             upload_handle: None,
+            upload_limit: Mutex::new(UploadLimit::new(max_upload_size)),
         }
     }
 
@@ -293,7 +301,7 @@ impl VOWLGrapherStore {
     /// Insert a chunk of data into the file currently in use.
     ///
     /// # Errors
-    /// Returns an error if the data cannot ve written to the file.
+    /// Returns an error if the data cannot be written to the file.
     pub fn upload_chunk(&mut self, data: &[u8]) -> Result<(), VOWLGrapherStoreError> {
         if let Some(file) = &mut self.upload_handle {
             std::io::Write::write_all(file, data)?;
@@ -390,8 +398,14 @@ impl VOWLGrapherStore {
             }
 
             let (bytes, hinted_format, next_base) =
-                match fetch_import_source(&client, &resolved).await {
+                match self.fetch_import_source(&client, &resolved).await {
                     Ok(source) => source,
+                    Err(
+                        err @ VOWLGrapherStoreError {
+                            inner: VOWLGrapherStoreErrorKind::UploadLimitExceeded(_),
+                            ..
+                        },
+                    ) => return Err(err),
                     Err(err) => {
                         warn!("Skipping failed import fetch '{resolved}': {err}");
                         warnings.push(err.into());
@@ -431,6 +445,94 @@ impl VOWLGrapherStore {
         };
 
         Ok((all_quads, warnings))
+    }
+
+    async fn fetch_import_source(
+        &self,
+        client: &Client,
+        url: &Url,
+    ) -> Result<(Vec<u8>, DataType, ImportBase), VOWLGrapherStoreError> {
+        let format = DataType::from(Path::new(url.path()));
+
+        match url.scheme() {
+            "file" => {
+                let path = url.to_file_path().map_err(|()| {
+                    VOWLGrapherStoreErrorKind::ImportResolutionError(format!(
+                        "Could not convert file URL to path: {url}"
+                    ))
+                })?;
+
+                let file_size = tokio::fs::metadata(&path).await?.len();
+                let mut limit = self.upload_limit.lock().await;
+                if !limit.try_subtract(file_size) {
+                    return Err(
+                        VOWLGrapherStoreErrorKind::UploadLimitExceeded(url.to_string()).into(),
+                    );
+                }
+                let expected_size = limit
+                    .limit()
+                    .map_or(file_size, |lim| lim.min(file_size))
+                    .try_into()
+                    .unwrap_or(0);
+                drop(limit);
+
+                let file = File::open(&path).await?;
+                let mut reader = BufReader::new(file);
+                let mut bytes = Vec::with_capacity(expected_size);
+                reader.read_to_end(&mut bytes).await?;
+
+                Ok((bytes, format, ImportBase::from_path(&path)))
+            }
+            "http" | "https" => {
+                let mut response = client.get(url.clone()).send().await.map_err(|e| {
+                    VOWLGrapherStoreErrorKind::RemoteFetchError(format!(
+                        "Failed to fetch import {url}: {e}"
+                    ))
+                })?;
+
+                let mut size_limit = self.upload_limit.lock().await;
+
+                let mut bytes: Vec<u8> = response.content_length().map_or_else(
+                    || Ok(Vec::new()),
+                    |len| {
+                        if !size_limit.allows(len) {
+                            return Err(VOWLGrapherStoreErrorKind::UploadLimitExceeded(
+                                url.to_string(),
+                            ));
+                        }
+                        let expected_size = size_limit
+                            .limit()
+                            .map_or(len, |lim| lim.min(len))
+                            .try_into()
+                            .unwrap_or(0);
+                        Ok(Vec::with_capacity(expected_size))
+                    },
+                )?;
+
+                // stream the response so we can ensure that we don't exceed the upload limit
+                while let Some(chunk) = response.chunk().await.map_err(|e| {
+                    VOWLGrapherStoreErrorKind::RemoteFetchError(format!(
+                        "Failed to read import body {url}: {e}"
+                    ))
+                })? {
+                    if !size_limit.try_subtract(chunk.len() as u64) {
+                        return Err(VOWLGrapherStoreErrorKind::UploadLimitExceeded(
+                            url.to_string(),
+                        )
+                        .into());
+                    }
+                    bytes.extend(chunk);
+                }
+
+                drop(size_limit);
+
+                Ok((bytes, format, ImportBase::Url(url.clone())))
+            }
+            scheme => Err(VOWLGrapherStoreErrorKind::ImportResolutionError(format!(
+                "Unsupported import scheme '{scheme}' for {url}"
+            ))
+            .into()),
+        }
     }
 }
 
@@ -478,44 +580,6 @@ async fn extract_import_iris(quads: &[Quad]) -> Result<Vec<String>, VOWLGrapherS
     Ok(imports)
 }
 
-async fn fetch_import_source(
-    client: &Client,
-    url: &Url,
-) -> Result<(Vec<u8>, DataType, ImportBase), VOWLGrapherStoreError> {
-    let format = DataType::from(Path::new(url.path()));
-
-    match url.scheme() {
-        "file" => {
-            let path = url.to_file_path().map_err(|()| {
-                VOWLGrapherStoreErrorKind::ImportResolutionError(format!(
-                    "Could not convert file URL to path: {url}"
-                ))
-            })?;
-            let bytes = std::fs::read(&path)?;
-            Ok((bytes, format, ImportBase::from_path(&path)))
-        }
-        "http" | "https" => {
-            let response = client.get(url.clone()).send().await.map_err(|e| {
-                VOWLGrapherStoreErrorKind::RemoteFetchError(format!(
-                    "Failed to fetch import {url}: {e}"
-                ))
-            })?;
-
-            let bytes = response.bytes().await.map_err(|e| {
-                VOWLGrapherStoreErrorKind::RemoteFetchError(format!(
-                    "Failed to read import body {url}: {e}"
-                ))
-            })?;
-
-            Ok((bytes.to_vec(), format, ImportBase::Url(url.clone())))
-        }
-        scheme => Err(VOWLGrapherStoreErrorKind::ImportResolutionError(format!(
-            "Unsupported import scheme '{scheme}' for {url}"
-        ))
-        .into()),
-    }
-}
-
 #[derive(Clone, Debug)]
 enum ImportBase {
     Url(Url),
@@ -542,6 +606,64 @@ impl ImportBase {
             Self::Unknown => Url::parse(import_iri).map_err(|e| {
                 VOWLGrapherStoreErrorKind::ImportResolutionError(e.to_string()).into()
             }),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum UploadLimit {
+    Limited {
+        /// The number of additional bytes allowed in this session.
+        remaining: u64,
+        /// The total number of bytes allowed this session.
+        max: u64,
+    },
+    Unlimited,
+}
+
+impl UploadLimit {
+    #[must_use]
+    pub const fn new(size: u64) -> Self {
+        Self::Limited {
+            remaining: size,
+            max: size,
+        }
+    }
+
+    /// Subtracts `amount` from `remaining` if `self` is `Limited`.
+    /// Does nothing for `Unlimited`
+    pub const fn subtract(&mut self, amount: u64) {
+        match self {
+            Self::Limited { remaining, max: _ } => {
+                *remaining = remaining.saturating_sub(amount);
+            }
+            Self::Unlimited => {}
+        }
+    }
+
+    /// Whether `amount` bytes can be accepted within the limits
+    pub const fn allows(&self, amount: u64) -> bool {
+        match self {
+            Self::Limited { remaining, max: _ } => *remaining >= amount,
+            Self::Unlimited => true,
+        }
+    }
+
+    /// Subtracts `amount` bytes from the remaining limit, if it is within the limit.
+    /// Returns `None` if that amount of bytes is within the limit, otherwise,
+    /// returns the limit.
+    pub const fn try_subtract(&mut self, amount: u64) -> bool {
+        let allowed = self.allows(amount);
+        if allowed {
+            self.subtract(amount);
+        }
+        allowed
+    }
+
+    pub const fn limit(&self) -> Option<u64> {
+        match self {
+            Self::Limited { remaining: _, max } => Some(*max),
+            Self::Unlimited => None,
         }
     }
 }

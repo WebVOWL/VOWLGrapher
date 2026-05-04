@@ -1,3 +1,4 @@
+use bytesize::ByteSize;
 #[cfg(feature = "server")]
 use futures::StreamExt;
 use gloo_timers::callback::Interval;
@@ -127,13 +128,19 @@ pub async fn handle_local(
             let len = chunk.len();
             count += len;
 
-            if count as u64 > VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.0 {
+            let mut upload_limit = session.upload_limit.lock().await;
+
+            if !upload_limit.try_subtract(len as u64) {
                 return Err(ServerFnError::ServerError(format!(
                     "File '{name}' exceeds the maximum allowed size of {}",
-                    VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.display().si()
+                    upload_limit.limit().map_or_else(
+                        || String::from("unlimited"),
+                        |size| ByteSize::b(size).display().si().to_string()
+                    )
                 ))
                 .into());
             }
+            drop(upload_limit);
 
             session.upload_chunk(&chunk)?;
             progress::add_chunk(&name, len).await;

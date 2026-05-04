@@ -19,6 +19,7 @@
     fluent-uri="0.4.1"
     futures={workspace=true}
     grapher={workspace=true}
+    heck="0.5.0"
     log={workspace=true}
     oxilangtag.workspace=true
     oxrdf="0.3.1"

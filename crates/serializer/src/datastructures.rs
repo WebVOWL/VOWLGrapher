@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use heck::{ToKebabCase, ToLowerCamelCase, ToSnakeCase, ToTitleCase, ToUpperCamelCase};
 use oxrdf::Term;
 
 use crate::datastructures::{edge_data::Edge, restriction_data::RestrictionState, triple::Triple};
@@ -61,5 +62,35 @@ pub struct DocumentBase {
 impl DocumentBase {
     pub const fn new(base_term: ArcTerm, base: String) -> Self {
         Self { base_term, base }
+    }
+}
+
+#[expect(unused)]
+#[derive(Copy, Clone)]
+pub enum DisplayCase {
+    /// `Title Case`
+    Title,
+    /// `UpperCamelCase`
+    UpperCamelCase,
+    /// `lowerCamelCase`
+    LowerCamelCase,
+    /// `snake_case`
+    SnakeCase,
+    /// `kebab-case`
+    KebabCase,
+    /// No conversion
+    Original,
+}
+
+impl DisplayCase {
+    pub fn fmt_string(self, input: &str) -> String {
+        match self {
+            Self::Title => input.to_title_case(),
+            Self::UpperCamelCase => input.to_upper_camel_case(),
+            Self::LowerCamelCase => input.to_lower_camel_case(),
+            Self::SnakeCase => input.to_snake_case(),
+            Self::KebabCase => input.to_kebab_case(),
+            Self::Original => input.to_string(),
+        }
     }
 }

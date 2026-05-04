@@ -7,22 +7,28 @@ pub mod nodes;
 pub mod serialize_triple;
 pub mod synthetic;
 
+use std::{collections::HashMap, sync::Arc};
+
 use grapher::prelude::{
     ElementType, OwlEdge, OwlNode, OwlType, RdfEdge, RdfType, RdfsNode, RdfsType,
 };
-use log::warn;
+use heck::ToTitleCase;
+use log::{info, warn};
 
 use oxrdf::{NamedNodeRef, Term, TermRef};
 use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
     datastructures::{
-        ArcTerm, LanguageTag, MetadataContent, index::TermIndex,
+        ArcTerm, DisplayCase, LanguageTag, MetadataContent, index::TermIndex,
         serialization_data_buffer::SerializationDataBuffer,
     },
     errors::{SerializationError, SerializationErrorKind},
-    serializer_util::synthetic::{
-        SYNTH_LITERAL, SYNTH_LITERAL_VALUE, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING,
+    serializer_util::{
+        labels::extract_label,
+        synthetic::{
+            SYNTH_LITERAL, SYNTH_LITERAL_VALUE, SYNTH_LOCAL_LITERAL, SYNTH_LOCAL_THING, SYNTH_THING,
+        },
     },
     vocab::{owl, rdf, rdfs, xsd},
 };
@@ -269,15 +275,45 @@ pub fn is_external(
     }
 }
 
+/// Formats a term for display on the frontend.
+pub fn get_term_string(
+    term: &ArcTerm,
+    case: DisplayCase,
+    term_cache: &mut HashMap<ArcTerm, Arc<String>>,
+    failed: &mut Vec<ErrorRecord>,
+) -> Arc<String> {
+    term_cache
+        .entry(term.clone())
+        .or_insert_with_key(|key| {
+            if let (Some(label), _) = extract_label(None, term) {
+                label.to_title_case().into()
+            } else {
+                let msg =
+                    format!("Failed to extract metadata label for term '{term}'. Using default");
+                failed.push(SerializationErrorKind::SerializationWarning(msg).into());
+                let fallback = trim_tag_circumfix(&key.to_string());
+                case.fmt_string(fallback.as_str()).into()
+            }
+        })
+        .clone()
+}
+
 /// Translates the term ids of metadata content into term strings.
-pub fn translate_metadata_content(
-    term_index: &TermIndex,
+pub fn fmt_translated_metadata_content(
     content: &MetadataContent,
-) -> Vec<String> {
-    content
-        .iter()
-        .map(|content_term_id| term_index.display_term(*content_term_id))
-        .collect()
+    term_index: &TermIndex,
+    term_cache: &mut HashMap<ArcTerm, Arc<String>>,
+    failed: &mut Vec<ErrorRecord>,
+) -> Result<Vec<String>, SerializationError> {
+    let mut out = Vec::with_capacity(content.len());
+    for content_term_id in content {
+        let term = term_index.get(*content_term_id)?;
+        let term_str = get_term_string(&term, DisplayCase::Original, term_cache, failed);
+        info!("{term_str}");
+        out.push(term_str.to_string());
+    }
+    info!("{out:#?}");
+    Ok(out)
 }
 
 /// Converts a [`NamedNodeRef`] into a term.

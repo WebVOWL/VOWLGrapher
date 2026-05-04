@@ -1,10 +1,13 @@
+use vowlgrapher_util::prelude::ErrorRecord;
+
 use crate::{
     datastructures::{
-        ArcTriple, ElementTypeMetadata, LanguageTag, MetadataType, TermID, index::TermIndex,
+        ArcTerm, ArcTriple, ElementTypeMetadata, LanguageTag, MetadataType, TermID,
+        index::TermIndex,
     },
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
-        fmt_langtag, labels::extract_label, translate_metadata_content, trim_tag_circumfix,
+        fmt_langtag, fmt_translated_metadata_content, labels::extract_label, trim_tag_circumfix,
     },
 };
 use std::{
@@ -74,18 +77,22 @@ impl GraphMetadataBuffer {
         &self,
         metadata_type: &MetadataType,
         metadata_term_id: TermID,
-    ) -> Option<HashMap<String, Vec<String>>> {
-        metadata_type.get(&metadata_term_id).map(|tagged_metadata| {
-            tagged_metadata
-                .iter()
-                .map(|(lang_tag, content)| {
-                    (
-                        fmt_langtag(lang_tag.clone()),
-                        translate_metadata_content(&self.term_index, content),
-                    )
-                })
-                .collect::<HashMap<_, _>>()
-        })
+        term_cache: &mut HashMap<ArcTerm, Arc<String>>,
+        failed: &mut Vec<ErrorRecord>,
+    ) -> Result<Option<HashMap<String, Vec<String>>>, SerializationError> {
+        if let Some(tagged_metadata) = metadata_type.get(&metadata_term_id) {
+            let mut out = HashMap::new();
+            for (lang_tag, content) in tagged_metadata {
+                let k = fmt_langtag(lang_tag.clone());
+                let v =
+                    fmt_translated_metadata_content(content, &self.term_index, term_cache, failed)?;
+                out.insert(k, v);
+            }
+
+            Ok(Some(out))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Adds a language-tagged metadata triple to the metadata buffer.

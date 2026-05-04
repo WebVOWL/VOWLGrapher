@@ -8279,6 +8279,7 @@ dependencies = [
  "fluent-uri",
  "futures",
  "grapher",
+ "heck",
  "log",
  "oxilangtag",
  "oxrdf",

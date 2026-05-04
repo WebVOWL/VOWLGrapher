@@ -1,11 +1,11 @@
 use crate::{
     datastructures::{
-        ArcEdge, ArcLockRestrictionState, ArcTerm, ArcTriple, DocumentBase, TermID,
+        ArcEdge, ArcLockRestrictionState, ArcTerm, ArcTriple, DisplayCase, DocumentBase, TermID,
         graph_metadata_buffer::GraphMetadataBuffer, index::TermIndex,
     },
     errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
-        fmt_langtag, named_node_to_term, translate_metadata_content, trim_tag_circumfix,
+        fmt_langtag, fmt_translated_metadata_content, get_term_string, named_node_to_term,
     },
     vocab::{
         dcmi::{dc, dcterms},
@@ -349,6 +349,7 @@ impl SerializationDataBuffer {
         iricache: &HashMap<usize, usize>,
     ) -> Result<(), SerializationError> {
         let mut metadata_buffer = GraphMetadata::new();
+        let mut term_cache: HashMap<ArcTerm, Arc<String>> = HashMap::new();
 
         metadata_buffer.languages = {
             let mut lang_buffer = self.metadata.lanuages.write()?;
@@ -366,7 +367,7 @@ impl SerializationDataBuffer {
             .map_or_else(String::new, |docbase| docbase.base);
         metadata_buffer.graph_header.title = {
             if let Some(docbase) = self.document_base.read()?.clone() {
-                self.extract_header_title(&docbase, failed)?
+                self.extract_header_title(&docbase, &mut term_cache, failed)?
             } else {
                 None
             }
@@ -374,7 +375,7 @@ impl SerializationDataBuffer {
         };
         metadata_buffer.graph_header.description = {
             if let Some(docbase) = self.document_base.read()?.clone() {
-                self.extract_header_description(&docbase, failed)?
+                self.extract_header_description(&docbase, &mut term_cache, failed)?
             } else {
                 None
             }
@@ -386,6 +387,7 @@ impl SerializationDataBuffer {
                     &docbase,
                     &[dcterms::CREATOR, dc::CREATOR],
                     "creator",
+                    &mut term_cache,
                     failed,
                 )
                 .map(|(_, map)| map)?
@@ -400,6 +402,7 @@ impl SerializationDataBuffer {
                     &docbase,
                     &[dcterms::CONTRIBUTOR, dc::CONTRIBUTOR],
                     "creator",
+                    &mut term_cache,
                     failed,
                 )
                 .map(|(_, map)| map)?
@@ -430,6 +433,7 @@ impl SerializationDataBuffer {
                         &docbase,
                         &[owl::VERSION_INFO],
                         "version_info",
+                        &mut term_cache,
                         failed,
                     )?;
                     match maybe_version_info {
@@ -470,7 +474,7 @@ impl SerializationDataBuffer {
                 },
             )
         };
-        self.convert_element_metadata(&mut metadata_buffer, iricache, failed)?;
+        self.convert_element_metadata(&mut metadata_buffer, iricache, &mut term_cache, failed)?;
         display_data.graph_metadata = metadata_buffer;
         Ok(())
     }
@@ -483,16 +487,9 @@ impl SerializationDataBuffer {
         &self,
         metadata_buffer: &mut GraphMetadata,
         iricache: &HashMap<usize, usize>,
+        term_cache: &mut HashMap<ArcTerm, Arc<String>>,
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<(), SerializationError> {
-        let mut term_cache: HashMap<ArcTerm, Arc<String>> = HashMap::new();
-        let mut get_term_string = |term: ArcTerm| {
-            term_cache
-                .entry(term)
-                .or_insert_with_key(|key| trim_tag_circumfix(&key.to_string()).into())
-                .clone()
-        };
-
         let mut buffer = self.metadata.element_metadata.write()?;
         for (term_id, metadata_types) in take(&mut *buffer) {
             if let Some(term_idx) = iricache.get(&term_id) {
@@ -503,13 +500,29 @@ impl SerializationDataBuffer {
                                 .metadata_type
                                 .entry(*term_idx)
                                 .or_default()
-                                .entry(get_term_string(metadata_term))
+                                .entry(get_term_string(
+                                    &metadata_term,
+                                    DisplayCase::Title,
+                                    term_cache,
+                                    failed,
+                                ))
                                 .or_default();
                             for (lang_tag, content) in tagged_metadata {
                                 tagged_metadata_entry
                                     .entry(fmt_langtag(lang_tag))
                                     .or_insert_with(|| {
-                                        translate_metadata_content(&self.term_index, &content)
+                                        match fmt_translated_metadata_content(
+                                            &content,
+                                            &self.term_index,
+                                            term_cache,
+                                            failed,
+                                        ) {
+                                            Ok(content) => content,
+                                            Err(e) => {
+                                                failed.push(e.into());
+                                                Vec::new()
+                                            }
+                                        }
                                     });
                             }
                         }
@@ -552,6 +565,7 @@ impl SerializationDataBuffer {
         document_base: &DocumentBase,
         element_types: &[NamedNodeRef],
         element_name: &str,
+        term_cache: &mut HashMap<ArcTerm, Arc<String>>,
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<(Option<TermID>, Option<HashMap<String, Vec<String>>>), SerializationError> {
         if let Ok(base_term_id) = self.term_index.get_id(&document_base.base_term) {
@@ -576,9 +590,19 @@ impl SerializationDataBuffer {
                     };
 
                     maybe_metadata_term_id.map_or((Some(base_term_id), None), |metadata_term_id| {
-                        let content = self
-                            .metadata
-                            .get_element_metadata_content(metadata_type, metadata_term_id);
+                        let content = match self.metadata.get_element_metadata_content(
+                            metadata_type,
+                            metadata_term_id,
+                            term_cache,
+                            failed,
+                        ) {
+                            Ok(content) => content,
+                            Err(e) => {
+                                failed.push(e.into());
+                                None
+                            }
+                        };
+
                         (Some(base_term_id), content)
                     })
                 });
@@ -597,6 +621,7 @@ impl SerializationDataBuffer {
     fn extract_header_title(
         &self,
         document_base: &DocumentBase,
+        term_cache: &mut HashMap<ArcTerm, Arc<String>>,
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<Option<HashMap<String, Vec<String>>>, SerializationError> {
         // Try getting title from title buffer first
@@ -604,6 +629,7 @@ impl SerializationDataBuffer {
             document_base,
             &[dcterms::TITLE, dc::TITLE],
             "title",
+            term_cache,
             failed,
         )?;
 
@@ -640,6 +666,7 @@ impl SerializationDataBuffer {
     fn extract_header_description(
         &self,
         document_base: &DocumentBase,
+        term_cache: &mut HashMap<ArcTerm, Arc<String>>,
         failed: &mut Vec<ErrorRecord>,
     ) -> Result<Option<HashMap<String, Vec<String>>>, SerializationError> {
         // Try getting description from description buffer first
@@ -647,6 +674,7 @@ impl SerializationDataBuffer {
             document_base,
             &[dcterms::DESCRIPTION, dc::DESCRIPTION],
             "description",
+            term_cache,
             failed,
         )?;
 
@@ -654,8 +682,14 @@ impl SerializationDataBuffer {
             (_, Some(descriptions)) => Ok(Some(descriptions)),
             (_, None) => {
                 // Try getting description from comment buffer
-                self.get_metadata_element(document_base, &[rdfs::COMMENT], "comment", failed)
-                    .map(|(_, map)| map)
+                self.get_metadata_element(
+                    document_base,
+                    &[rdfs::COMMENT],
+                    "comment",
+                    term_cache,
+                    failed,
+                )
+                .map(|(_, map)| map)
             }
         }
     }

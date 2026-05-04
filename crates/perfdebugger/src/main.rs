@@ -28,7 +28,7 @@ async fn main() {
             .await
             .expect("Error inserting file");
 
-        let (_data, _) = store
+        let (data, _) = store
             .query(DEFAULT_QUERY.to_string(), Some(args[1].clone()))
             .await
             .expect("querying the store should succeed");
@@ -36,7 +36,7 @@ async fn main() {
         // Uncomment to enable rendering
         EVENT_DISPATCHER
             .rend_write_chan
-            .send(RenderEvent::LoadGraph(Box::new(_data)))
+            .send(RenderEvent::LoadGraph(Box::new(data)))
             .expect("sending events should succeed");
     }
     // Uncomment to enable rendering

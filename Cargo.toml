@@ -94,6 +94,7 @@
     async-broadcast="0.7.2"
     bytes="1.9"
     bytesize.workspace=true
+    console-subscriber = { version = "0.5.0", optional=true }
     console_error_panic_hook={version="0.1", optional=true}
     console_log={version="1.0", optional=true}
     dashmap="6.1.0"
@@ -114,6 +115,7 @@
     serde.workspace=true
     strum.workspace=true
     tokio={workspace=true, optional=true}
+    tokio-console = { version = "0.1.14", optional=true }
     uuid={version="1.22.0", features=["v4"]}
     vowlgrapher-database={path="crates/database", optional=true}
     vowlgrapher-parser={path="crates/parser", optional=true}
@@ -171,6 +173,8 @@
         "dep:env_logger",
         "dep:reqwest",
         "dep:tokio",
+        "dep:tokio-console",
+        "dep:console-subscriber",
         "dep:vowlgrapher-database",
         "dep:vowlgrapher-parser",
         "leptos-use/actix",

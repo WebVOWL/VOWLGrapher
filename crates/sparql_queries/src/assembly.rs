@@ -76,7 +76,7 @@ impl QueryAssembler {
         Self::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
     }
 
-    /// Construct a custom SPARQL query based of query inserted by the user in the UI(query_menu)
+    /// Construct a custom SPARQL query based of query inserted by the user in the `UI(query_menu)`
     pub fn assemble_custom_query(user_query: &str) -> String {
         let prefixes = DEFAULT_PREFIXES
             .iter()
@@ -85,8 +85,8 @@ impl QueryAssembler {
             .join("\n");
 
         format!(
-            r#"
-            {}
+            r"
+            {prefixes}
             CONSTRUCT {{
                 ?s ?p ?o .
                 ?s rdf:type ?typeS .
@@ -102,7 +102,7 @@ impl QueryAssembler {
                     }}
                     UNION
                     {{
-                        {{ {} }}
+                        {{ {user_query} }}
 
                         ?s ?p ?o .
                         OPTIONAL {{ ?s rdf:type ?typeS }}
@@ -113,9 +113,7 @@ impl QueryAssembler {
                 }}
             }}
             ORDER BY ?weight
-            "#,
-            prefixes,
-            user_query
+            "
         )
     }
 }

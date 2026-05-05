@@ -64,6 +64,32 @@ pub fn CustomSparql() -> impl IntoView {
                         <div class="h-full bg-blue-500 animate-pulse w-full"></div>
                     </div>
                 </Show>
+
+                <div>
+                    <p>"Ensure your query binds results to the standard triple variables ?s (subject), ?p (predicate), and ?o (object) if used. 
+                    Automatic prefix fetching is currently disabled. Use full IRIs for any namespace not listed below."
+                    </p>
+                    <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">"Available Prefixes"</p>
+                    <div class="border rounded border-gray-200 overflow-hidden">
+                        <table class="w-full text-[10px] text-left border-collapse">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="p-1 font-semibold">"Prefix"</th>
+                                    <th class="p-1 font-semibold">"Namespace IRI"</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 bg-white">
+                                <tr><td>owl</td><td>"http://www.w3.org/2002/07/owl#"</td></tr>
+                                <tr><td>rdfs</td><td>"http://www.w3.org/2000/01/rdf-schema#"</td></tr>
+                                <tr><td>rdf</td><td>"http://www.w3.org/1999/02/22-rdf-syntax-ns#"</td></tr>
+                                <tr><td>xsd</td><td>"http://www.w3.org/2001/XMLSchema#"</td></tr>
+                                <tr><td>xml</td><td>"http://www.w3.org/XML/1998/namespace"</td></tr>
+                                <tr><td>dc</td><td>"http://purl.org/dc/elements/1.1/"</td></tr>
+                                <tr><td>dcterms</td><td>"http://purl.org/dc/terms/"</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </fieldset>
     }

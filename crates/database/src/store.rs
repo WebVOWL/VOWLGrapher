@@ -1,6 +1,6 @@
 use futures::stream::{BoxStream, StreamExt};
 use grapher::prelude::GraphDisplayData;
-use log::{debug, info, warn};
+use log::{debug, info, warn, trace};
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::model::{NamedNodeRef, Quad};
 use rdf_fusion::store::Store;
@@ -128,7 +128,7 @@ impl VOWLGrapherStore {
                 query.replace("{GRAPH_IRI}", &graph_name)
             },
         );
-        info!("{user_query}");
+        trace!("{user_query}");
 
         let solution_serializer = GraphDisplayDataSolutionSerializer::new();
         let query_stream = self
@@ -172,7 +172,7 @@ impl VOWLGrapherStore {
 
                 let prepared = vowlgrapher_parser::parser_util::parser_from_reader(
                     cursor,
-                    Path::new("temp.nt").into(),
+                    DataType::NTriples,
                     false,
                     &temp_graph_name,
                 )

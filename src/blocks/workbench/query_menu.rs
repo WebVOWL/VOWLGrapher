@@ -23,7 +23,7 @@ pub fn CustomSparql() -> impl IntoView {
 
     let run_query = move |_| {
         let user_query = query_input.get_untracked();
-        let final_query = QueryAssembler::assemble_custom_query(&user_query);
+        let final_query = QueryAssembler::assemble_user_query(&user_query);
         is_loading.set(true);
 
         spawn_local_scoped_with_cancellation(async move {
@@ -39,7 +39,7 @@ pub fn CustomSparql() -> impl IntoView {
                 <div>
                     <textarea
                         node_ref=textarea_ref
-                        class="font-jetbrains overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none min-h-24"
+                        class="overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none font-jetbrains min-h-24"
                         rows=1
                         placeholder="Enter query"
                         prop:value=move || query_input.get()
@@ -53,39 +53,69 @@ pub fn CustomSparql() -> impl IntoView {
 
                 <button
                     class="p-1 mt-1 text-xs text-white bg-blue-500 rounded"
-                    disabled =move || is_loading.get()
+                    disabled=move || is_loading.get()
                     on:click=run_query
                 >
-                    {move || if is_loading.get() { "Running query..." } else { "Run query" }}
+                    {move || {
+                        if is_loading.get() {
+                            "Running query..."
+                        } else {
+                            "Run query"
+                        }
+                    }}
                 </button>
 
                 <Show when=move || is_loading.get()>
-                    <div class="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                        <div class="h-full bg-blue-500 animate-pulse w-full"></div>
+                    <div class="overflow-hidden w-full h-1 bg-gray-100 rounded-full">
+                        <div class="w-full h-full bg-blue-500 animate-pulse"></div>
                     </div>
                 </Show>
 
                 <div>
-                    <p>"Ensure your query binds results to the standard triple variables ?s (subject), ?p (predicate), and ?o (object) if used. 
-                    Automatic prefix fetching is currently disabled. Use full IRIs for any namespace not listed below."
+                    <p>
+                        "Ensure your query binds results to the standard triple variables ?s (subject), ?p (predicate), and ?o (object) if used.
+                        Automatic prefix fetching is currently disabled. Use full IRIs for any namespace not listed below."
                     </p>
-                    <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">"Available Prefixes"</p>
-                    <div class="border rounded border-gray-200 overflow-hidden">
-                        <table class="w-full text-[10px] text-left border-collapse">
+                    <p class="mb-1 font-bold text-gray-500 uppercase text-[10px]">
+                        "Available Prefixes"
+                    </p>
+                    <div class="overflow-hidden rounded border border-gray-200">
+                        <table class="w-full text-left border-collapse text-[10px]">
                             <thead class="bg-gray-100 border-b border-gray-200">
                                 <tr>
                                     <th class="p-1 font-semibold">"Prefix"</th>
                                     <th class="p-1 font-semibold">"Namespace IRI"</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-100 bg-white">
-                                <tr><td>owl</td><td>"http://www.w3.org/2002/07/owl#"</td></tr>
-                                <tr><td>rdfs</td><td>"http://www.w3.org/2000/01/rdf-schema#"</td></tr>
-                                <tr><td>rdf</td><td>"http://www.w3.org/1999/02/22-rdf-syntax-ns#"</td></tr>
-                                <tr><td>xsd</td><td>"http://www.w3.org/2001/XMLSchema#"</td></tr>
-                                <tr><td>xml</td><td>"http://www.w3.org/XML/1998/namespace"</td></tr>
-                                <tr><td>dc</td><td>"http://purl.org/dc/elements/1.1/"</td></tr>
-                                <tr><td>dcterms</td><td>"http://purl.org/dc/terms/"</td></tr>
+                            <tbody class="bg-white divide-y divide-gray-100">
+                                <tr>
+                                    <td>owl</td>
+                                    <td>"http://www.w3.org/2002/07/owl#"</td>
+                                </tr>
+                                <tr>
+                                    <td>rdfs</td>
+                                    <td>"http://www.w3.org/2000/01/rdf-schema#"</td>
+                                </tr>
+                                <tr>
+                                    <td>rdf</td>
+                                    <td>"http://www.w3.org/1999/02/22-rdf-syntax-ns#"</td>
+                                </tr>
+                                <tr>
+                                    <td>xsd</td>
+                                    <td>"http://www.w3.org/2001/XMLSchema#"</td>
+                                </tr>
+                                <tr>
+                                    <td>xml</td>
+                                    <td>"http://www.w3.org/XML/1998/namespace"</td>
+                                </tr>
+                                <tr>
+                                    <td>dc</td>
+                                    <td>"http://purl.org/dc/elements/1.1/"</td>
+                                </tr>
+                                <tr>
+                                    <td>dcterms</td>
+                                    <td>"http://purl.org/dc/terms/"</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -98,7 +128,10 @@ pub fn CustomSparql() -> impl IntoView {
 #[component]
 pub fn QueryMenu() -> impl IntoView {
     view! {
-        <WorkbenchMenuItems title={format!("Query from {} database", env!("CARGO_PKG_NAME"))}>
+        <WorkbenchMenuItems title=format!(
+            "Query from {} database",
+            env!("CARGO_PKG_NAME"),
+        )>
             <CustomSparql />
         </WorkbenchMenuItems>
     }

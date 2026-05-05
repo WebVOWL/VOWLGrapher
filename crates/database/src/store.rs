@@ -1,6 +1,6 @@
 use futures::stream::{BoxStream, StreamExt};
 use grapher::prelude::GraphDisplayData;
-use log::{debug, info, warn, trace};
+use log::{debug, info, trace, warn};
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::model::{NamedNodeRef, Quad};
 use rdf_fusion::store::Store;
@@ -185,8 +185,8 @@ impl VOWLGrapherStore {
                 })?;
 
                 debug!(
-                    "Loaded {} quad in {} s",
-                    temp_graph_iri,
+                    "Loaded {} quads in {} s",
+                    temp_graph_name,
                     Instant::now()
                         .checked_duration_since(start_time)
                         .unwrap_or(Duration::new(0, 0))

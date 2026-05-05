@@ -20,6 +20,7 @@ use vowlgrapher_parser::parser_util::{
     path_type,
 };
 use vowlgrapher_serializer::prelude::GraphDisplayDataSolutionSerializer;
+use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
 use vowlgrapher_util::prelude::{DataType, ErrorRecord, VOWLGRAPHER_ENVIRONMENT, VOWLGrapherError};
 
 static GLOBAL_STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();

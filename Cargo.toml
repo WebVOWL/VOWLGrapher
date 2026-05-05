@@ -81,6 +81,7 @@
         strum={version="0.27", features=["derive"]}
         tokio="1.48.0"
         web-sys="0.3.77"
+        uuid ={version = "1.0", features = ["v4"]}
 
 
 [dependencies]
@@ -114,7 +115,7 @@
     serde.workspace=true
     strum.workspace=true
     tokio={workspace=true, optional=true}
-    uuid={version="1.22.0", features=["v4"]}
+    uuid={workspace=true, optional=true}
     vowlgrapher-database={path="crates/database", optional=true}
     vowlgrapher-parser={path="crates/parser", optional=true}
     vowlgrapher-sparql-queries={path="crates/sparql_queries"}

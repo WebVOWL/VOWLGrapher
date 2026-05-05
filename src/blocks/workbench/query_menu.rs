@@ -1,5 +1,5 @@
-use crate::components::user_input::internal_sparql::load_graph;
 use super::WorkbenchMenuItems;
+use crate::components::user_input::internal_sparql::load_graph;
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
 use vowlgrapher_sparql_queries::prelude::QueryAssembler;
 use web_sys::HtmlInputElement;
@@ -21,7 +21,7 @@ pub fn CustomSparql() -> impl IntoView {
         }
     };
 
-    let run_query = move |_|{
+    let run_query = move |_| {
         let user_query = query_input.get_untracked();
         let final_query = QueryAssembler::assemble_custom_query(&user_query);
         is_loading.set(true);

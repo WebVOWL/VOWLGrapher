@@ -152,8 +152,8 @@ impl VOWLGrapherStore {
             .into()),
             QueryResults::Graph(mut _query_triple_stream) => {
                 let temp_id = uuid::Uuid::new_v4().to_string();
-                let temp_graph_iri = format!("urn:vowlr:temp:{}", temp_id);
-                debug!("Creating temporary view graph: {}", temp_graph_iri);
+                let temp_graph_name = format!("urn:vowlr:temp:{temp_id}");
+                debug!("Creating temporary view graph: {temp_graph_name}");
 
                 let mut buffer = Vec::new();
 
@@ -176,7 +176,7 @@ impl VOWLGrapherStore {
                     false,
                     &temp_graph_name,
                 )
-                .map_err(|e| <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e))?;
+                .map_err(<VOWLGrapherStoreError as Into<VOWLGrapherError>>::into)?;
 
                 self.session.extend(prepared).await.map_err(|e| {
                     <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(
@@ -197,7 +197,8 @@ impl VOWLGrapherStore {
                     vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY.clone();
 
                 let (display_data, errors) =
-                    Box::pin(self.query(default_query_logic, Some(temp_graph_iri))).await?;
+                    Box::pin(self.query(default_query_logic, Some(temp_graph_name))).await?;
+
                 Ok((display_data, errors))
             }
         }

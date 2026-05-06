@@ -1,3 +1,4 @@
+pub mod assembly;
 pub mod characteristic;
 pub mod element_type;
 pub mod general;

@@ -4,17 +4,13 @@
 //! that it may be used both server-side and client-side
 
 mod assembly;
+mod errors;
 mod snippets;
 
 /// Exports all the core types of the library.
 pub mod prelude {
-    use grapher::prelude::{
-        Characteristic, OwlEdge, OwlNode, RdfEdge, RdfNode, RdfsEdge, RdfsNode,
-    };
-    use std::sync::LazyLock;
-
     use crate::assembly::DEFAULT_PREFIXES;
-    pub use crate::assembly::QueryAssembler;
+    use crate::assembly::normalization::QueryNormalizer;
     use crate::snippets::general::{
         COLLECTIONS, DOMAIN_RANGES, LABEL, NAMED_INDIVIDUAL_COUNTS, ONTOLOGY, OWL_DEPRECATED,
         XML_BASE,
@@ -25,7 +21,13 @@ pub mod prelude {
         COMMENT, INCOMPATIBLE_WITH, IS_DEFINED_BY, PRIOR_VERSION, SEE_ALSO, VERSION_INFO,
         VERSION_IRI,
     };
-    use crate::snippets::snippets_from_enum;
+    use crate::snippets::{assembly, snippets_from_enum};
+    use grapher::prelude::{
+        Characteristic, OwlEdge, OwlNode, RdfEdge, RdfNode, RdfsEdge, RdfsNode,
+    };
+    use std::sync::LazyLock;
+
+    pub use crate::assembly::QueryAssembler;
 
     /// SPARQL snippets that should generally be included in all queries.
     pub static GENERAL_SNIPPETS: [&str; 7] = [
@@ -101,5 +103,24 @@ pub mod prelude {
         .concat();
 
         QueryAssembler::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
+    });
+
+    /// SPARQL snippets normalized for use in user-defined query assembly.
+    pub static NORMALIZED_SNIPPETS: LazyLock<Vec<String>> = LazyLock::new(|| {
+        let assembly_snippets = vec![
+            assembly::DOMAIN_RANGES,
+            assembly::LABEL,
+            assembly::ONTOLOGY,
+            assembly::OWL_DEPRECATED,
+            assembly::TYPE,
+        ];
+        let snippets = [assembly_snippets, METADATA_SNIPPETS.into()].concat();
+
+        #[expect(
+            clippy::expect_used,
+            reason = "more performant here than normalizing for each call to [`QueryNormalizer::normalize_query_variables`] just to catch an unlikely error"
+        )]
+        QueryNormalizer::normalize_snippets(&snippets)
+            .expect("regex should not fail in snippet normalization")
     });
 }

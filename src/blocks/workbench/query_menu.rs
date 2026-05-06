@@ -1,12 +1,32 @@
+use std::collections::HashMap;
+
 use super::WorkbenchMenuItems;
-use crate::components::user_input::internal_sparql::load_graph;
+use crate::{components::user_input::internal_sparql::load_graph, errors::ErrorLogContext};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
+use log::info;
 use vowlgrapher_sparql_queries::prelude::QueryAssembler;
 use web_sys::HtmlInputElement;
 
 #[component]
 pub fn CustomSparql() -> impl IntoView {
+    let error_context = expect_context::<ErrorLogContext>();
+
     let query_input = RwSignal::new(String::new());
+
+    let query_variables =
+        Memo::new(move |old| {
+            match QueryAssembler::get_significant_variable_count(&query_input.read()) {
+                Ok(vars) => vars,
+                Err(e) => {
+                    error_context.push(e.into());
+                    old.cloned().unwrap_or_default()
+                }
+            }
+        });
+    let variable_count_greater_than_2 = Signal::derive(move || query_variables.read().len() > 2);
+
+    info!("{}", variable_count_greater_than_2.get());
+
     let is_loading = RwSignal::new(false);
     let textarea_ref = NodeRef::<leptos::html::Textarea>::new();
 
@@ -21,15 +41,21 @@ pub fn CustomSparql() -> impl IntoView {
         }
     };
 
-    let run_query = move |_| {
-        let user_query = query_input.get_untracked();
-        let final_query = QueryAssembler::assemble_user_query(&user_query);
-        is_loading.set(true);
+    let run_query = move |_| match QueryAssembler::assemble_user_query(
+        &query_input.get_untracked(),
+        &HashMap::new(),
+    ) {
+        Ok(query) => {
+            is_loading.set(true);
 
-        spawn_local_scoped_with_cancellation(async move {
-            load_graph(final_query, false).await;
-            is_loading.set(false);
-        });
+            spawn_local_scoped_with_cancellation(async move {
+                load_graph(query, true).await;
+                is_loading.set(false);
+            });
+        }
+        Err(e) => {
+            error_context.push(e.into());
+        }
     };
 
     view! {

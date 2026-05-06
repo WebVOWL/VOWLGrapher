@@ -1,12 +1,18 @@
-mod query_regex;
+pub mod normalization;
+pub mod prefix;
+pub mod query_regex;
+
+use crate::assembly::normalization::QueryNormalizer;
+use crate::assembly::query_regex::{VAR, VAR_FIRST};
+use crate::errors::QueryAssemblyError;
+use crate::prelude::GENERAL_SNIPPETS;
 use crate::snippets::SparqlSnippet;
-use crate::{prelude::GENERAL_SNIPPETS, snippets::void::VOID};
+use crate::snippets::void::VOID;
 use grapher::prelude::ElementType;
 use indexmap::IndexSet;
 use log::info;
 use regex::Regex;
 use std::collections::HashMap;
-use std::fmt::Write;
 
 // TODO: Remove when automatic prefix fetching is implemented.
 pub const DEFAULT_PREFIXES: [&str; 8] = [
@@ -20,14 +26,35 @@ pub const DEFAULT_PREFIXES: [&str; 8] = [
     "dcterms: <http://purl.org/dc/terms/>",
 ];
 
-static VAR_REGEX: &str = r"[?$]([a-zA-Z_][a-zA-Z0-9_\u00B7\u0300-\u036F\u203F-\u2040]*)";
-static QUERY_VAR_REGEX: &str = r"(?:SELECT|select) ([?$].*|\*)(?:WHERE|where)?";
-// static QUERY_VAR_REGEX: &str = r"(?:SELECT|select) (?<first>[?$].*|\*)(?:WHERE|where)?";
-
 /// Compiles snippets of SPARQL code into full-fledged SPARQL queries.
 pub struct QueryAssembler;
 
 impl QueryAssembler {
+    /// Returns the significant query variables of the query.
+    ///
+    /// That is, all query variables of the first SELECT clause.
+    ///
+    /// # Note
+    /// Do not remove elements from the returned [`IndexSet`]. Doing so breaks the ordering!
+    ///
+    /// # Errors
+    /// Returns an error if the internal Regex procedure fails.
+    pub fn get_significant_variable_count(
+        query: &str,
+    ) -> Result<IndexSet<String>, QueryAssemblyError> {
+        let mut q_set = IndexSet::new();
+        let query_var_re = Regex::new(VAR)?;
+        let var_first_re = Regex::new(VAR_FIRST)?;
+
+        for (_, [c]) in var_first_re.captures_iter(query).map(|c| c.extract()) {
+            query_var_re.find_iter(c).for_each(|m| {
+                q_set.insert(m.as_str().to_string());
+            });
+        }
+
+        Ok(q_set)
+    }
+
     /// Construct a SPARQL query from URI prefixes and SPARQL snippets.
     ///
     /// `prefixes` is the collection of prefixes to use.
@@ -85,9 +112,24 @@ impl QueryAssembler {
         Self::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
     }
 
-    #[expect(clippy::unwrap_used, reason = "Testing. Remove on sight")]
-    /// Construct a custom SPARQL query based on the query inserted by the user in the `UI(query_menu)`
-    pub fn assemble_user_query(user_query: &str) -> String {
+    /// Construct a serializable, user-defined SPARQL query.
+    ///
+    /// # Errors
+    /// Returns an error if the query could not be assembled.
+    pub fn assemble_user_query(
+        user_query: &str,
+        variable_triple_map: &HashMap<String, [String; 3]>,
+    ) -> Result<String, QueryAssemblyError> {
+        // PIPELINE:
+        // 1. Gather query variables from after SELECT.
+        //  [WIP] 1.2. If SELECT *, gather all query variables - in order of appearance.
+        // 2. Normalize query variables to triples
+        //  2.1. Include SPARQL snippets with relevant type information.
+        // 3. Insert query triples into CONSTRUCT graph template.
+        // 4. Insert user query into CONSTRUCT pattern.
+        //  4.1. Include SPARQL snippets with relevant type information.
+        // 5. Load result into DB and query as normal.
+
         info!("{user_query}");
 
         let prefixes = DEFAULT_PREFIXES
@@ -96,72 +138,31 @@ impl QueryAssembler {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let query_var_re = Regex::new(VAR_REGEX).unwrap();
-
-        // NEVER remove elements from the IndexSet. Doing so breaks ordering!
-        // The variables to use in CONSTRUCT.
-        let query_variables = {
-            let mut q_set = IndexSet::new();
-            let re = Regex::new(QUERY_VAR_REGEX).unwrap();
-
-            for (_, [c]) in re.captures_iter(user_query).map(|c| c.extract()) {
-                query_var_re.find_iter(c).for_each(|m| {
-                    q_set.insert(m.as_str());
-                });
-            }
-
-            q_set
-        };
+        let query_variables = Self::get_significant_variable_count(user_query)?;
 
         info!("{query_variables:?}");
 
-        let variable_type_snippet = query_variables
-            .iter()
-            .map(|v| format!("OPTIONAL {{ {v} rdf:type {v}_type }}"))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let normalized_query_variables =
+            QueryNormalizer::normalize_query_variables(&query_variables, variable_triple_map);
 
-        let construct_type_snippet = query_variables
-            .iter()
-            .map(|v| format!("{v} rdf:type {v}_type"))
-            .collect::<Vec<_>>()
-            .join(". \n");
-
-        let query_variable_snippet =
-            query_variables
-                .iter()
-                .fold(String::new(), |mut buffer, var| {
-                    // SAFETY: writing strings is infallible
-                    // https://doc.rust-lang.org/stable/src/alloc/string.rs.html#2879
-                    let _ = write!(buffer, "{var}");
-                    buffer
-                });
-
-        format!(
+        Ok(format!(
             r"
             {prefixes}
             CONSTRUCT {{
-                {query_variable_snippet} .
-                {construct_type_snippet}
+                {normalized_query_variables}
             }}
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
                     {{  
-                        ?s a owl:Ontology .
-                        ?s ?p ?o .
-                        BIND(owl:Ontology AS ?typeS)
+                        {normalized_query_variables}
                     }}
                     UNION
                     {{
-                        {{ {user_query} }}
-
-                        {query_variable_snippet} .
-                        {variable_type_snippet}
-                        
+                        {user_query}
                     }}
                 }}
             }}
             "
-        )
+        ))
     }
 }

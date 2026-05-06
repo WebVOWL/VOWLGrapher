@@ -77,6 +77,7 @@ pub fn SelectStaticInput() -> impl IntoView {
         if name.is_empty() {
             return;
         }
+        error_context.clear();
         match name.try_into() {
             Ok(ontology) => {
                 selected_ontology.set(Some(ontology));
@@ -300,6 +301,7 @@ pub fn UploadInput() -> impl IntoView {
 
             if let Err(e) = tracker_file.upload_files(&files, move |form| {
                 info!("Uploading files");
+                error_context.clear();
                 upload.local_action.dispatch_local(form);
                 upload.mode.set("local".to_string());
             }) {
@@ -325,6 +327,7 @@ pub fn UploadInput() -> impl IntoView {
                         .upload_url(
                             &url,
                             move |u| {
+                                error_context.clear();
                                 upload.remote_action.dispatch(u);
                                 upload.mode.set("remote".to_string());
                             },
@@ -426,6 +429,7 @@ pub fn UploadInput() -> impl IntoView {
 
 #[component]
 pub fn FetchData() -> impl IntoView {
+    let error_context = expect_context::<ErrorLogContext>();
     let fetch = Action::new(|(): &()| async move {
         load_graph(DEFAULT_QUERY.to_string(), true).await;
     });
@@ -435,6 +439,7 @@ pub fn FetchData() -> impl IntoView {
             <button
                 class="flex relative justify-center items-center p-1 mt-1 text-xs bg-gray-200 rounded text-[#000000]"
                 on:click=move |_| {
+                    error_context.clear();
                     fetch.dispatch(());
                 }
             >
@@ -619,6 +624,7 @@ pub fn UploadedOntology() -> impl IntoView {
         if value.is_empty() {
             return;
         }
+        error_context.clear();
         selected_iri.set(Some(value));
     };
 

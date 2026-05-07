@@ -80,11 +80,11 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     let mut quads = Vec::new();
-    while let Some(result) = futures::stream::StreamExt::next(&mut quads_stream).await {
+    while let Some(result) = quads_stream.next().await {
         let quad = result.map_err(|_e| {
-            VOWLGrapherStoreError::from(VOWLGrapherStoreErrorKind::InvalidFileType(
+            VOWLGrapherStoreErrorKind::InvalidFileType(
                 "Failed to read quad from stream".to_string(),
-            ))
+            )
         })?;
         quads.push(quad);
     }
@@ -196,7 +196,7 @@ pub fn parser_from_reader(
                 .rename_blank_nodes()
                 .for_reader(bytes)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| VOWLGrapherStoreError::from(LoaderError::from(e)))
+                .map_err(|e| <LoaderError as Into<VOWLGrapherStoreError>>::into(e.into()))
         };
 
     match format {

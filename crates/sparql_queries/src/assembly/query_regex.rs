@@ -22,7 +22,7 @@ pub static VAR_FIRST: &str = r"(?:SELECT) ([?$].*|\*)(?:WHERE)?";
 /// Pattern matching all SPARQL prefixes in the input.
 ///
 /// Defined by: <https://www.w3.org/TR/2013/REC-sparql11-query-20130321/#rPrefixDecl>
-pub static PREFIX_DECL: &str = r"";
+pub static _PREFIX_DECL: &str = r"";
 
 /// Pattern matching content of SPARQL constructs:
 ///

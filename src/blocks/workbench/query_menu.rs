@@ -1,9 +1,6 @@
-use std::collections::HashMap;
-
 use super::WorkbenchMenuItems;
 use crate::{components::user_input::internal_sparql::load_graph, errors::ErrorLogContext};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
-use log::info;
 use vowlgrapher_sparql_queries::prelude::{QueryAssembler, QueryNormalizer};
 use web_sys::HtmlInputElement;
 

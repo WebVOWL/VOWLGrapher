@@ -165,6 +165,7 @@ impl VOWLGrapherStore {
                         )
                     })?;
                     let line = format!("{} {} {} .\n", t.subject, t.predicate, t.object);
+                    trace!("{line}");
                     buffer.extend_from_slice(line.as_bytes());
                 }
 

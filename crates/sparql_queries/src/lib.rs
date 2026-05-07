@@ -10,7 +10,6 @@ mod snippets;
 /// Exports all the core types of the library.
 pub mod prelude {
     use crate::assembly::DEFAULT_PREFIXES;
-    use crate::assembly::normalization::QueryNormalizer;
     use crate::snippets::general::{
         COLLECTIONS, DOMAIN_RANGES, LABEL, NAMED_INDIVIDUAL_COUNTS, ONTOLOGY, OWL_DEPRECATED,
         XML_BASE,
@@ -28,6 +27,7 @@ pub mod prelude {
     use std::sync::LazyLock;
 
     pub use crate::assembly::QueryAssembler;
+    pub use crate::assembly::normalization::QueryNormalizer;
 
     /// SPARQL snippets that should generally be included in all queries.
     pub static GENERAL_SNIPPETS: [&str; 7] = [
@@ -108,11 +108,12 @@ pub mod prelude {
     /// SPARQL snippets normalized for use in user-defined query assembly.
     pub static NORMALIZED_SNIPPETS: LazyLock<Vec<String>> = LazyLock::new(|| {
         let assembly_snippets = vec![
-            assembly::DOMAIN_RANGES,
+            assembly::DOMAIN,
+            assembly::RANGE,
             assembly::LABEL,
             assembly::ONTOLOGY,
-            assembly::OWL_DEPRECATED,
             assembly::TYPE,
+            OWL_DEPRECATED,
         ];
         let snippets = [assembly_snippets, METADATA_SNIPPETS.into()].concat();
 

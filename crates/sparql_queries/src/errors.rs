@@ -8,6 +8,7 @@ use vowlgrapher_util::prelude::{
 /// The different error types the serializer may raise.
 pub enum QueryAssemblyErrorKind {
     RegexError(Box<regex::Error>),
+    InvalidTripleDecl(String),
 }
 
 impl From<QueryAssemblyErrorKind> for VOWLGrapherError {
@@ -72,12 +73,13 @@ impl From<QueryAssemblyError> for ErrorRecord {
             QueryAssemblyErrorKind::RegexError(regex_error) => {
                 (format!("{regex_error}"), ErrorSeverity::Critical)
             }
+            QueryAssemblyErrorKind::InvalidTripleDecl(e) => (e, ErrorSeverity::Error),
         };
 
         Self::new(
             value.timestamp,
             severity,
-            ErrorType::Serializer,
+            ErrorType::Database,
             message,
             #[cfg(debug_assertions)]
             Some(value.location.to_string()),

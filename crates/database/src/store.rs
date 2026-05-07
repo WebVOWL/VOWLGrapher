@@ -1,6 +1,7 @@
 use futures::stream::{BoxStream, StreamExt};
 use grapher::prelude::GraphDisplayData;
 use log::{debug, info, trace, warn};
+use oxrdf::NamedNode;
 use rdf_fusion::execution::results::QueryResults;
 use rdf_fusion::model::{NamedNodeRef, Quad};
 use rdf_fusion::store::Store;
@@ -151,39 +152,28 @@ impl VOWLGrapherStore {
                 "Query stream is not a SELECT query".to_string(),
             )
             .into()),
-            QueryResults::Graph(mut _query_triple_stream) => {
+            QueryResults::Graph(mut query_triple_stream) => {
+                let start_time = Instant::now();
+
                 let temp_id = uuid::Uuid::new_v4().to_string();
                 let temp_graph_name = format!("urn:vowlr:temp:{temp_id}");
                 debug!("Creating temporary view graph: {temp_graph_name}");
 
-                let mut buffer = Vec::new();
+                let mut quads = Vec::new();
+                let graph_name = NamedNode::new(&temp_graph_name).map_err(|e| {
+                    <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e.into())
+                })?;
 
-                while let Some(maybe_triple) = _query_triple_stream.next().await {
-                    let t = maybe_triple.map_err(|e| {
-                        <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(
-                            VOWLGrapherStoreError::from(e),
-                        )
+                while let Some(maybe_triple) = query_triple_stream.next().await {
+                    let triple = maybe_triple.map_err(|e| {
+                        <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e.into())
                     })?;
-                    let line = format!("{} {} {} .\n", t.subject, t.predicate, t.object);
-                    trace!("{line}");
-                    buffer.extend_from_slice(line.as_bytes());
+                    trace!("{triple}");
+                    quads.push(triple.in_graph(graph_name.clone()));
                 }
 
-                let start_time = Instant::now();
-                let cursor = std::io::Cursor::new(buffer);
-
-                let prepared = vowlgrapher_parser::parser_util::parser_from_reader(
-                    cursor,
-                    DataType::NTriples,
-                    false,
-                    &temp_graph_name,
-                )
-                .map_err(<VOWLGrapherStoreError as Into<VOWLGrapherError>>::into)?;
-
-                self.session.extend(prepared).await.map_err(|e| {
-                    <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(
-                        VOWLGrapherStoreError::from(e),
-                    )
+                self.session.extend(quads).await.map_err(|e| {
+                    <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e.into())
                 })?;
 
                 debug!(

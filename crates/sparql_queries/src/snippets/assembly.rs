@@ -1,20 +1,23 @@
 pub const TYPE: &str = r"{
         ?s a ?o
+        BIND(rdf:type as ?p)
     }";
 
 pub const ONTOLOGY: &str = r"{
-        ?ont a owl:Ontology
-    }";
-
-pub const OWL_DEPRECATED: &str = r"{
-        ?s owl:deprecated ?o
+        ?base a owl:Ontology
     }";
 
 pub const LABEL: &str = r"{
-        ?s rdfs:label ?o
+        ?p a rdfs:label .
+        ?s ?p ?o
     }";
 
-pub const DOMAIN_RANGES: &str = r"{
-        ?s rdfs:domain ?o
-        ?s rdfs:range ?o
+pub const DOMAIN: &str = r"{
+        ?p a rdfs:domain .
+        ?t1 ?p ?t0
+    }";
+
+pub const RANGE: &str = r"{
+        ?p a rdfs:range .
+        ?t1 ?p ?t2
     }";

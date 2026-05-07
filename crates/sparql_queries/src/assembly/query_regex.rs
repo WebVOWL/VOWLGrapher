@@ -26,7 +26,5 @@ pub static PREFIX_DECL: &str = r"";
 
 /// Pattern matching content of SPARQL constructs:
 ///
-/// - `FILTER`
-/// - `BIND`
 /// - `#`
-pub static QUERY_NORMALIZATION: &str = r"(?:FILTER|BIND|#).*\s";
+pub static QUERY_NORMALIZATION: &str = r"(?:#).*\s";

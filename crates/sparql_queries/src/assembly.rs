@@ -3,15 +3,11 @@ pub mod prefix;
 pub mod query_regex;
 
 use crate::assembly::normalization::QueryNormalizer;
-use crate::assembly::query_regex::{VAR, VAR_FIRST};
 use crate::errors::QueryAssemblyError;
 use crate::prelude::GENERAL_SNIPPETS;
 use crate::snippets::SparqlSnippet;
 use crate::snippets::void::VOID;
 use grapher::prelude::ElementType;
-use indexmap::IndexSet;
-use log::info;
-use regex::Regex;
 use std::collections::HashMap;
 
 // TODO: Remove when automatic prefix fetching is implemented.
@@ -30,31 +26,6 @@ pub const DEFAULT_PREFIXES: [&str; 8] = [
 pub struct QueryAssembler;
 
 impl QueryAssembler {
-    /// Returns the significant query variables of the query.
-    ///
-    /// That is, all query variables of the first SELECT clause.
-    ///
-    /// # Note
-    /// Do not remove elements from the returned [`IndexSet`]. Doing so breaks the ordering!
-    ///
-    /// # Errors
-    /// Returns an error if the internal Regex procedure fails.
-    pub fn get_significant_variable_count(
-        query: &str,
-    ) -> Result<IndexSet<String>, QueryAssemblyError> {
-        let mut q_set = IndexSet::new();
-        let query_var_re = Regex::new(VAR)?;
-        let var_first_re = Regex::new(VAR_FIRST)?;
-
-        for (_, [c]) in var_first_re.captures_iter(query).map(|c| c.extract()) {
-            query_var_re.find_iter(c).for_each(|m| {
-                q_set.insert(m.as_str().to_string());
-            });
-        }
-
-        Ok(q_set)
-    }
-
     /// Construct a SPARQL query from URI prefixes and SPARQL snippets.
     ///
     /// `prefixes` is the collection of prefixes to use.
@@ -118,7 +89,7 @@ impl QueryAssembler {
     /// Returns an error if the query could not be assembled.
     pub fn assemble_user_query(
         user_query: &str,
-        variable_triple_map: &HashMap<String, [String; 3]>,
+        triple_decls: &str,
     ) -> Result<String, QueryAssemblyError> {
         // PIPELINE:
         // 1. Gather query variables from after SELECT.
@@ -130,36 +101,35 @@ impl QueryAssembler {
         //  4.1. Include SPARQL snippets with relevant type information.
         // 5. Load result into DB and query as normal.
 
-        info!("{user_query}");
-
         let prefixes = DEFAULT_PREFIXES
             .iter()
             .map(|item| format!("PREFIX {item}"))
             .collect::<Vec<_>>()
             .join("\n");
 
-        let query_variables = Self::get_significant_variable_count(user_query)?;
-
-        info!("{query_variables:?}");
-
-        let normalized_query_variables =
-            QueryNormalizer::normalize_query_variables(&query_variables, variable_triple_map);
+        let query_variables = QueryNormalizer::get_significant_query_variables(user_query)?;
+        let variable_triple_map = QueryNormalizer::create_variable_triple_map(triple_decls)?;
+        let normalized_template_variables = QueryNormalizer::normalize_variables_for_template(
+            &query_variables,
+            &variable_triple_map,
+        );
+        let normalized_pattern_variables = QueryNormalizer::normalize_variables_for_pattern(
+            &query_variables,
+            &variable_triple_map,
+        );
 
         Ok(format!(
             r"
             {prefixes}
             CONSTRUCT {{
-                {normalized_query_variables}
+                {normalized_template_variables}
             }}
             WHERE {{
                 GRAPH <{{GRAPH_IRI}}> {{
-                    {{  
-                        {normalized_query_variables}
-                    }}
-                    UNION
                     {{
                         {user_query}
-                    }}
+                    }} . 
+                    {normalized_pattern_variables}
                 }}
             }}
             "

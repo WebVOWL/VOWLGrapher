@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
+/* 
+ * JetBrains Mono Font
+ * Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+ * Licensed under the SIL Open Font License, Version 1.1.
+ * The license text can be found in "public/fonts/JetBrainsMono-Regular_LICENSE.txt"
+ */
 @font-face {
-    font-family: 'JetBrains Mono';
-    src: url('/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+    font-family: "JetBrains Mono";
+    src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -11,7 +17,6 @@
 @theme {
     --font-jetbrains: "JetBrains Mono", monospace;
 }
-
 
 /* Marker for dark mode support */
 @custom-variant dark (&:where(.dark, .dark *));

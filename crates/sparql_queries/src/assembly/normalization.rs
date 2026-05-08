@@ -46,7 +46,7 @@
 //! 1. Return _T_ as part of the solution.
 //! 2. Treat _A_, _B_, and _C_ as independent. See 1A.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexSet;
 use regex::Regex;
@@ -66,6 +66,52 @@ pub type VariableTripleMap = HashMap<String, [String; 3]>;
 pub struct QueryNormalizer;
 
 impl QueryNormalizer {
+    /// Returns a tuple consisting of:
+    /// - query variables as a string normalized to a sequence of triples.
+    ///   They should be used in the graph template of a `CONSTRUCT` query.
+    /// - query variables as a string with all necessary serialization information.
+    ///   They should be used in the graph pattern of a `CONSTRUCT` query.
+    ///
+    /// ## Arguments
+    /// - `user_query` is the SPARQL query to normalize.\
+    ///   Normalization is necessary to prepare the query for serialization.
+    /// - `triple_decls` is a variable map of user-defined query variable triple relationships.\
+    ///   That is, a mapping from a subject variable to the triple containing it.
+    ///
+    /// # Example
+    /// Usage of return values.
+    ///
+    /// ```sparql
+    /// CONSTRUCT {
+    /// # This is the graph template
+    /// } WHERE {
+    /// # This is the graph pattern
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    /// If the user-defined triples in `triple_decls` are invalid.
+    ///
+    /// If the internal [`Regex`] procedure fails.
+    pub fn normalize_query_variables(
+        user_query: &str,
+        triple_decls: &str,
+    ) -> Result<(String, String), QueryAssemblyError> {
+        let query_variables = Self::get_significant_query_variables(user_query)?;
+        let variable_triple_map = Self::create_variable_triple_map(triple_decls)?;
+
+        let (normalized_pattern_variables, template_triples) =
+            Self::normalize_variables_for_pattern(&query_variables, &variable_triple_map);
+
+        let normalized_template_variables = Self::normalize_variables_for_template(
+            &query_variables,
+            &variable_triple_map,
+            template_triples,
+        );
+
+        Ok((normalized_template_variables, normalized_pattern_variables))
+    }
+
     /// Returns query variables as a string normalized to a sequence of triples.
     ///
     /// The return value should be used in the graph template of a `CONSTRUCT` query.
@@ -78,9 +124,10 @@ impl QueryNormalizer {
     /// } WHERE {}
     /// ```
     #[expect(clippy::branches_sharing_code, reason = "testing")]
-    pub fn normalize_variables_for_template(
+    fn normalize_variables_for_template(
         query_variables: &IndexSet<String>,
         variable_triple_map: &VariableTripleMap,
+        template_triples: Vec<String>,
     ) -> String {
         let mut triples = Vec::new();
         for qvar in query_variables {
@@ -103,6 +150,7 @@ impl QueryNormalizer {
                 ));
             }
         }
+        triples.extend(template_triples);
         triples.push(assembly::ONTOLOGY.replace(['{', '}'], ""));
         triples.join(" .\n")
     }
@@ -121,63 +169,102 @@ impl QueryNormalizer {
     fn normalize_variables_for_pattern(
         query_variables: &IndexSet<String>,
         variable_triple_map: &VariableTripleMap,
-    ) -> String {
-        let mut triples = Vec::new();
+    ) -> (String, Vec<String>) {
+        let mut template_triples = Vec::new();
+        let mut pattern_triples = Vec::new();
         let mut variable_snippets = Vec::new();
+        let mut visited = HashSet::new();
         for qvar in query_variables {
+            // Prevent dublicate snippets
+            if visited.contains(qvar) {
+                continue;
+            }
+
             if let Some(triple) = variable_triple_map.get(qvar) {
                 // Dependent
-                triples.push(format!(
+                pattern_triples.push(format!(
                     "{{\n\t{} {} {}\n}}",
                     triple[0], triple[1], triple[2]
                 ));
-                variable_snippets.extend(Self::build_snippet_for_triple(triple));
+                variable_snippets.extend(Self::build_snippet_for_triple(
+                    triple,
+                    &mut visited,
+                    &mut template_triples,
+                ));
             } else {
                 // Independent
                 variable_snippets.push(Self::build_snippet_for_variable(qvar));
+                visited.insert(qvar.clone());
             }
         }
-
-        triples.extend(variable_snippets);
-        triples.join(" UNION ")
+        pattern_triples.extend(variable_snippets);
+        (pattern_triples.join(" UNION "), template_triples)
     }
 
     /// Returns SPARQL snippets which provide necessary serialization information
     /// for the variable.
     fn build_snippet_for_variable(variable: &str) -> String {
-        NORMALIZED_SNIPPETS
-            .iter()
-            .map(|snippet| {
-                snippet
-                    .replace("?_o", &Self::encode_object(variable))
-                    .replace("?_p", &Self::encode_predicate(variable))
-                    .replace("?_s", variable)
-            })
-            .collect::<Vec<_>>()
-            .join(" UNION ")
+        let mut snippets = Vec::new();
+
+        for snippet in NORMALIZED_SNIPPETS.iter() {
+            if Self::is_snippet_triple_pattern(snippet) {
+                continue;
+            }
+
+            let norm = snippet
+                .replace("?_o", &Self::encode_object(variable))
+                .replace("?_p", &Self::encode_predicate(variable))
+                .replace("?_s", variable);
+            snippets.push(norm);
+        }
+        snippets.join(" UNION ")
     }
 
     /// Returns SPARQL snippets which provide necessary serialization information
-    /// for the variable.
-    fn build_snippet_for_triple(triple: &[String; 3]) -> Vec<String> {
-        let mut out = Vec::new();
+    /// for the triple, including its variables.
+    fn build_snippet_for_triple(
+        triple: &[String; 3],
+        visited: &mut HashSet<String>,
+        template_triples: &mut Vec<String>,
+    ) -> Vec<String> {
+        let mut snippets = Vec::new();
         for variable in triple {
-            let a = NORMALIZED_SNIPPETS
-                .iter()
-                .map(|snippet| {
-                    snippet
+            let mut normalized_snippets = Vec::new();
+            for snippet in NORMALIZED_SNIPPETS.iter() {
+                let norm_snippet = {
+                    let is_predicate = *variable == triple[1];
+                    let is_domain = snippet.contains("rdfs:domain");
+                    let is_range = snippet.contains("rdfs:range");
+
+                    if !is_predicate && (is_domain || is_range) {
+                        // Don't include domain/range snippets for subject or object
+                        continue;
+                    }
+
+                    let v1 = snippet
                         .replace("?_o", &Self::encode_object(variable))
                         .replace("?_p", &Self::encode_predicate(variable))
-                        .replace("?_s", variable)
-                        // Special case for domain/range
-                        .replace("?t2 ", &triple[2])
-                        .replace("?t0 ", &triple[0])
-                })
-                .collect::<Vec<_>>()
-                .join(" UNION ");
-            out.push(a);
+                        .replace("?_s", variable);
+
+                    // Special case for predicate.
+                    // Enable domain/range queries.
+                    if is_predicate {
+                        if is_domain {
+                            template_triples.push(format!("{variable} rdfs:domain {}", triple[0]));
+                        } else if is_range {
+                            template_triples.push(format!("{variable} rdfs:range {}", triple[2]));
+                        }
+                        v1.replace("?*2", &triple[2]).replace("?*0", &triple[0])
+                    } else {
+                        v1
+                    }
+                };
+                normalized_snippets.push(norm_snippet);
+            }
+            visited.insert(variable.clone());
+            snippets.push(normalized_snippets.join(" UNION "));
         }
-        out
+        snippets
     }
 
     /// Normalizes SPARQL snippets for use in user-defined query assembly.
@@ -192,7 +279,13 @@ impl QueryNormalizer {
                 let norm_v1 = snippet
                     .replace("?id", "?_s")
                     .replace("?nodeType", "?_p")
-                    .replace("?target", "?_o");
+                    .replace("?target", "?_o")
+                    // Special case for domain/range.
+                    // Encoded `t` to `*`, an illegal char in SPARQL, to prevent triple variables
+                    // in [`QueryNormalizer::build_snippet_for_triple`] and [`QueryNormalizer::build_snippet_for_variable`]
+                    // from potentially overiding the previous value when encoding triple variables.
+                    .replace("?t2", "?*2")
+                    .replace("?t0", "?*0");
                 query_norm_re.replace_all(&norm_v1, "").to_string()
             })
             .collect();
@@ -207,13 +300,17 @@ impl QueryNormalizer {
         format!("{subject}_o")
     }
 
+    fn is_snippet_triple_pattern(snippet: &str) -> bool {
+        snippet.contains("rdfs:domain") || snippet.contains("rdfs:range")
+    }
+
     /// Returns the variable map of user-defined query variable triple relationships.
     ///
     /// That is, a mapping from a subject variable to the triple containing it.
     ///
     /// # Errors
-    /// Returns an error if the user-defined triples are invalid.
-    pub fn create_variable_triple_map(
+    /// If the user-defined triples are invalid.
+    fn create_variable_triple_map(
         triple_decls: &str,
     ) -> Result<VariableTripleMap, QueryAssemblyError> {
         let mut map = HashMap::new();
@@ -222,7 +319,8 @@ impl QueryNormalizer {
                 let variables = Self::get_query_variables(triple_decl)?;
                 if variables.len() != 3 {
                     let msg = format!(
-                        "Error at line {line}: A triple must consist of exactly 3 variables"
+                        "Error at line {}: A triple must consist of exactly 3 variables",
+                        line + 1
                     );
                     return Err(QueryAssemblyErrorKind::InvalidTripleDecl(msg))?;
                 }

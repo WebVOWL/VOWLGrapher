@@ -1,3 +1,4 @@
+#[cfg(feature = "server")]
 use bytesize::ByteSize;
 #[cfg(feature = "server")]
 use futures::StreamExt;
@@ -523,6 +524,7 @@ impl Default for FileUpload {
     }
 }
 
+#[cfg(feature = "server")]
 fn merge_warnings(
     left: Option<VOWLGrapherError>,
     right: Option<VOWLGrapherError>,

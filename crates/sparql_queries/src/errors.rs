@@ -25,7 +25,7 @@ impl From<QueryAssemblyErrorKind> for ErrorRecord {
     }
 }
 
-/// Wrapper for errors raised by the serializer.
+/// Wrapper for errors raised by the query assembler.
 #[derive(Debug)]
 pub struct QueryAssemblyError {
     /// The contained error type.

@@ -182,7 +182,7 @@ impl VOWLGrapherStore {
                     size,
                     Instant::now()
                         .checked_duration_since(start_time)
-                        .unwrap_or(Duration::new(0, 0))
+                        .unwrap_or_default()
                         .as_secs_f32()
                 );
 

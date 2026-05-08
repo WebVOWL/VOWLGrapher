@@ -109,16 +109,8 @@ impl QueryAssembler {
             .collect::<Vec<_>>()
             .join("\n");
 
-        let query_variables = QueryNormalizer::get_significant_query_variables(user_query)?;
-        let variable_triple_map = QueryNormalizer::create_variable_triple_map(triple_decls)?;
-        let normalized_template_variables = QueryNormalizer::normalize_variables_for_template(
-            &query_variables,
-            &variable_triple_map,
-        );
-        let normalized_pattern_variables = QueryNormalizer::normalize_variables_for_pattern(
-            &query_variables,
-            &variable_triple_map,
-        );
+        let (normalized_template_variables, normalized_pattern_variables) =
+            QueryNormalizer::normalize_query_variables(user_query, triple_decls)?;
 
         Ok(format!(
             r"

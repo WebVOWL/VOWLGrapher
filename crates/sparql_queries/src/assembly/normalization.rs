@@ -12,15 +12,15 @@
 //!
 //! b) A _dependent_ query variable may form triples with other query variables, but which triples it is part of is unknown.
 //!    - Consider the query `SELECT ?a ?b ?c ?d`.\
-//!      Valid triples are `a - b - c` and `b - c - d`.\
-//!      Now, we have these possibilities:
-//!         - triple a is valid  (?d is independent)
-//!         - triple d is valid  (?a is independent)
+//!      Example valid triples are: `a - b - c` and `b - c - d` (however, any variable combination is potentially valid) \
+//!      Now, for the example, we have these possibilities:
+//!         - triple `a - b - c` is valid  (?d is independent)
+//!         - triple `b - c - d` is valid  (?a is independent)
 //!         - No triple is valid (all query variables are independent)
 //!  
 //! As such, 1-2 query variables are considered _independent_, since they cannot form a triple.
 //!
-//! However with >2 query variables, at least one triple can be formed. However, forming semantically correct triples is hard due to:
+//! With >2 query variables, at least one triple can be formed. However, forming semantically correct triples is hard due to:
 //! 1. The ordering of the query variables is not quaranteed.
 //!    - Consider `SELECT * WHERE {?s ?p ?o}`. A valid solution sequence is `?o ?p ?s`.
 //! 2. Mapping query variables to triples is ambiguous, see b).
@@ -61,10 +61,22 @@ use crate::{
 pub type VariableTripleMap = HashMap<String, [String; 3]>;
 
 /// Provides methods to normalize user-defined SPARQL queries.
+///
+/// Normalization is necessary to prepare the query for serialization.
 pub struct QueryNormalizer;
 
 impl QueryNormalizer {
     /// Returns query variables as a string normalized to a sequence of triples.
+    ///
+    /// The return value should be used in the graph template of a `CONSTRUCT` query.
+    ///
+    /// # Example
+    ///
+    /// ```sparql
+    /// CONSTRUCT {
+    /// # This is the graph template
+    /// } WHERE {}
+    /// ```
     #[expect(clippy::branches_sharing_code, reason = "testing")]
     pub fn normalize_variables_for_template(
         query_variables: &IndexSet<String>,
@@ -96,7 +108,17 @@ impl QueryNormalizer {
     }
 
     /// Returns query variables as a string with all necessary serialization information.
-    pub fn normalize_variables_for_pattern(
+    ///
+    /// The return value should be used in the graph pattern of a `CONSTRUCT` query.
+    ///
+    /// # Example
+    ///
+    /// ```sparql
+    /// CONSTRUCT {} WHERE {
+    /// # This is the graph pattern
+    /// }
+    /// ```
+    fn normalize_variables_for_pattern(
         query_variables: &IndexSet<String>,
         variable_triple_map: &VariableTripleMap,
     ) -> String {
@@ -161,7 +183,7 @@ impl QueryNormalizer {
     /// Normalizes SPARQL snippets for use in user-defined query assembly.
     ///
     /// # Errors
-    /// Returns an error if the snippets could not be normalized.
+    /// If the snippets could not be normalized.
     pub fn normalize_snippets(snippets: &Vec<&str>) -> Result<Vec<String>, QueryAssemblyError> {
         let query_norm_re = Regex::new(QUERY_NORMALIZATION)?;
         let normalized = snippets
@@ -186,6 +208,8 @@ impl QueryNormalizer {
     }
 
     /// Returns the variable map of user-defined query variable triple relationships.
+    ///
+    /// That is, a mapping from a subject variable to the triple containing it.
     ///
     /// # Errors
     /// Returns an error if the user-defined triples are invalid.
@@ -223,11 +247,11 @@ impl QueryNormalizer {
     ///
     /// That is, all query variables of the first SELECT clause.
     ///
-    /// # Note
+    /// # Warning
     /// Do not remove elements from the returned [`IndexSet`]. Doing so breaks the ordering!
     ///
     /// # Errors
-    /// Returns an error if the internal Regex procedure fails.
+    /// If the internal [`Regex`] procedure fails.
     pub fn get_significant_query_variables(
         query: &str,
     ) -> Result<IndexSet<String>, QueryAssemblyError> {
@@ -244,15 +268,13 @@ impl QueryNormalizer {
         Ok(q_set)
     }
 
-    /// Returns the significant query variables of the query.
+    /// Returns all query variables present in the query.
     ///
-    /// That is, all query variables of the first SELECT clause.
-    ///
-    /// # Note
+    /// # Warning
     /// Do not remove elements from the returned [`IndexSet`]. Doing so breaks the ordering!
     ///
     /// # Errors
-    /// Returns an error if the internal Regex procedure fails.
+    /// If the internal [`Regex`] procedure fails.
     pub fn get_query_variables(query: &str) -> Result<IndexSet<String>, QueryAssemblyError> {
         let mut q_set = IndexSet::new();
         let query_var_re = Regex::new(VAR)?;

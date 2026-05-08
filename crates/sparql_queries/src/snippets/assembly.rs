@@ -1,6 +1,6 @@
 pub const TYPE: &str = r"{
-        ?s a ?o
-        BIND(rdf:type as ?p)
+        ?id a ?target
+        BIND(rdf:type as ?nodeType)
     }";
 
 pub const ONTOLOGY: &str = r"{
@@ -8,16 +8,16 @@ pub const ONTOLOGY: &str = r"{
     }";
 
 pub const LABEL: &str = r"{
-        ?p a rdfs:label .
-        ?s ?p ?o
+        ?nodeType a rdfs:label .
+        ?id ?nodeType ?target
     }";
 
 pub const DOMAIN: &str = r"{
-        ?p a rdfs:domain .
-        ?t1 ?p ?t0
+        ?nodeType a rdfs:domain .
+        ?id ?nodeType ?t0
     }";
 
 pub const RANGE: &str = r"{
-        ?p a rdfs:range .
-        ?t1 ?p ?t2
+        ?nodeType a rdfs:range .
+        ?id ?nodeType ?t2
     }";

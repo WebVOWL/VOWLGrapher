@@ -127,11 +127,9 @@ impl QueryNormalizer {
             .iter()
             .map(|snippet| {
                 snippet
-                    .replace("?o", &Self::encode_object(variable))
-                    .replace("?p", &Self::encode_predicate(variable))
-                    .replace("?s", variable)
-                    // Special case for domain/range
-                    .replace("?po", "to")
+                    .replace("?_o", &Self::encode_object(variable))
+                    .replace("?_p", &Self::encode_predicate(variable))
+                    .replace("?_s", variable)
             })
             .collect::<Vec<_>>()
             .join(" UNION ")
@@ -146,13 +144,12 @@ impl QueryNormalizer {
                 .iter()
                 .map(|snippet| {
                     snippet
-                        .replace("?o", &Self::encode_object(variable))
-                        .replace("?p", &Self::encode_predicate(variable))
-                        .replace("?s", variable)
+                        .replace("?_o", &Self::encode_object(variable))
+                        .replace("?_p", &Self::encode_predicate(variable))
+                        .replace("?_s", variable)
                         // Special case for domain/range
-                        .replace("?t2", &triple[2])
-                        .replace("?t1", &triple[1])
-                        .replace("?t0", &triple[0])
+                        .replace("?t2 ", &triple[2])
+                        .replace("?t0 ", &triple[0])
                 })
                 .collect::<Vec<_>>()
                 .join(" UNION ");
@@ -171,9 +168,9 @@ impl QueryNormalizer {
             .iter()
             .map(|snippet| {
                 let norm_v1 = snippet
-                    .replace("?id", "?s")
-                    .replace("?nodeType", "?p")
-                    .replace("?target", "?o");
+                    .replace("?id", "?_s")
+                    .replace("?nodeType", "?_p")
+                    .replace("?target", "?_o");
                 query_norm_re.replace_all(&norm_v1, "").to_string()
             })
             .collect();

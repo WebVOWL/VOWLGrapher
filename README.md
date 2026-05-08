@@ -64,16 +64,17 @@ Benchmarks are performed on a Windows 11 Home HP ENVY Laptop 13 with a 60 Hz scr
 $\triangle$ indicates a time-out after 1 hour of loading.  
 WebVOWL refers to [version 1.3.9](https://github.com/WebVOWL/WebVOWL-Legacy/tree/28e92c7220302c50aa32cebab977ab6e884d8887).
 
-| Ontology      | Triples                                         | FPS  |  Load (s)   | Mem. (MB) | FPS  | Load (s) | Mem. (MB) |
-| :------------ | :---------------------------------------------- | :--: | :---------: | :-------: | :--: | :------: | :-------: |
-|               | <td colspan=3>WebVOWL <td colspan=3>VOWLGrapher |
-| FOAF          | 631                                             |  60  |      2      |   16.8    |  60  |   $<1$   |   30.6    |
-| GoodRelations | 1,834                                           |  31  |      3      |   24.8    |  60  |    1     |   33.4    |
-| VIVO          | 6,810                                           |  10  |      3      |   59.3    |  57  |    2     |   53.3    |
-| SIO           | 14,675                                          |  5   |      3      |    112    |  27  |    3     |   69.4    |
-| SWEET         | 55,597                                          |  1   |     74      |    523    |  8   |    48    |    213    |
-| ENVO          | 106,643                                         | $<1$ |      6      |    544    |  6   |    7     |    247    |
-| GO            | 1,444,037                                       |  --  | $\triangle$ |    --     | $<1$ |   157    |   1,298   |
+                           WebVOWL                  VOWLGrapher
+
+| Ontology      | Triples   | FPS  |  Load (s)   | Mem. (MB) | FPS  | Load (s) | Mem. (MB) |
+| :------------ | :-------- | :--: | :---------: | :-------: | :--: | :------: | :-------: |
+| FOAF          | 631       |  60  |      2      |   16.8    |  60  |   $<1$   |   30.6    |
+| GoodRelations | 1,834     |  31  |      3      |   24.8    |  60  |    1     |   33.4    |
+| VIVO          | 6,810     |  10  |      3      |   59.3    |  57  |    2     |   53.3    |
+| SIO           | 14,675    |  5   |      3      |    112    |  27  |    3     |   69.4    |
+| SWEET         | 55,597    |  1   |     74      |    523    |  8   |    48    |    213    |
+| ENVO          | 106,643   | $<1$ |      6      |    544    |  6   |    7     |    247    |
+| GO            | 1,444,037 |  --  | $\triangle$ |    --     | $<1$ |   157    |   1,298   |
 
 ## Run using Docker
 

@@ -11,8 +11,9 @@ use grapher::prelude::ElementType;
 use std::collections::HashMap;
 
 // TODO: Remove when automatic prefix fetching is implemented.
-pub const DEFAULT_PREFIXES: [&str; 8] = [
-    "vowlgrapher: <http://www.example.com/iri#>",
+pub const DEFAULT_PREFIXES: [&str; 9] = [
+    "example: <http://www.example.com/iri#>",
+    "vowlgrapher: <https://purl.org/vowlgrapher>",
     "owl: <http://www.w3.org/2002/07/owl#>",
     "rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
     "rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>",

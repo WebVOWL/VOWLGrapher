@@ -20,7 +20,13 @@ pub fn CustomSparql() -> impl IntoView {
             }
         }
     });
-    let variable_count_greater_than_2 = Signal::derive(move || query_variables.read().len() > 2);
+    let variable_count_greater_than_2 = Signal::derive(move || {
+        let value = query_variables.read().len() > 2;
+        if !value {
+            triple_input.set(String::new());
+        }
+        value
+    });
 
     let is_loading = RwSignal::new(false);
     let textarea_ref = NodeRef::<leptos::html::Textarea>::new();

@@ -38,7 +38,6 @@
     vowlgrapher-serializer={path="../serializer"}
     vowlgrapher-sparql-queries={path="../sparql_queries"}
     vowlgrapher-util={path="../util", features=["server"]}
-    # strum.workspace=true
 
 [dev-dependencies]
     anyhow="1.0.102"
@@ -46,4 +45,3 @@
     sovs-parser={git="https://github.com/WebVOWL/sovs-parser", version="0.1.0", features=[
         "test-suite",
     ]}
-    uuid={version="1.0", features=["v4"]}

@@ -66,7 +66,7 @@ WebVOWL refers to [version 1.3.9](https://github.com/WebVOWL/WebVOWL-Legacy/tree
 
 | Ontology      | Triples                                         | FPS  |  Load (s)   | Mem. (MB) | FPS  | Load (s) | Mem. (MB) |
 | :------------ | :---------------------------------------------- | :--: | :---------: | :-------: | :--: | :------: | :-------: |
-|               | <td colspan=3>WebVOWL <td colspan=3>VOWLGrapher |      |             |           |
+|               | <td colspan=3>WebVOWL <td colspan=3>VOWLGrapher |
 | FOAF          | 631                                             |  60  |      2      |   16.8    |  60  |   $<1$   |   30.6    |
 | GoodRelations | 1,834                                           |  31  |      3      |   24.8    |  60  |    1     |   33.4    |
 | VIVO          | 6,810                                           |  10  |      3      |   59.3    |  57  |    2     |   53.3    |

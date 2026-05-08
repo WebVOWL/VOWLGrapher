@@ -1,0 +1,21 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb-dap",
+            "request": "launch",
+            "name": "Debug",
+            "program": "${workspaceFolder}/target/x86_64-unknown-linux-gnu/debug/vowlgrapher",
+            "args": [],
+            "env": [
+                "RUST_BACKTRACE=1",
+                "RUST_LOG=trace,datafusion=off,datafusion_physical_plan=off,datafusion_optimizer=off,sqlparser=off"
+            ],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

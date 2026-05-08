@@ -86,7 +86,9 @@ impl QueryAssembler {
     /// Construct a serializable, user-defined SPARQL query.
     ///
     /// # Errors
-    /// Returns an error if the query could not be assembled.
+    /// If the user-defined triples in `triple_decls` are invalid.
+    ///
+    /// If the internal [`Regex`] procedure fails.
     pub fn assemble_user_query(
         user_query: &str,
         triple_decls: &str,

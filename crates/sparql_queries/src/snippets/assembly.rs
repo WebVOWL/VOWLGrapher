@@ -13,11 +13,9 @@ pub const LABEL: &str = r"{
     }";
 
 pub const DOMAIN: &str = r"{
-        ?nodeType a rdfs:domain .
-        ?id ?nodeType ?t0
+        ?id rdfs:domain ?t0
     }";
 
 pub const RANGE: &str = r"{
-        ?nodeType a rdfs:range .
-        ?id ?nodeType ?t2
+        ?id rdfs:range ?t2
     }";

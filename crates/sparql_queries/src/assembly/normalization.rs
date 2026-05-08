@@ -123,7 +123,6 @@ impl QueryNormalizer {
     /// # This is the graph template
     /// } WHERE {}
     /// ```
-    #[expect(clippy::branches_sharing_code, reason = "testing")]
     fn normalize_variables_for_template(
         query_variables: &IndexSet<String>,
         variable_triple_map: &VariableTripleMap,
@@ -134,21 +133,14 @@ impl QueryNormalizer {
             if let Some([triple_0, triple_1, triple_2]) = variable_triple_map.get(qvar) {
                 // Dependent
                 triples.push(format!("{triple_0} {triple_1} {triple_2}"));
-                triples.push(format!(
-                    "{} {} {}",
-                    qvar,
-                    Self::encode_predicate(qvar),
-                    Self::encode_object(qvar)
-                ));
-            } else {
-                // Independent
-                triples.push(format!(
-                    "{} {} {}",
-                    qvar,
-                    Self::encode_predicate(qvar),
-                    Self::encode_object(qvar)
-                ));
             }
+            // Independent
+            triples.push(format!(
+                "{} {} {}",
+                qvar,
+                Self::encode_predicate(qvar),
+                Self::encode_object(qvar)
+            ));
         }
         triples.extend(template_triples);
         triples.push(assembly::ONTOLOGY.replace(['{', '}'], ""));

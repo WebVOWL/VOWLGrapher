@@ -172,13 +172,14 @@ impl VOWLGrapherStore {
                     quads.push(triple.in_graph(graph_name.clone()));
                 }
 
+                let size = quads.len();
                 self.session.extend(quads).await.map_err(|e| {
                     <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e.into())
                 })?;
 
                 debug!(
                     "Loaded {} quads in {} s",
-                    temp_graph_name,
+                    size,
                     Instant::now()
                         .checked_duration_since(start_time)
                         .unwrap_or(Duration::new(0, 0))

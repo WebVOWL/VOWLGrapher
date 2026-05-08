@@ -2,6 +2,7 @@ use leptos::prelude::*;
 use leptos::server_fn::ServerFnError;
 use leptos::server_fn::codec::Rkyv;
 use std::fmt::Display;
+#[cfg(feature = "server")]
 use std::path::Path;
 #[cfg(feature = "server")]
 use vowlgrapher_database::prelude::VOWLGrapherStore;

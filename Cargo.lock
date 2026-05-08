@@ -6140,8 +6140,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e48830cfa4b03515e04a9e1f143baa7ad8d3ece05666eab771984e77387d15f"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "datafusion",
  "futures",
@@ -6160,8 +6159,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-encoding"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc75ce64fc4df92255a435fc14c22fe353bc91e72f92543691853abdd63f1caf"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "datafusion",
  "rdf-fusion-model",
@@ -6171,8 +6169,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-execution"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "960dd2a5ddc0e8436fdf9ed8c019cf87e0df34af9c104e9cd9b973aef0ecc409"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -6194,8 +6191,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-extensions"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84cac74c571d7777612efc8750ca81b92b7f567a058e37a1a9d2bbda6072aa9"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -6207,8 +6203,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-functions"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "838c1fb6e6a1d24b0e9dd994b32dea1a06f9d713e5801fd3bd856019c7e7d1da"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "datafusion",
  "itertools 0.14.0",
@@ -6226,8 +6221,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-logical"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d788b4034ac4d7071f4542e72778460be6ee2dc5e658e5083c72dadd594c711"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "datafusion",
  "rdf-fusion-encoding",
@@ -6239,8 +6233,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-model"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83df3a118d0f577a243339917e9e0c79a0b4e9cb2efe55c30e48db55cab5afca"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "datafusion",
  "oxiri",
@@ -6253,8 +6246,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-physical"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11376333f2267b5c365ba00feb7570b0acadcb686231c52a053d81b63a5a6758"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "async-trait",
  "datafusion",
@@ -6269,8 +6261,7 @@ dependencies = [
 [[package]]
 name = "rdf-fusion-storage"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbb55eab8904d73081f1729f999efff8e6e0e01ec0a016dcc3484b355fac9271"
+source = "git+https://github.com/WebVOWL/rdf-fusion-codeberg#b2d8d738984fca965653d567a0e6394e874e75c5"
 dependencies = [
  "async-trait",
  "dashmap",

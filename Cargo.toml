@@ -74,14 +74,14 @@
         log="0.4"
         oxilangtag="0.1.5"
         rayon="1.10"
-        rdf-fusion="0.1.0"
+        rdf-fusion={git="https://github.com/WebVOWL/rdf-fusion-codeberg"}
         rkyv="0.8.12"
         serde={version="1.0", features=["derive"]}
         smallvec={version="1.15.1", features=["union"]}
         strum={version="0.27", features=["derive"]}
         tokio="1.48.0"
+        uuid={version="1.0", features=["v4"]}
         web-sys="0.3.77"
-        uuid ={version = "1.0", features = ["v4"]}
 
 
 [dependencies]

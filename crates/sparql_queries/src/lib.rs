@@ -86,25 +86,6 @@ pub mod prelude {
         ANNOTATED_TARGET,
     ];
 
-    // PERF: this could maybe be a thread_local instead?
-    /// The default query contains all classes and properties supported by `VOWLGrapher`.
-    pub static DEFAULT_QUERY: LazyLock<String> = LazyLock::new(|| {
-        let snippets = [
-            snippets_from_enum::<OwlNode>(),
-            snippets_from_enum::<OwlEdge>(),
-            snippets_from_enum::<RdfEdge>(),
-            snippets_from_enum::<RdfNode>(),
-            snippets_from_enum::<RdfsNode>(),
-            snippets_from_enum::<RdfsEdge>(),
-            snippets_from_enum::<Characteristic>(),
-            GENERAL_SNIPPETS.into(),
-            METADATA_SNIPPETS.into(),
-        ]
-        .concat();
-
-        QueryAssembler::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
-    });
-
     /// SPARQL snippets normalized for use in user-defined query assembly.
     pub static NORMALIZED_SNIPPETS: LazyLock<Vec<String>> = LazyLock::new(|| {
         let assembly_snippets = vec![
@@ -123,5 +104,24 @@ pub mod prelude {
         )]
         QueryNormalizer::normalize_snippets(&snippets)
             .expect("regex should not fail in snippet normalization")
+    });
+
+    // PERF: this could maybe be a thread_local instead?
+    /// The default query contains all classes and properties supported by `VOWLGrapher`.
+    pub static DEFAULT_QUERY: LazyLock<String> = LazyLock::new(|| {
+        let snippets = [
+            snippets_from_enum::<OwlNode>(),
+            snippets_from_enum::<OwlEdge>(),
+            snippets_from_enum::<RdfEdge>(),
+            snippets_from_enum::<RdfNode>(),
+            snippets_from_enum::<RdfsNode>(),
+            snippets_from_enum::<RdfsEdge>(),
+            snippets_from_enum::<Characteristic>(),
+            GENERAL_SNIPPETS.into(),
+            METADATA_SNIPPETS.into(),
+        ]
+        .concat();
+
+        QueryAssembler::assemble_query(&DEFAULT_PREFIXES.into(), &snippets)
     });
 }

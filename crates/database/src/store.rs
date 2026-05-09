@@ -157,7 +157,7 @@ impl VOWLGrapherStore {
 
                 let temp_id = uuid::Uuid::new_v4().to_string();
                 let temp_graph_name = format!("urn:vowlr:temp:{temp_id}");
-                debug!("Creating temporary view graph: {temp_graph_name}");
+                info!("Creating temporary view graph: {temp_graph_name}");
 
                 let mut quads = Vec::new();
                 let graph_name = NamedNode::new(&temp_graph_name).map_err(|e| {
@@ -177,7 +177,7 @@ impl VOWLGrapherStore {
                     <VOWLGrapherStoreError as Into<VOWLGrapherError>>::into(e.into())
                 })?;
 
-                debug!(
+                info!(
                     "Loaded {} quads in {} s",
                     size,
                     Instant::now()

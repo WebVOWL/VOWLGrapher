@@ -1,18 +1,23 @@
 use super::WorkbenchMenuItems;
 use crate::{components::user_input::internal_sparql::load_graph, errors::ErrorLogContext};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
+use leptos_use::use_textarea_autosize;
 use vowlgrapher_sparql_queries::prelude::{DefaultPrefixTable, QueryAssembler, QueryNormalizer};
-use web_sys::HtmlInputElement;
 
 #[component]
 pub fn CustomSparql() -> impl IntoView {
     let error_context = expect_context::<ErrorLogContext>();
+    let textarea_class = "overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none font-jetbrains min-h-24";
 
-    let query_input = RwSignal::new(String::new());
-    let triple_input = RwSignal::new(String::new());
+    let textarea_query = NodeRef::new();
+    let textarea_query_props = use_textarea_autosize(textarea_query);
+
+    let textarea_triple = NodeRef::new();
+    let textarea_triple_props = use_textarea_autosize(textarea_triple);
 
     let query_variables = Memo::new(move |old| {
-        match QueryNormalizer::get_significant_query_variables(&query_input.read()) {
+        match QueryNormalizer::get_significant_query_variables(&textarea_query_props.content.read())
+        {
             Ok(vars) => vars,
             Err(e) => {
                 error_context.push(e.into());
@@ -23,38 +28,16 @@ pub fn CustomSparql() -> impl IntoView {
     let variable_count_greater_than_2 = Signal::derive(move || {
         let value = query_variables.read().len() > 2;
         if !value {
-            triple_input.set(String::new());
+            textarea_triple_props.set_content.set(String::new());
         }
         value
     });
 
     let is_loading = RwSignal::new(false);
-    let textarea_ref = NodeRef::<leptos::html::Textarea>::new();
-    let textarea_ref2 = NodeRef::<leptos::html::Textarea>::new();
-
-    let handle_input = move |()| {
-        if let Some(el) = textarea_ref.get() {
-            el.style("height: auto");
-
-            let scroll = el.scroll_height();
-            let new_height = scroll - 16;
-
-            el.style(("height", format!("{new_height}px")));
-        }
-
-        if let Some(el) = textarea_ref2.get() {
-            el.style("height: auto");
-
-            let scroll = el.scroll_height();
-            let new_height = scroll - 16;
-
-            el.style(("height", format!("{new_height}px")));
-        }
-    };
 
     let run_query = move |_| match QueryAssembler::assemble_user_query(
-        &query_input.get_untracked(),
-        &triple_input.get_untracked(),
+        &textarea_query_props.content.get_untracked(),
+        &textarea_triple_props.content.get_untracked(),
     ) {
         Ok(query) => {
             is_loading.set(true);
@@ -75,16 +58,15 @@ pub fn CustomSparql() -> impl IntoView {
             <div class="flex flex-col gap-2">
                 <div>
                     <textarea
-                        node_ref=textarea_ref
-                        class="overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none font-jetbrains min-h-24"
-                        rows=1
-                        placeholder="Enter query"
-                        prop:value=move || query_input.get()
-                        on:input=move |ev| {
-                            let t: HtmlInputElement = event_target(&ev);
-                            query_input.set(t.value());
-                            handle_input(());
+                        prop:value=textarea_query_props.content
+                        on:input=move |evt| {
+                            textarea_query_props
+                                .set_content
+                                .set(event_target_value(&evt))
                         }
+                        node_ref=textarea_query
+                        class=textarea_class
+                        placeholder="Enter query"
                     />
                 </div>
 
@@ -97,19 +79,17 @@ pub fn CustomSparql() -> impl IntoView {
                             Leave blank to treat all variables as independent.
                             "
                         </p>
-
                         <div>
                             <textarea
-                                node_ref=textarea_ref2
-                                class="overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none font-jetbrains min-h-24"
-                                rows=1
-                                placeholder="Enter triples"
-                                prop:value=move || triple_input.get()
-                                on:input=move |ev| {
-                                    let t: HtmlInputElement = event_target(&ev);
-                                    triple_input.set(t.value());
-                                    handle_input(());
+                                prop:value=textarea_triple_props.content
+                                on:input=move |evt| {
+                                    textarea_triple_props
+                                        .set_content
+                                        .set(event_target_value(&evt))
                                 }
+                                node_ref=textarea_triple
+                                class=textarea_class
+                                placeholder="Enter triples"
                             />
                         </div>
                     </div>

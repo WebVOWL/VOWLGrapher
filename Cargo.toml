@@ -135,7 +135,11 @@
         version="0.6.0"
 
     [dependencies.leptos-use]
-        features=["on_click_outside", "use_preferred_dark"]
+        features=[
+            "on_click_outside",
+            "use_preferred_dark",
+            "use_textarea_autosize",
+        ]
         version="0.16.3"
 
     [dependencies.web-sys]

@@ -81,7 +81,12 @@ impl GraphMetadataBuffer {
             let mut out = HashMap::new();
             for (lang_tag, content) in tagged_metadata {
                 let k = fmt_langtag(lang_tag.clone());
-                let v = fmt_translated_metadata_content(content, &self.term_index, term_cache)?;
+                let v = fmt_translated_metadata_content(
+                    content,
+                    metadata_term_id,
+                    &self.term_index,
+                    term_cache,
+                )?;
                 out.insert(k, v);
             }
 

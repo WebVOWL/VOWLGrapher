@@ -1,7 +1,7 @@
 use super::WorkbenchMenuItems;
 use crate::{components::user_input::internal_sparql::load_graph, errors::ErrorLogContext};
 use leptos::{prelude::*, task::spawn_local_scoped_with_cancellation};
-use vowlgrapher_sparql_queries::prelude::{QueryAssembler, QueryNormalizer};
+use vowlgrapher_sparql_queries::prelude::{DefaultPrefixTable, QueryAssembler, QueryNormalizer};
 use web_sys::HtmlInputElement;
 
 #[component]
@@ -143,44 +143,7 @@ pub fn CustomSparql() -> impl IntoView {
                         "Included prefixes"
                     </p>
                     <div class="overflow-hidden rounded border border-gray-200">
-                        <table class="w-full text-left border-collapse text-[10px]">
-                            <thead class="bg-gray-100 border-b border-gray-200">
-                                <tr>
-                                    <th class="p-1 font-semibold">"Prefix"</th>
-                                    <th class="p-1 font-semibold">"Namespace IRI"</th>
-                                </tr>
-                            </thead>
-                            <tbody class="bg-white divide-y divide-gray-100">
-                                <tr>
-                                    <td>owl</td>
-                                    <td>"http://www.w3.org/2002/07/owl#"</td>
-                                </tr>
-                                <tr>
-                                    <td>rdfs</td>
-                                    <td>"http://www.w3.org/2000/01/rdf-schema#"</td>
-                                </tr>
-                                <tr>
-                                    <td>rdf</td>
-                                    <td>"http://www.w3.org/1999/02/22-rdf-syntax-ns#"</td>
-                                </tr>
-                                <tr>
-                                    <td>xsd</td>
-                                    <td>"http://www.w3.org/2001/XMLSchema#"</td>
-                                </tr>
-                                <tr>
-                                    <td>xml</td>
-                                    <td>"http://www.w3.org/XML/1998/namespace"</td>
-                                </tr>
-                                <tr>
-                                    <td>dc</td>
-                                    <td>"http://purl.org/dc/elements/1.1/"</td>
-                                </tr>
-                                <tr>
-                                    <td>dcterms</td>
-                                    <td>"http://purl.org/dc/terms/"</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <DefaultPrefixTable />
                     </div>
                 </div>
             </div>

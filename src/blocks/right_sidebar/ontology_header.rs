@@ -2,7 +2,7 @@ use std::{collections::HashMap, iter::once};
 
 use crate::{
     blocks::right_sidebar::{
-        LanguageSelection, default_metadata_value_signal, metadata_value_signal,
+        LanguageSelection, default_metadata_value_signal, metadata_value_signal, display_url_or_text,
     },
     components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext},
 };
@@ -26,15 +26,17 @@ pub fn Title(
 #[component]
 pub fn DocumentBase(#[prop(into)] base: Signal<String>) -> impl IntoView {
     view! {
-        <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            <a
-                href=move || base.get()
-                target="_blank"
-                class="text-blue-600 hover:underline"
-            >
-                {move || base.get()}
-            </a>
-        </p>
+        <div class="py-2 my-2 text-sm text-gray-500">
+            <p class="text-center">
+                <a
+                    href=move || base.get()
+                    target="_blank"
+                    class="text-blue-600 break-words hover:underline"
+                >
+                    {move || base.get()}
+                </a>
+            </p>
+        </div>
     }
 }
 
@@ -46,17 +48,44 @@ pub fn Version(
     #[prop(into)] backward_compatible_with: Signal<Option<String>>,
 ) -> impl IntoView {
     view! {
-        <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            "Version: "{move || version_iri.get().unwrap_or("None".to_string())}
-            <br /> "Prior Version: "
-            {move || prior_version.get().unwrap_or("None".to_string())} <br />
-            "Incompatible With: "
-            {move || incompatible_with.get().unwrap_or("None".to_string())}
-            <br /> "Backward Compatible With: "
-            {move || {
-                backward_compatible_with.get().unwrap_or("None".to_string())
-            }}
-        </p>
+        <div class="py-2 my-2 text-sm text-gray-500">
+            <p class="text-center break-words">
+                "Version: "
+                {move || {
+                    version_iri
+                        .get()
+                        .map(display_url_or_text)
+                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                }}
+            </p>
+            <p class="text-center break-words">
+                "Prior Version: "
+                {move || {
+                    prior_version
+                        .get()
+                        .map(display_url_or_text)
+                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                }}
+            </p>
+            <p class="text-center break-words">
+                "Incompatible With: "
+                {move || {
+                    incompatible_with
+                        .get()
+                        .map(display_url_or_text)
+                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                }}
+            </p>
+            <p class="text-center break-words">
+                "Backward Compatible With: "
+                {move || {
+                    backward_compatible_with
+                        .get()
+                        .map(display_url_or_text)
+                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                }}
+            </p>
+        </div>
     }
 }
 
@@ -72,10 +101,14 @@ pub fn Author(
     let shown_contributor =
         metadata_value_signal(contributors, default_contributor, selected_language.0);
     view! {
-        <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            Author(s): {move || { shown_creator.get() }} <br />Contributor(s):
-            {move || shown_contributor.get()}
-        </p>
+        <div class="py-2 my-2 text-sm text-gray-500">
+            <p class="text-center break-words">
+                "Author(s): " {move || shown_creator.get().join(", ")}
+            </p>
+            <p class="text-center break-words">
+                "Contributor(s): " {move || shown_contributor.get().join(", ")}
+            </p>
+        </div>
     }
 }
 
@@ -118,8 +151,8 @@ pub fn Language(
     };
 
     view! {
-        <p class="flex gap-2 justify-center items-center py-2 my-2 text-sm text-gray-500">
-            "Languages:"
+        <div class="flex flex-col gap-2 items-center py-2 my-2 text-sm text-gray-500">
+            <p>"Languages:"</p>
             <select
                 class="py-1 px-2 text-sm text-gray-500 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none w-[100px] h-[30px]"
                 prop:value=selected_language
@@ -130,7 +163,7 @@ pub fn Language(
             >
                 {shown_languages()}
             </select>
-        </p>
+        </div>
     }
 }
 
@@ -144,7 +177,7 @@ pub fn Description(
 
     view! {
         <Accordion title="Description">
-            <p>{move || shown_desc.get()}</p>
+            <p class="text-center break-words">{move || shown_desc.get()}</p>
         </Accordion>
     }
 }

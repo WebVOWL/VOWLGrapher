@@ -65,6 +65,21 @@ pub fn metadata_value(
     })
 }
 
+/// Displays a value as a clickable link if it's a URL, otherwise as plain text.
+pub fn display_url_or_text(value: String) -> AnyView {
+    if value.starts_with("http://") || value.starts_with("https://") {
+        let url = value.clone();
+        view! {
+            <a href=url target="_blank" class="text-blue-600 hover:underline">
+                {value}
+            </a>
+        }
+        .into_any()
+    } else {
+        view! { <span>{value}</span> }.into_any()
+    }
+}
+
 #[component]
 pub fn RightSidebar() -> impl IntoView {
     let selected_language_tag = LanguageSelection::default();

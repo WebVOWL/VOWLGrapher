@@ -8,6 +8,7 @@ use oxrdf::{Term, TermRef};
 use crate::{
     datastructures::{ArcEdge, ArcTerm, ArcTriple},
     errors::{SerializationError, SerializationErrorKind},
+    serializer_util::trim_terms,
 };
 
 #[derive(Debug, Default)]
@@ -193,6 +194,6 @@ impl TermIndex {
     /// Use only in infallible contexts.
     pub fn display_term(&self, term_id: usize) -> String {
         self.get(term_id)
-            .map_or_else(|e| e.to_string(), |term| term.to_string())
+            .map_or_else(|e| e.to_string(), |term| trim_terms(&term.to_string()))
     }
 }

@@ -9,7 +9,7 @@ mod snippets;
 
 /// Exports all the core types of the library.
 pub mod prelude {
-    use crate::assembly::DEFAULT_PREFIXES;
+    use crate::assembly::prefix::DEFAULT_PREFIXES;
     use crate::snippets::general::{
         COLLECTIONS, DOMAIN_RANGES, LABEL, NAMED_INDIVIDUAL_COUNTS, ONTOLOGY, OWL_DEPRECATED,
         XML_BASE,
@@ -28,6 +28,7 @@ pub mod prelude {
 
     pub use crate::assembly::QueryAssembler;
     pub use crate::assembly::normalization::QueryNormalizer;
+    pub use crate::assembly::prefix::DefaultPrefixTable;
 
     /// SPARQL snippets that should generally be included in all queries.
     pub static GENERAL_SNIPPETS: [&str; 7] = [

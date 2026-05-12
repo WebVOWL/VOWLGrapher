@@ -8298,6 +8298,7 @@ version = "0.2.0-beta"
 dependencies = [
  "grapher",
  "indexmap 2.14.0",
+ "leptos",
  "log",
  "regex",
  "vowlgrapher-util",

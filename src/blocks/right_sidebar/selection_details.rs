@@ -1,5 +1,7 @@
 use crate::{
-    blocks::right_sidebar::{LanguageSelection, default_metadata_value, metadata_value},
+    blocks::right_sidebar::{
+        LanguageSelection, default_metadata_value, metadata_value, display_url_or_text,
+    },
     components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext},
     events::EventContext,
 };
@@ -28,14 +30,32 @@ pub fn SelectionDetails() -> impl IntoView {
                             let value = metadata_type_map.clone();
                             let default_value =
                                 Memo::new(move |_| default_metadata_value(value.clone()));
+                            let metadata_type_literal_lower = metadata_type_literal.to_lowercase();
+                            let should_be_link = metadata_type_literal_lower.contains("see also") 
+                                || metadata_type_literal_lower.contains("is defined by");
                             view! {
                                 <p>
                                     {move || { metadata_type_literal.as_ref().clone() }}": "
-                                    {move || metadata_value(
-                                        metadata_type_map.clone(),
-                                        default_value,
-                                        selected_language.0,
-                                    )}
+                                    {move || {
+                                        let meta_val = metadata_value(
+                                                metadata_type_map.clone(),
+                                                default_value,
+                                                selected_language.0,
+                                            )
+                                            .get();
+                                        if should_be_link {
+                                            meta_val.into_iter().map(display_url_or_text).collect_view()
+                                        } else {
+                                            meta_val
+                                                .into_iter()
+                                                .map(|value| {
+
+                                                    view! { <span>{value}</span> }
+                                                        .into_any()
+                                                })
+                                                .collect_view()
+                                        }
+                                    }}
                                 </p>
                             }
                         })

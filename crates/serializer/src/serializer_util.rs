@@ -20,7 +20,7 @@ use vowlgrapher_util::prelude::ErrorRecord;
 
 use crate::{
     datastructures::{
-        ArcTerm, DisplayCase, LanguageTag, MetadataContent, index::TermIndex,
+        ArcTerm, DisplayCase, LanguageTag, MetadataContent, MetadataTermID, index::TermIndex,
         serialization_data_buffer::SerializationDataBuffer,
     },
     errors::{SerializationError, SerializationErrorKind},
@@ -235,6 +235,46 @@ pub fn trim_tag_circumfix(input: &str) -> String {
         .to_string()
 }
 
+/// Removes wrapping double quotes from metadata values.
+pub fn trim_wrapping_quotes(input: &str) -> String {
+    input
+        .trim_start_matches('"')
+        .trim_end_matches('"')
+        .to_string()
+}
+
+/// Removes language tags from metadata values.
+pub fn trim_lang_tag(input: &str) -> String {
+    input
+        .rfind('@')
+        .map_or_else(|| input.to_string(), |idx| input[..idx].to_string())
+}
+
+/// Removes datatype tags from metadata values.
+pub fn trim_datatype(input: &str) -> String {
+    input
+        .rfind("^^")
+        .map_or_else(|| input.to_string(), |idx| input[..idx].to_string())
+}
+
+/// Performs all trimming steps for metadata values.
+pub fn trim_terms(input: &str) -> String {
+    let trimmed = trim_datatype(input);
+    let trimmed = trim_lang_tag(&trimmed);
+    let trimmed = trim_tag_circumfix(&trimmed);
+    trim_wrapping_quotes(&trimmed)
+}
+
+/// Determines whether the raw metadata value should be preserved for a given metadata term.
+fn should_preserve_raw_metadata_value(
+    metadata_term_id: MetadataTermID,
+    term_index: &TermIndex,
+) -> bool {
+    term_index
+        .get(metadata_term_id)
+        .is_ok_and(|term| matches!(term.as_ref().as_ref(), TermRef::NamedNode(named_node_ref) if named_node_ref == rdfs::IS_DEFINED_BY || named_node_ref == rdfs::SEE_ALSO))
+}
+
 /// Generate a new IRI based on a current one.
 pub fn synthetic_iri(base: &ArcTerm, suffix: &str) -> String {
     let clean = trim_tag_circumfix(&base.to_string());
@@ -300,14 +340,21 @@ pub fn get_term_string(
 /// Translates the term ids of metadata content into term strings.
 pub fn fmt_translated_metadata_content(
     content: &MetadataContent,
+    metadata_term_id: MetadataTermID,
     term_index: &TermIndex,
     term_cache: &mut HashMap<ArcTerm, Arc<String>>,
 ) -> Result<Vec<String>, SerializationError> {
     let mut out = Vec::with_capacity(content.len());
     for content_term_id in content {
         let term = term_index.get(*content_term_id)?;
-        let term_str = get_term_string(&term, DisplayCase::Original, term_cache);
-        out.push(term_str.to_string());
+        let cleaned_str = if should_preserve_raw_metadata_value(metadata_term_id, term_index) {
+            trim_terms(&term.to_string())
+        } else {
+            let term_str = get_term_string(&term, DisplayCase::Original, term_cache);
+            trim_terms(&term_str)
+        };
+
+        out.push(cleaned_str);
     }
     Ok(out)
 }

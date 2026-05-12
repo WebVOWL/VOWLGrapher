@@ -1,5 +1,4 @@
 pub mod normalization;
-pub mod prefix;
 pub mod query_regex;
 
 use crate::assembly::normalization::QueryNormalizer;

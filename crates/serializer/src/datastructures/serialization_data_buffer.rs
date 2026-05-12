@@ -514,6 +514,7 @@ impl SerializationDataBuffer {
                                     .or_insert_with(|| {
                                         match fmt_translated_metadata_content(
                                             &content,
+                                            metadata_term_id,
                                             &self.term_index,
                                             term_cache,
                                         ) {

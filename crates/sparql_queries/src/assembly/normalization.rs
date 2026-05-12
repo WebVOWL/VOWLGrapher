@@ -46,10 +46,9 @@
 //! 1. Return _T_ as part of the solution.
 //! 2. Treat _A_, _B_, and _C_ as independent. See 1A.
 
-use std::collections::{HashMap, HashSet};
-
 use indexmap::IndexSet;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     assembly::query_regex::{QUERY_NORMALIZATION, VAR, VAR_FIRST},
@@ -308,25 +307,22 @@ impl QueryNormalizer {
         let mut map = HashMap::new();
         if !triple_decls.is_empty() {
             for (line, triple_decl) in triple_decls.split('\n').enumerate() {
-                let variables = Self::get_query_variables(triple_decl)?;
-                if variables.len() != 3 {
+                let variables = Self::get_query_variables(triple_decl)?
+                    .into_iter()
+                    .collect::<Vec<_>>();
+
+                let [subject, predicate, object] = &variables[..] else {
                     let msg = format!(
                         "Error at line {}: A triple must consist of exactly 3 variables",
                         line + 1
                     );
                     return Err(QueryAssemblyErrorKind::InvalidTripleDecl(msg))?;
-                }
-
-                let subject = variables.first().cloned().ok_or_else(|| {
-                    let msg = "Missing subject in triple declaration".to_string();
-                    QueryAssemblyErrorKind::InvalidTripleDecl(msg)
-                })?;
-
-                let v = {
-                    let a = variables.into_iter().collect::<Vec<_>>();
-                    [a[0].clone(), a[1].clone(), a[2].clone()]
                 };
-                map.insert(subject.clone(), v);
+
+                map.insert(
+                    subject.clone(),
+                    [subject.clone(), predicate.clone(), object.clone()],
+                );
             }
         }
 

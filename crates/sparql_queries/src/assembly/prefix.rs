@@ -2,9 +2,7 @@ use leptos::either::Either;
 use leptos::prelude::*;
 
 // TODO: Remove when automatic prefix fetching is implemented.
-pub const DEFAULT_PREFIXES: [&str; 9] = [
-    "example: <http://www.example.com/iri#>",
-    "vowlgrapher: <https://purl.org/vowlgrapher>",
+pub const DEFAULT_PREFIXES: [&str; 7] = [
     "owl: <http://www.w3.org/2002/07/owl#>",
     "rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
     "rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>",
@@ -20,9 +18,6 @@ pub fn DefaultPrefixTable() -> impl IntoView {
     let prefixes = move || {
         DEFAULT_PREFIXES
             .iter()
-            .filter(|full_prefix| {
-                !(full_prefix.contains("example:") || full_prefix.contains("vowlgrapher:"))
-            })
             .map(|full_prefix| {
                 if let Some((prefix, iri)) = full_prefix.split_once(':') {
                     Either::Left(view! {

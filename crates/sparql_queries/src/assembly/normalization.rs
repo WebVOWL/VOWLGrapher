@@ -74,8 +74,7 @@ impl QueryNormalizer {
     /// ## Arguments
     /// - `user_query` is the SPARQL query to normalize.\
     ///   Normalization is necessary to prepare the query for serialization.
-    /// - `triple_decls` is a variable map of user-defined query variable triple relationships.\
-    ///   That is, a mapping from a subject variable to the triple containing it.
+    /// - `triple_decls` are user-defined query variable triple relationships.
     ///
     /// # Example
     /// Usage of return values.

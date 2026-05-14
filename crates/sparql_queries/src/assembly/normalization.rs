@@ -52,7 +52,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     assembly::query_regex::{QUERY_NORMALIZATION, VAR, VAR_FIRST},
-    errors::{QueryAssemblyError, QueryAssemblyErrorKind},
+    errors::QueryAssemblyError,
     prelude::NORMALIZED_SNIPPETS,
     snippets::assembly,
 };
@@ -315,7 +315,7 @@ impl QueryNormalizer {
                         "Error at line {}: A triple must consist of exactly 3 variables",
                         line + 1
                     );
-                    return Err(QueryAssemblyErrorKind::InvalidTripleDecl(msg))?;
+                    return Err(QueryAssemblyError::InvalidTripleDecl(msg))?;
                 };
 
                 map.insert(

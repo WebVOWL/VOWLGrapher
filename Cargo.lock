@@ -8301,6 +8301,7 @@ dependencies = [
  "leptos",
  "log",
  "regex",
+ "thiserror 2.0.18",
  "vowlgrapher-util",
 ]
 

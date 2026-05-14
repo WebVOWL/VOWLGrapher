@@ -1,6 +1,6 @@
 use crate::{
     blocks::right_sidebar::{
-        LanguageSelection, default_metadata_value, metadata_value, display_url_or_text,
+        LanguageSelection, default_metadata_value, display_url_or_text, metadata_value,
     },
     components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext},
     events::EventContext,

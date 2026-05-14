@@ -1,3 +1,6 @@
+// In order to capture backtraces with thiserror.
+#![feature(error_generic_member_access)]
+
 //! Shared SPARQL query strings for `VOWLGrapher`.
 //!
 //! This crate is intentionally free of vowlgrapher-dependencies such

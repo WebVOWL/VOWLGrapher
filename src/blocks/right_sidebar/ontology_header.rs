@@ -2,7 +2,8 @@ use std::{collections::HashMap, iter::once};
 
 use crate::{
     blocks::right_sidebar::{
-        LanguageSelection, default_metadata_value_signal, metadata_value_signal, display_url_or_text,
+        LanguageSelection, default_metadata_value_signal, display_url_or_text,
+        metadata_value_signal,
     },
     components::{accordion::Accordion, user_input::internal_sparql::GraphDataContext},
 };

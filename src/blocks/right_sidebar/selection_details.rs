@@ -44,7 +44,13 @@ pub fn SelectionDetails() -> impl IntoView {
                                             )
                                             .get();
                                         if should_be_link {
-                                            meta_val.into_iter().map(display_url_or_text).collect_view()
+                                            meta_val.into_iter().enumerate().map(|(i, v)| {
+                                                if i == 0 {
+                                                    display_url_or_text(v)
+                                                } else {
+                                                    view! { <div>{display_url_or_text(v)}</div> }.into_any()
+                                                }
+                                            }).collect_view()
                                         } else {
                                             meta_val
                                                 .into_iter()

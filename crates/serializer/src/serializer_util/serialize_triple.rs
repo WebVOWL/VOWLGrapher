@@ -1412,15 +1412,39 @@ fn internal_serialize_triple(
                                         data_buffer.term_index.get(domain_term_id)?
                                     );
 
-                                    (
-                                        None,
-                                        Some(create_triple_from_id(
+                                    let object_term = data_buffer.term_index.get(object_term_id)?;
+                                    if *object_term == rdfs::LITERAL.into() {
+                                        let property_term =
+                                            data_buffer.term_index.get(predicate_term_id)?;
+                                        let target_iri =
+                                            synthetic_iri(&property_term, SYNTH_LITERAL);
+                                        let node = create_triple_from_iri(
                                             &data_buffer.term_index,
-                                            domain_term_id,
-                                            Some(property_term_id),
-                                            Some(range_term_id),
-                                        )?),
-                                    )
+                                            &target_iri,
+                                            &rdfs::LITERAL.as_str().to_string(),
+                                            None,
+                                        )?;
+
+                                        (
+                                            Some(vec![node.clone()]),
+                                            Some(create_triple_from_id(
+                                                &data_buffer.term_index,
+                                                domain_term_id,
+                                                Some(property_term_id),
+                                                Some(node.subject_term_id),
+                                            )?),
+                                        )
+                                    } else {
+                                        (
+                                            None,
+                                            Some(create_triple_from_id(
+                                                &data_buffer.term_index,
+                                                domain_term_id,
+                                                Some(property_term_id),
+                                                Some(range_term_id),
+                                            )?),
+                                        )
+                                    }
                                 }
                                 (Some(domain_term_id), Some(property_term_id), None) => {
                                     trace!(

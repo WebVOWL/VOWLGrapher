@@ -270,9 +270,12 @@ fn should_preserve_raw_metadata_value(
     metadata_term_id: MetadataTermID,
     term_index: &TermIndex,
 ) -> bool {
-    term_index
-        .get(metadata_term_id)
-        .is_ok_and(|term| matches!(term.as_ref().as_ref(), TermRef::NamedNode(named_node_ref) if named_node_ref == rdfs::IS_DEFINED_BY || named_node_ref == rdfs::SEE_ALSO))
+    term_index.get(metadata_term_id).is_ok_and(|term| {
+        matches!(
+            (*term).as_ref(),
+            TermRef::NamedNode(rdfs::IS_DEFINED_BY | rdfs::SEE_ALSO)
+        )
+    })
 }
 
 /// Generate a new IRI based on a current one.

@@ -39,7 +39,7 @@
         ]
         license-file="LICENSE"
         repository="https://github.com/WebVOWL/VOWLGrapher"
-        version="0.2.0-beta"
+        version="0.2.1-beta"
 
     [workspace.lints.rust]
         missing_docs="warn"

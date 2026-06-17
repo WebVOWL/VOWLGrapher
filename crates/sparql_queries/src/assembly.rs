@@ -118,4 +118,38 @@ impl QueryAssembler {
             "
         ))
     }
+    /// Construct a serializable, user-defined SPARQL query for the user query endpoint.
+    ///
+    /// # Errors
+    /// If the user-defined triples in `triple_decls` are invalid.
+    ///
+    /// If the internal [`Regex`] procedure fails.
+    pub fn assemble_user_query_endpoint(
+        user_query: &str,
+        triple_decls: &str,
+    ) -> Result<String, QueryAssemblyError> {
+        let prefixes = DEFAULT_PREFIXES
+            .iter()
+            .map(|item| format!("PREFIX {item}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let (normalized_template_variables, normalized_pattern_variables) =
+            QueryNormalizer::normalize_query_variables(user_query, triple_decls)?;
+
+        Ok(format!(
+            r"
+            {prefixes}
+            CONSTRUCT {{
+                {normalized_template_variables}
+            }}
+            WHERE {{
+                {{
+                    {user_query}
+                }} . 
+                {normalized_pattern_variables}
+            }}
+            "
+        ))
+    }
 }

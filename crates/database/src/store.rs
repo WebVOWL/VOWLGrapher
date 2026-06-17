@@ -103,6 +103,22 @@ impl VOWLGrapherStore {
         registry.get(&key).cloned().unwrap_or_default()
     }
 
+    /// Clears the named graph, stores the given quads, and registers the graph.
+    ///
+    /// # Errors
+    /// Returns an error if the graph name is invalid or if the store fails to clear or insert quads.
+    pub async fn store_quads(
+        &self,
+        graph_name: &str,
+        quads: Vec<Quad>,
+    ) -> Result<(), VOWLGrapherStoreError> {
+        let graph_ref = NamedNodeRef::new(graph_name)?;
+        self.session.clear_graph(graph_ref).await?;
+        self.session.extend(quads).await?;
+        self.register_uploaded_graph(graph_name);
+        Ok(())
+    }
+
     /// Executes a SPARQL query and serializes the result.
     ///
     /// This method tries to continue serializing despite errors.

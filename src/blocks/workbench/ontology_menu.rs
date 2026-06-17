@@ -10,10 +10,13 @@ use crate::errors::ClientErrorKind;
 use crate::errors::ErrorLogContext;
 use leptos::prelude::*;
 use leptos::task::spawn_local_scoped_with_cancellation;
+use leptos_use::use_textarea_autosize;
 use log::info;
 use std::iter::once;
 use strum::IntoEnumIterator;
-use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
+use vowlgrapher_sparql_queries::prelude::{
+    DEFAULT_QUERY, DefaultPrefixTable, QueryAssembler, QueryNormalizer,
+};
 use vowlgrapher_util::prelude::VOWLGrapherEnviron;
 use web_sys::Event;
 use web_sys::HtmlInputElement;
@@ -452,37 +455,90 @@ pub fn FetchData() -> impl IntoView {
 
 #[component]
 pub fn Sparql() -> impl IntoView {
+    let error_context = expect_context::<ErrorLogContext>();
+    let GraphDataContext {
+        active_graph_name, ..
+    } = expect_context::<GraphDataContext>();
     let upload = FileUpload::new();
     let upload_progress = upload.tracker.upload_progress;
     let parsing_status = upload.tracker.parsing_status;
     let parsing_done = upload.tracker.parsing_done;
     let tracker_sparql = upload.tracker.clone();
+    let sparql_loading_done = upload.sparql_action.value();
+
+    let textarea_class = "overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none font-jetbrains min-h-24";
 
     let endpoint_signal = RwSignal::new(String::new());
-    let query_signal = RwSignal::new(String::new());
+    let sparql_stage: RwSignal<Option<&'static str>> = RwSignal::new(None);
 
-    let textarea_ref = NodeRef::<leptos::html::Textarea>::new();
+    let textarea_query = NodeRef::new();
+    let textarea_query_props = use_textarea_autosize(textarea_query);
 
-    let handle_input = move |()| {
-        if let Some(el) = textarea_ref.get() {
-            el.style("height: auto");
+    let textarea_triple = NodeRef::new();
+    let textarea_triple_props = use_textarea_autosize(textarea_triple);
 
-            let scroll = el.scroll_height();
-            let new_height = scroll - 16;
-
-            el.style(("height", format!("{new_height}px")));
+    let query_variables = Memo::new(move |old| {
+        match QueryNormalizer::get_significant_query_variables(&textarea_query_props.content.read())
+        {
+            Ok(vars) => vars,
+            Err(e) => {
+                error_context.push(e.into());
+                old.cloned().unwrap_or_default()
+            }
         }
-    };
+    });
+    let variable_count_greater_than_2 = Signal::derive(move || {
+        let value = query_variables.read().len() > 2;
+        if !value {
+            textarea_triple_props.set_content.set(String::new());
+        }
+        value
+    });
 
-    let run_sparql = move || {
-        tracker_sparql.upload_sparql(
-            &endpoint_signal.get(),
-            &query_signal.get(),
-            move |(ep, q, fmt)| {
-                upload.sparql_action.dispatch((ep, q, fmt));
+    let is_loading = RwSignal::new(false);
+
+    Effect::new(move || {
+        if let Some(value) = sparql_loading_done.get() {
+            sparql_stage.set(Some("Serializing"));
+            active_graph_name.set(format!("sparql-{}", endpoint_signal.get_untracked()));
+
+            match value {
+                Ok((_, _, warning)) => {
+                    if let Some(e) = warning {
+                        error_context.extend(e.records);
+                    }
+                    let stage = sparql_stage;
+                    spawn_local_scoped_with_cancellation(async move {
+                        load_graph(DEFAULT_QUERY.to_string(), true).await;
+                        stage.set(Some("Done"));
+                        is_loading.set(false);
+                    });
+                }
+                Err(e) => {
+                    error_context.extend(e.records);
+                    sparql_stage.set(None);
+                    is_loading.set(false);
+                }
+            }
+        }
+    });
+
+    let run_sparql = move |_| match QueryAssembler::assemble_user_query_endpoint(
+        &textarea_query_props.content.get_untracked(),
+        &textarea_triple_props.content.get_untracked(),
+    ) {
+        Ok(query) => {
+            is_loading.set(true);
+            sparql_stage.set(Some("Querying"));
+            let endpoint = endpoint_signal.get_untracked();
+            tracker_sparql.upload_sparql_endpoint(&endpoint, &query, move |(ep, q)| {
+                upload.sparql_action.dispatch((ep, q, None));
                 upload.mode.set("sparql".to_string());
-            },
-        );
+            });
+        }
+        Err(e) => {
+            error_context.push(e.into());
+        }
     };
 
     view! {
@@ -506,24 +562,62 @@ pub fn Sparql() -> impl IntoView {
                 <div>
                     <label class="block mb-1 text-xs text-gray">"Query"</label>
                     <textarea
-                        node_ref=textarea_ref
-                        class="overflow-hidden p-1 w-full text-xs bg-gray-200 rounded border-b-0 resize-none min-h-24"
-                        rows=1
-                        placeholder="Enter query"
-                        on:input=move |ev| {
-                            let t: HtmlInputElement = event_target(&ev);
-                            query_signal.set(t.value());
-                            handle_input(());
+                        prop:value=textarea_query_props.content
+                        on:input=move |evt| {
+                            textarea_query_props
+                                .set_content
+                                .set(event_target_value(&evt))
                         }
+                        node_ref=textarea_query
+                        class=textarea_class
+                        placeholder="Enter query"
                     />
                 </div>
 
+                <Show when=move || variable_count_greater_than_2.get()>
+                    <div>
+                        <p>
+                            "Your query includes more than two variables. Please enter below which variables should form triples (if any).
+                            For instance, write \"?s ?p ?o\" (without the quotes) if you intend for variables ?s, ?p, and ?o to be a triple.
+                            Please enter each triple on a new line.
+                            Leave blank to treat all variables as independent.
+                            "
+                        </p>
+                        <div>
+                            <textarea
+                                prop:value=textarea_triple_props.content
+                                on:input=move |evt| {
+                                    textarea_triple_props
+                                        .set_content
+                                        .set(event_target_value(&evt))
+                                }
+                                node_ref=textarea_triple
+                                class=textarea_class
+                                placeholder="Enter triples"
+                            />
+                        </div>
+                    </div>
+                </Show>
+
                 <button
                     class="p-1 mt-1 text-xs text-white bg-blue-500 rounded"
-                    on:click=move |_| run_sparql()
+                    disabled=move || is_loading.get()
+                    on:click=run_sparql
                 >
-                    "Run query"
+                    {move || {
+                        if is_loading.get() {
+                            "Running query..."
+                        } else {
+                            "Run query"
+                        }
+                    }}
                 </button>
+
+                <Show when=move || is_loading.get()>
+                    <div class="overflow-hidden w-full h-1 bg-gray-100 rounded-full">
+                        <div class="w-full h-full bg-blue-500 animate-pulse"></div>
+                    </div>
+                </Show>
 
                 {move || {
                     let progress = upload_progress.get();
@@ -569,6 +663,18 @@ pub fn Sparql() -> impl IntoView {
                         ().into_any()
                     }
                 }}
+
+                <div>
+                    <p>
+                        "Most prefixes are currently not included automatically. Use full IRIs for any namespace not listed below."
+                    </p>
+                    <p class="mb-1 font-bold text-gray-500 uppercase text-[10px]">
+                        "Included prefixes"
+                    </p>
+                    <div class="overflow-hidden rounded border border-gray-200">
+                        <DefaultPrefixTable />
+                    </div>
+                </div>
             </div>
         </fieldset>
     }
@@ -630,16 +736,21 @@ pub fn UploadedOntology() -> impl IntoView {
 
     view! {
         <div class="my-2">
-            <label class="block mb-1">"Previously Uploaded:"
+            <label class="block mb-1">
+                "Previously Uploaded:"
                 <button
                     class="ml-1 text-xs text-gray-500 hover:text-gray-800"
                     title="Refresh list"
-                    on:click=move |_| { refresh.update(|n| *n += 1); }
+                    on:click=move |_| {
+                        refresh.update(|n| *n += 1);
+                    }
                 >
                     <Icon class="inline" icon=icondata::AiReloadOutlined />
                 </button>
             </label>
-            <Suspense fallback=move || view! { <p class="text-xs text-gray-500">"Loading list…"</p> }>
+            <Suspense fallback=move || {
+                view! { <p class="text-xs text-gray-500">"Loading list…"</p> }
+            }>
                 {move || Suspend::new(async move {
                     match list_ontologies.await {
                         Ok(entries) if entries.is_empty() => {
@@ -647,7 +758,8 @@ pub fn UploadedOntology() -> impl IntoView {
                                 <p class="text-xs italic text-gray-400">
                                     "No uploaded ontologies yet."
                                 </p>
-                            }.into_any()
+                            }
+                                .into_any()
                         }
                         Ok(entries) => {
                             view! {
@@ -656,28 +768,24 @@ pub fn UploadedOntology() -> impl IntoView {
                                     class="p-1 w-full text-sm bg-gray-200 rounded border-b-0"
                                     on:change=on_select
                                 >
-                                    <option value="">
-                                        "Select an uploaded ontology"
-                                    </option>
+                                    <option value="">"Select an uploaded ontology"</option>
                                     {entries
                                         .into_iter()
                                         .map(|e| {
                                             let iri = e.graph_iri.clone();
-                                            view! {
-                                                <option value=iri>{e.label}</option>
-                                            }
+                                            view! { <option value=iri>{e.label}</option> }
                                         })
                                         .collect_view()}
                                 </select>
-                            }.into_any()
+                            }
+                                .into_any()
                         }
                         Err(e) => {
                             error_context.extend(e.records);
                             view! {
-                                <p class="text-xs text-red-500">
-                                    "Failed to load list."
-                                </p>
-                            }.into_any()
+                                <p class="text-xs text-red-500">"Failed to load list."</p>
+                            }
+                                .into_any()
                         }
                     }
                 })}
@@ -748,7 +856,7 @@ pub fn OntologyMenu() -> impl IntoView {
             <SelectStaticInput />
             <UploadInput />
             <UploadedOntology />
-            //<Sparql />
+            <Sparql />
             <FetchData />
         </WorkbenchMenuItems>
     }

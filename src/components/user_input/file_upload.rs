@@ -20,6 +20,8 @@ use vowlgrapher_database::prelude::VOWLGrapherStore;
 use vowlgrapher_parser::errors::VOWLGrapherStoreError;
 #[cfg(feature = "server")]
 use vowlgrapher_parser::errors::VOWLGrapherStoreErrorKind;
+#[cfg(feature = "server")]
+use vowlgrapher_parser::parser_util::parser_from_bytes;
 #[cfg(feature = "ssr")]
 use vowlgrapher_util::prelude::manage_user_id;
 use vowlgrapher_util::prelude::{DataType, VOWLGrapherError};
@@ -251,27 +253,90 @@ pub async fn handle_sparql(
     format: Option<String>,
 ) -> Result<(DataType, usize, Option<VOWLGrapherError>), VOWLGrapherError> {
     let user_id = manage_user_id().await?;
-    trace!("User {user_id} is quering SPARQL");
+    let is_construct_query = format.is_none();
+    if is_construct_query {
+        trace!("User {user_id} is querying SPARQL endpoint");
+    } else {
+        trace!("User {user_id} is quering SPARQL");
+    }
 
     let client = Client::new();
 
     let mut session = VOWLGrapherStore::new_for_user(user_id);
 
-    let accept_type = match format.as_deref() {
-        Some("xml") => DataType::SPARQLXML.mime_type(),
-        Some("tsv") => DataType::SPARQLTSV.mime_type(),
-        Some("csv") => DataType::SPARQLCSV.mime_type(),
-        Some("json") => DataType::SPARQLJSON.mime_type(),
-        _ => DataType::UNKNOWN.mime_type(),
+    let accept_type = if is_construct_query {
+        "text/turtle"
+    } else {
+        match format.as_deref() {
+            Some("xml") => DataType::SPARQLXML.mime_type(),
+            Some("tsv") => DataType::SPARQLTSV.mime_type(),
+            Some("csv") => DataType::SPARQLCSV.mime_type(),
+            Some("json") => DataType::SPARQLJSON.mime_type(),
+            _ => DataType::UNKNOWN.mime_type(),
+        }
     };
 
     let resp = client
         .post(&endpoint)
         .header("Accept", accept_type)
-        .form(&[("query", query)])
+        .form(&[("query", query.clone())])
         .send()
         .await
         .map_err(|e| ServerFnError::new(format!("Error querying SPARQL endpoint: {e}")))?;
+
+    if is_construct_query {
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(
+                ServerFnError::new(format!("SPARQL endpoint returned {status}: {body}")).into(),
+            );
+        }
+
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| ServerFnError::new(format!("Error reading response body: {e}")))?;
+
+        let total = bytes.len();
+        debug!("Received {total} bytes from SPARQL endpoint");
+        debug!(
+            "Response body (first 2000 chars): {}",
+            String::from_utf8_lossy(&bytes[..bytes.len().min(2000)])
+        );
+
+        let graph_name = session.get_graph_name(&format!("sparql-{endpoint}"));
+
+        let quads = parser_from_bytes(&bytes, DataType::TTL, true, &graph_name)
+            .or_else(|_| {
+                debug!("Turtle parsing failed, trying RDF/XML...");
+                parser_from_bytes(&bytes, DataType::RDF, true, &graph_name).or_else(|_| {
+                    debug!("RDF/XML parsing failed, trying N-Triples...");
+                    parser_from_bytes(&bytes, DataType::NTriples, true, &graph_name)
+                })
+            })
+            .map_err(|e| {
+                ServerFnError::new(format!(
+                    "Failed to parse SPARQL endpoint response as RDF triples: {e}"
+                ))
+            })?;
+
+        let quad_count = quads.len();
+        info!("Parsed {quad_count} quads from SPARQL endpoint response");
+
+        for (i, quad) in quads.iter().enumerate() {
+            debug!("Triple[{i}]: {quad}");
+        }
+
+        session
+            .store_quads(&graph_name, quads)
+            .await
+            .map_err(|e| ServerFnError::new(format!("Failed to store triples: {e}")))?;
+
+        info!("Stored {quad_count} quads in graph '{graph_name}'");
+
+        return Ok((DataType::TTL, total, None));
+    }
 
     let progress_key = format!("sparql-{endpoint}");
     progress::reset(&progress_key);
@@ -446,6 +511,16 @@ impl UploadProgress {
         let q = query.to_string();
         let fmt = Some("json".to_string());
         self.track_progress(&key, None, true, move || dispatch((ep, q, fmt)));
+    }
+
+    pub fn upload_sparql_endpoint<F>(&self, endpoint: &str, query: &str, dispatch: F)
+    where
+        F: FnOnce((String, String)) + 'static,
+    {
+        let key = format!("sparql-{endpoint}");
+        let ep = endpoint.to_string();
+        let q = query.to_string();
+        self.track_progress(&key, None, true, move || dispatch((ep, q)));
     }
 }
 

@@ -141,4 +141,4 @@ The following environment variables are available:
 |              Variable              |  Type   |    Default value    | Description                                                        |
 | :--------------------------------: | :-----: | :-----------------: | :----------------------------------------------------------------- |
 | `VOWLGRAPHER_MAX_INPUT_SIZE_BYTES` |  Bytes  | `52,428,800` (50MB) | The maximum allowed size, in bytes, of any input into VOWLGrapher. |
-|   `VOWLGRAPHER_RESOLVE_IMPORTS`    | Boolean |       `false`       | Whether `owl:imports` should be fetched and loaded recursively.    |
+|   `VOWLGRAPHER_RESOLVE_IMPORTS`    | Boolean |       `true`        | Whether `owl:imports` should be fetched and loaded recursively.    |

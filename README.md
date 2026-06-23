@@ -14,7 +14,7 @@ A new VOWL-based ontology visualization tool designed with performance, extensib
 ### Visualization
 
 - Visualizes OWL, RDFS, RDF, and Dublin Core
-- Parallellized force-directed graph simulation using the Barnes-Hut algorithm
+- Parallelized force-directed graph simulation using the Barnes-Hut algorithm
 - Hardware-accelerated rendering
 
 ### Filtering

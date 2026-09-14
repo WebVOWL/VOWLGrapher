@@ -1,19 +1,19 @@
 //! Functions to add/remove/inspect buffers
 
+use grapher::prelude::{ElementType, GenericNode, GenericType, OwlNode, OwlType};
+use log::error;
+use log::{debug, info, trace};
 use std::{
     collections::HashMap,
     mem::take,
     sync::{Arc, RwLock},
 };
 
-use grapher::prelude::{ElementType, OwlNode, OwlType};
-use log::{debug, info, trace};
-
 use crate::{
     datastructures::{
         ArcEdge, ArcTriple, index::TermIndex, serialization_data_buffer::SerializationDataBuffer,
     },
-    errors::SerializationError,
+    errors::{SerializationError, SerializationErrorKind},
     serializer_util::{
         edges::{follow_redirection, restrictions::retry_restrictions},
         entity_creation::create_triple_from_id,
@@ -228,6 +228,23 @@ pub fn check_all_unknowns(
                     &anonymous_triple,
                     ElementType::Owl(OwlType::Node(OwlNode::AnonymousClass)),
                 )?;
+            } else if term.is_named_node() {
+                // FIXME: Remove or fix (currently is too eager to match on this branch)
+                // This branch MUST be the very last one before calling `serialize_triple`!
+                // let untyped_warning = SerializationErrorKind::SerializationWarning(format!(
+                //     "Missing type declaration for '{term}'"
+                // ));
+                // data_buffer
+                //     .failed_buffer
+                //     .write()?
+                //     .push(untyped_warning.into());
+                // let untyped_triple =
+                //     create_triple_from_id(&data_buffer.term_index, term_id, None, None)?;
+                // insert_node(
+                //     data_buffer,
+                //     &untyped_triple,
+                //     ElementType::Generic(GenericType::Node(GenericNode::Generic)),
+                // )?;
             }
 
             for triple in triples {

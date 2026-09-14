@@ -3221,7 +3221,7 @@ dependencies = [
 [[package]]
 name = "grapher"
 version = "0.5.3"
-source = "git+https://github.com/WebVOWL/WasmGrapher#655cd11156fceac6d9e6b34513abbea18e3a42b4"
+source = "git+https://github.com/WebVOWL/WasmGrapher?branch=generics#a8efe5896586923ae463459e84deb8480b15b892"
 dependencies = [
  "anyhow",
  "async-channel",

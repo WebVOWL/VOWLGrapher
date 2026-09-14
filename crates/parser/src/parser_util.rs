@@ -39,7 +39,7 @@ pub fn path_type(path: &Path) -> Option<DataType> {
     match path.extension().and_then(|s| s.to_str()) {
         Some("ofn") => Some(DataType::OFN),
         Some("owx") => Some(DataType::OWX),
-        Some("rdf") => Some(DataType::RDF),
+        Some("rdf" | "xml") => Some(DataType::RDF),
         Some("owl") => Some(DataType::OWL),
         Some("ttl") => Some(DataType::TTL),
         Some("nt") => Some(DataType::NTriples),

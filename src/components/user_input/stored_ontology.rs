@@ -70,6 +70,11 @@ pub enum StoredOntology {
     /// - Classes: 2.5k
     /// - Size: 160 kB
     RenderingBenchmark,
+    /// The ODINI Ontology (ODINI)
+    ///
+    /// - Classses 6.8k
+    /// - Size: 1.9 MB
+    Oceanography,
     /// The Environment Ontology (ENVO).
     ///
     /// - Classes: 6.9k
@@ -84,6 +89,7 @@ impl StoredOntology {
             Self::OntoViBe => "src/assets/data/ontovibe.ttl",
             Self::ClinicalTrialsOntology => "src/assets/data/ClinicalTrialOntology-merged.owl",
             Self::RenderingBenchmark => "src/assets/data/vowlgrapher-benchmark-2500.ofn",
+            Self::Oceanography => "src/assets/data/oceanographic.xml",
             Self::EnvironmentOntology => "src/assets/data/envo.owl",
         }
     }
@@ -107,6 +113,9 @@ impl Display for StoredOntology {
             Self::RenderingBenchmark => {
                 write!(f, "Rendering Benchmark (2.5k classes)")
             }
+            Self::Oceanography => {
+                write!(f, "ODINI Ontology (6.8k classes)")
+            }
             Self::EnvironmentOntology => {
                 write!(f, "The Environment Ontology (6.9k classes)")
             }
@@ -124,7 +133,7 @@ impl TryFrom<&str> for StoredOntology {
             "Clinical Trials Ontology (CTO) (273 classes)" => Ok(Self::ClinicalTrialsOntology),
             "Rendering Benchmark (2.5k classes)" => Ok(Self::RenderingBenchmark),
             "The Environment Ontology (6.9k classes)" => Ok(Self::EnvironmentOntology),
-
+            "ODINI Ontology (6.8k classes)" => Ok(Self::Oceanography),
             _ => Err(ServerFnError::ServerError(format!(
                 "Unknown ontology: {value}"
             ))),

@@ -120,7 +120,7 @@ impl GraphMetadataBuffer {
                     .insert(object_term_id);
             }
             (None, Some(_)) => {
-                return Err(SerializationErrorKind::MissingPredicate(
+                Err(SerializationErrorKind::MissingPredicate(
                     self.term_index.display_triple(triple)?,
                     format!(
                         "Failed to insert metadata for element '{}': triple is missing a predicate",
@@ -129,7 +129,7 @@ impl GraphMetadataBuffer {
                 ))?;
             }
             (Some(_), None) => {
-                return Err(SerializationErrorKind::MissingObject(
+                Err(SerializationErrorKind::MissingObject(
                     self.term_index.display_triple(triple)?,
                     format!(
                         "Failed to insert metadata for element '{}': triple is missing an object",
@@ -138,7 +138,7 @@ impl GraphMetadataBuffer {
                 ))?;
             }
             (None, None) => {
-                return Err(SerializationErrorKind::MissingObject(
+                Err(SerializationErrorKind::MissingObject(
                     self.term_index.display_triple(triple)?,
                     format!(
                         "Failed to insert metadata for element '{}': triple is missing both predicate and object",

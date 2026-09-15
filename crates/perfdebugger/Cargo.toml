@@ -5,7 +5,6 @@
     keywords.workspace=true
     license-file.workspace=true
     name="perfdebugger"
-    readme="README.md"
     repository.workspace=true
     version.workspace=true
 

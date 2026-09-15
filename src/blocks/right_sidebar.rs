@@ -9,9 +9,13 @@ use crate::{
 };
 use leptos::prelude::*;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct LanguageSelection(RwSignal<Option<String>>);
 
+#[expect(
+    clippy::implicit_hasher,
+    reason = "`leptos::prelude::SyncStorage` does not implement `Storage<HashMap<String, Vec<String>, S>>`"
+)]
 /// Returns the default value of a metadata type, which is the union of all languages.
 pub fn default_metadata_value_signal(
     metadata_type: Signal<HashMap<String, Vec<String>>>,
@@ -27,7 +31,9 @@ pub fn default_metadata_value_signal(
 }
 
 /// Returns the default value of a metadata type, which is the union of all languages.
-pub fn default_metadata_value(metadata_type: HashMap<String, Vec<String>>) -> Vec<String> {
+pub fn default_metadata_value<S: ::std::hash::BuildHasher>(
+    metadata_type: HashMap<String, Vec<String>, S>,
+) -> Vec<String> {
     metadata_type
         .into_values()
         .reduce(|mut buffer, item| {
@@ -37,6 +43,10 @@ pub fn default_metadata_value(metadata_type: HashMap<String, Vec<String>>) -> Ve
         .unwrap_or_default()
 }
 
+#[expect(
+    clippy::implicit_hasher,
+    reason = "`leptos::prelude::SyncStorage` does not implement `Storage<HashMap<String, Vec<String>, S>>`"
+)]
 /// Returns the value of the metadata type associated with the language tag,
 /// or the default value if no value if found.
 pub fn metadata_value_signal(
@@ -51,6 +61,10 @@ pub fn metadata_value_signal(
     })
 }
 
+#[expect(
+    clippy::implicit_hasher,
+    reason = "`leptos::prelude::SyncStorage` does not implement `Storage<HashMap<String, Vec<String>, S>>`"
+)]
 /// Returns the value of the metadata type associated with the language tag,
 /// or the default value if no value if found.
 pub fn metadata_value(

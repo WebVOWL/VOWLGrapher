@@ -8391,7 +8391,6 @@ dependencies = [
 name = "vowlgrapher-serializer"
 version = "0.2.1-beta"
 dependencies = [
- "env_logger",
  "fluent-uri",
  "futures",
  "grapher",
@@ -8406,7 +8405,6 @@ dependencies = [
  "tokio",
  "unescape_zero_copy",
  "vowlgrapher-parser",
- "vowlgrapher-sparql-queries",
  "vowlgrapher-util",
 ]
 

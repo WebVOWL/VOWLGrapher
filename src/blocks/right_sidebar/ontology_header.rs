@@ -55,8 +55,10 @@ pub fn Version(
                 {move || {
                     version_iri
                         .get()
-                        .map(display_url_or_text)
-                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                        .map_or_else(
+                            || view! { <span>"None"</span> }.into_any(),
+                            display_url_or_text,
+                        )
                 }}
             </p>
             <p class="text-center break-words">
@@ -64,8 +66,10 @@ pub fn Version(
                 {move || {
                     prior_version
                         .get()
-                        .map(display_url_or_text)
-                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                        .map_or_else(
+                            || view! { <span>"None"</span> }.into_any(),
+                            display_url_or_text,
+                        )
                 }}
             </p>
             <p class="text-center break-words">
@@ -73,8 +77,10 @@ pub fn Version(
                 {move || {
                     incompatible_with
                         .get()
-                        .map(display_url_or_text)
-                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                        .map_or_else(
+                            || view! { <span>"None"</span> }.into_any(),
+                            display_url_or_text,
+                        )
                 }}
             </p>
             <p class="text-center break-words">
@@ -82,8 +88,10 @@ pub fn Version(
                 {move || {
                     backward_compatible_with
                         .get()
-                        .map(display_url_or_text)
-                        .unwrap_or_else(|| view! { <span>"None"</span> }.into_any())
+                        .map_or_else(
+                            || view! { <span>"None"</span> }.into_any(),
+                            display_url_or_text,
+                        )
                 }}
             </p>
         </div>
@@ -221,10 +229,7 @@ pub fn OntologyHeader() -> impl IntoView {
 
     view! {
         <div>
-            <Title
-                selected_language=selected_language_tag.clone()
-                title=title
-            />
+            <Title selected_language=selected_language_tag title=title />
             <DocumentBase base=document_base />
             <Version
                 version_iri=version_iri
@@ -233,12 +238,12 @@ pub fn OntologyHeader() -> impl IntoView {
                 backward_compatible_with=backward_compatible_with
             />
             <Author
-                selected_language=selected_language_tag.clone()
+                selected_language=selected_language_tag
                 creators=creators
                 contributors=contributors
             />
             <Language
-                selected_language=selected_language_tag.clone()
+                selected_language=selected_language_tag
                 language_tags=language_tags
             />
             <Description

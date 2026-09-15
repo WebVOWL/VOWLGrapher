@@ -243,14 +243,14 @@ impl SerializationDataBuffer {
                                 *existing_idx
                             } else {
                                 display_data.elements.push(edge.edge_type);
-                                display_data.labels.push(maybe_label.clone());
+                                display_data.labels.push(maybe_label);
                                 let new_idx = display_data.elements.len() - 1;
                                 inverse_edge_indices.insert(property_id, new_idx);
                                 new_idx
                             }
                         } else {
                             display_data.elements.push(edge.edge_type);
-                            display_data.labels.push(maybe_label.clone());
+                            display_data.labels.push(maybe_label);
                             display_data.elements.len() - 1
                         };
 

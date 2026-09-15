@@ -16,8 +16,9 @@ pub fn CustomSparql() -> impl IntoView {
     let textarea_triple_props = use_textarea_autosize(textarea_triple);
 
     let query_variables = Memo::new(move |old| {
-        match QueryNormalizer::get_significant_query_variables(&textarea_query_props.content.read())
-        {
+        let value =
+            QueryNormalizer::get_significant_query_variables(&textarea_query_props.content.read());
+        match value {
             Ok(vars) => vars,
             Err(e) => {
                 error_context.push(e.into());
@@ -62,7 +63,7 @@ pub fn CustomSparql() -> impl IntoView {
                         on:input=move |evt| {
                             textarea_query_props
                                 .set_content
-                                .set(event_target_value(&evt))
+                                .set(event_target_value(&evt));
                         }
                         node_ref=textarea_query
                         class=textarea_class
@@ -85,7 +86,7 @@ pub fn CustomSparql() -> impl IntoView {
                                 on:input=move |evt| {
                                     textarea_triple_props
                                         .set_content
-                                        .set(event_target_value(&evt))
+                                        .set(event_target_value(&evt));
                                 }
                                 node_ref=textarea_triple
                                 class=textarea_class

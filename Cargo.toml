@@ -62,27 +62,40 @@
 
     [workspace.dependencies]
         actix-session={version="0.11.0", features=["cookie-session"]}
+        anyhow="1.0.102"
         bytesize="2.3.1"
         env_logger="0.11"
+        fluent-uri="0.4.1"
         futures="0.3.31"
         grapher={features=[
             "webgl",
         ], git="https://github.com/WebVOWL/WasmGrapher"}
-        horned-owl={git="https://github.com/phillord/horned-owl", tag="v1.4.0"}
-        leptos={version="0.8.16", features=["nightly", "multipart", "rkyv"]}
+        heck="0.5.0"
+        horned-owl="3.0.0"
+        indexmap="2.14"
+        leptos={version="0.8.19", features=["nightly", "multipart", "rkyv"]}
         leptos_actix="0.8.7"
         log="0.4"
         oxilangtag="0.1.5"
-        rayon="1.10"
+        oxrdf="0.3.4"
+        rayon="1.12"
         rdf-fusion={git="https://github.com/WebVOWL/rdf-fusion-codeberg"}
-        rkyv="0.8.12"
+        regex="1.12.3"
+        reqwest="0.12.24"
+        rkyv="0.8.18"
         serde={version="1.0", features=["derive"]}
         smallvec={version="1.15.1", features=["union"]}
         strum={version="0.27", features=["derive"]}
+        tabled="0.20"
+        tempfile="3.10"
+        test-generator="^0.3"
         thiserror="2.0.18"
+        time="0.3.47"
         tokio="1.48.0"
+        tokio-stream="0.1.17"
+        unescape_zero_copy="2.3.1"
         uuid={version="1.0", features=["v4"]}
-        web-sys="0.3.77"
+        web-sys="0.3.105"
 
 
 [dependencies]
@@ -106,12 +119,12 @@
     grapher.workspace=true
     http={version="1.3.1", optional=true}
     leptos.workspace=true
-    leptos_actix={version="0.8.7", optional=true}
+    leptos_actix={workspace=true, optional=true}
     leptos_meta={version="0.8.6"}
     leptos_router={version="0.8.12", features=["nightly"]}
     log.workspace=true
     rayon.workspace=true
-    reqwest={version="0.12.24", optional=true, features=["json", "stream"]}
+    reqwest={workspace=true, optional=true, features=["json", "stream"]}
     rkyv.workspace=true
     serde.workspace=true
     strum.workspace=true
@@ -121,7 +134,7 @@
     vowlgrapher-parser={path="crates/parser", optional=true}
     vowlgrapher-sparql-queries={path="crates/sparql_queries"}
     vowlgrapher-util={path="crates/util"}
-    wasm-bindgen={version="=0.2.125", optional=true}
+    wasm-bindgen={version="=0.2.128", optional=true}
     wasm-bindgen-futures={version="0.4.68", optional=true}
     wasm-bindgen-rayon={version="1.3.0", optional=true, features=["no-bundler"]}
     [dependencies.icondata]

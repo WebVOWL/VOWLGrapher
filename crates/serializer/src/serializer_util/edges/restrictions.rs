@@ -707,7 +707,7 @@ pub fn try_materialize_restriction(
                 subject_term_id,
                 object_term_id,
             )?)
-            .map_or(existing_edge, |edge| edge);
+            .unwrap_or(existing_edge);
 
             register_property_endpoints(data_buffer, property_term_id, &edge)?;
 

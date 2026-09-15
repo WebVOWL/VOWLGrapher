@@ -5,7 +5,6 @@
     keywords.workspace=true
     license-file.workspace=true
     name="perfdebugger"
-    readme="README.md"
     repository.workspace=true
     version.workspace=true
 
@@ -13,9 +12,9 @@
     workspace=true
 
 [dependencies]
-    env_logger="0.11.0"
+    env_logger.workspace=true
     grapher={workspace=true, features=["native", "static"]}
-    log="0.4"
-    tokio="1.48.0"
+    log.workspace=true
+    tokio.workspace=true
     vowlgrapher-database={path="../database"}
     vowlgrapher-sparql-queries={path="../sparql_queries"}

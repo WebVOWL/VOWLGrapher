@@ -83,7 +83,7 @@ async fn main() -> std::io::Result<()> {
                     .add(("Cross-Origin-Embedder-Policy", "require-corp")),
             )
     })
-    .bind(&addr)?
+    .bind(addr)?
     .run()
     .await
 }

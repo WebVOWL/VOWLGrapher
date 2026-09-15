@@ -17,9 +17,9 @@
 
 [dependencies]
     grapher={workspace=true}
-    indexmap="2.14"
+    indexmap.workspace=true
     leptos.workspace=true
     log.workspace=true
-    regex="1.12.3"
+    regex.workspace=true
     thiserror.workspace=true
     vowlgrapher-util={path="../util"}

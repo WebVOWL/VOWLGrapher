@@ -18,8 +18,7 @@ pub fn SelectionDetails() -> impl IntoView {
     });
 
     let shown_selection_data = move || {
-        if let Some(idx) = *show_metadata.read() {
-            selection_data
+        show_metadata.read().map_or_else(std::vec::Vec::new, |idx| selection_data
                 .read()
                 .get(&idx)
                 .cloned()
@@ -44,13 +43,17 @@ pub fn SelectionDetails() -> impl IntoView {
                                             )
                                             .get();
                                         if should_be_link {
-                                            meta_val.into_iter().enumerate().map(|(i, v)| {
-                                                if i == 0 {
-                                                    display_url_or_text(v)
-                                                } else {
-                                                    view! { <div>{display_url_or_text(v)}</div> }.into_any()
-                                                }
-                                            }).collect_view()
+                                            meta_val
+                                                .into_iter()
+                                                .enumerate()
+                                                .map(|(i, v)| {
+                                                    if i == 0 {
+                                                        display_url_or_text(v)
+                                                    } else {
+                                                        view! { <div>{display_url_or_text(v)}</div> }.into_any()
+                                                    }
+                                                })
+                                                .collect_view()
                                         } else {
                                             meta_val
                                                 .into_iter()
@@ -66,10 +69,7 @@ pub fn SelectionDetails() -> impl IntoView {
                             }
                         })
                         .collect_view()
-                })
-        } else {
-            vec![]
-        }
+                }))
     };
 
     view! {

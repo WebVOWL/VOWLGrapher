@@ -24,9 +24,9 @@
     rkyv.workspace=true
     serde.workspace=true
     strum.workspace=true
-    tabled={version="0.20", optional=true}
-    time={version="0.3.47", features=["formatting", "macros"]}
-    uuid= {workspace=true, optional=true}
+    tabled={workspace=true, optional=true}
+    time={workspace=true, features=["formatting", "macros"]}
+    uuid={workspace=true, optional=true}
     web-sys={workspace=true, features=["Window", "Performance"], optional=true}
 
 [features]

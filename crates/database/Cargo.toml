@@ -16,31 +16,30 @@
     workspace=true
 
 [dependencies]
-    env_logger={workspace=true}
-    fluent-uri="0.4.1"
-    futures={workspace=true}
-    grapher={workspace=true}
-    horned-owl={workspace=true}
-    log={workspace=true}
-    memchr="2.7.6"
-    oxrdf="0.3.1"
+    env_logger.workspace=true
+    fluent-uri.workspace=true
+    futures.workspace=true
+    grapher.workspace=true
+    horned-owl.workspace=true
+    log.workspace=true
+    oxrdf.workspace=true
     rayon.workspace=true
-    rdf-fusion={workspace=true}
-    reqwest={version="0.12.24", features=["stream"]}
-    smallvec={workspace=true}
+    rdf-fusion.workspace=true
+    reqwest={workspace=true, features=["stream"]}
+    smallvec.workspace=true
     strum.workspace=true
-    tempfile="3.10"
-    test-generator="^0.3"
-    tokio={workspace=true}
-    unescape_zero_copy="2.3.1"
-    uuid={workspace=true}
+    tempfile.workspace=true
+    test-generator.workspace=true
+    tokio.workspace=true
+    unescape_zero_copy.workspace=true
+    uuid.workspace=true
     vowlgrapher-parser={path="../parser"}
     vowlgrapher-serializer={path="../serializer"}
     vowlgrapher-sparql-queries={path="../sparql_queries"}
     vowlgrapher-util={path="../util", features=["server"]}
 
 [dev-dependencies]
-    anyhow="1.0.102"
+    anyhow.workspace=true
     grapher={workspace=true, features=["test-utils"]}
     sovs-parser={git="https://github.com/WebVOWL/sovs-parser", version="0.1.0", features=[
         "test-suite",

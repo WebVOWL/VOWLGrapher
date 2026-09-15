@@ -55,7 +55,7 @@ pub enum StoredOntology {
     /// - Classes: 13
     /// - Size: 23 kB
     FriendOfAFriend,
-    /// Ontology Visualization Benchmark (OntoViBe).
+    /// Ontology Visualization Benchmark (`OntoViBe`).
     ///
     /// - Classes 43
     /// - Size: 13 kB

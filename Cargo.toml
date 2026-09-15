@@ -5,7 +5,6 @@
     keywords.workspace=true
     license-file.workspace=true
     name="vowlgrapher"
-    readme="README.md"
     repository.workspace=true
     version.workspace=true
 
@@ -42,7 +41,8 @@
         version="0.2.1-beta"
 
     [workspace.lints.rust]
-        missing_docs="warn"
+        # TODO: Add docs to everything missing
+        missing_docs="allow"
         unexpected_cfgs={level="warn", check-cfg=['cfg(docsrs_dep)']}
         unsafe_code="forbid"
         unsafe_op_in_unsafe_fn="forbid"
@@ -52,10 +52,12 @@
         missing_panics_doc="allow"
         too_many_lines="allow"
         unwrap_used="deny"
-        # Triggers false positives on components,
+        # Triggers false positives on Leptos' components,
         # See https://github.com/leptos-rs/leptos/issues/3172
         # This should have been fixed around 0.8.3 but it seems not to be?
-        must_use_candidate={level="allow"}
+        must_use_candidate="allow"
+        # Leptos' component macro triggers this, waiting for upstream fix.
+        empty_enums="allow"
         nursery={level="deny", priority=-1}
         pedantic={level="deny", priority=-1}
 
@@ -96,6 +98,9 @@
         unescape_zero_copy="2.3.1"
         uuid={version="1.0", features=["v4"]}
         web-sys="0.3.105"
+
+[lints]
+    workspace=true
 
 
 [dependencies]

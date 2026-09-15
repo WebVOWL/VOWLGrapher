@@ -109,7 +109,7 @@ ENV SSL_CERT_DIR=/etc/ssl/certs/
 # The delay in N milli-seconds (by default 10) after which mimalloc will purge OS pages that are not in use.
 # Setting N to a higher value like 100 can improve performance (sometimes by a lot) at the cost of potentially
 # using more memory at times
-ENV MIMALLOC_PURGE_DELAY=50
+ENV MIMALLOC_PURGE_DELAY=100
 
 # Show statistics when the program terminates
 ENV MIMALLOC_SHOW_STATS=1

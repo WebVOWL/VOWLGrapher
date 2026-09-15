@@ -3,7 +3,7 @@ FROM alpine:edge AS builder
 #### Rust Installation ####
 # The official `rustlang/rust:nightly-alpine` image does not support 
 # the LLVM version bundled with the latest nightly Rust.
-# This is due to Alpine:v3.23 only shipping up to Clang21, but Clang22 is required.
+# This is due to Alpine:v3.24 only shipping up to Clang22, but Clang23 is required.
 # Rust install taken from: https://github.com/rust-lang/docker-rust/blob/78eddf7aaa7cb9dd12d6e95605301d8a9f74290e/nightly/alpine3.23/Dockerfile
 
 RUN apk add --no-cache \
@@ -69,7 +69,7 @@ RUN apk update && apk upgrade --no-cache && apk add --no-cache \
     mold 
 
 # Install a prebuilt binary of cargo-leptos matching version in README.md
-RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.6/cargo-leptos-installer.sh | sh
+RUN curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.8/cargo-leptos-installer.sh | sh
 
 WORKDIR /build
 COPY . .

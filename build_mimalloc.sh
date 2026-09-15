@@ -6,8 +6,8 @@
 set -eu
 
 # Get mimalloc version from command argument.
-# If none is supplied, use the default "3.3.1".
-MIMALLOC_VERSION=${1:-3.3.1}
+# If none is supplied, use the default "3.5.2".
+MIMALLOC_VERSION=${1:-3.5.2}
 
 # Fetch mimalloc source files
 curl -f -L --retry 5 https://github.com/microsoft/mimalloc/archive/refs/tags/v$MIMALLOC_VERSION.tar.gz | tar xz
@@ -19,6 +19,8 @@ mkdir out
 # Create mimalloc build files with the following settings
 cmake -Bout -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang \
     -DMI_SECURE=OFF \
+    -DMI_OPT_ARCH=ON \
+    -DMI_ALLOW_THP=OFF \
     -DMI_BUILD_OBJECT=ON \
     -DMI_BUILD_TESTS=OFF \
     -DMI_DEBUG_FULL=OFF \

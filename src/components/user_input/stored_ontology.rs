@@ -10,6 +10,8 @@ use vowlgrapher_util::prelude::VOWLGrapherError;
 #[cfg(feature = "ssr")]
 use vowlgrapher_util::prelude::manage_user_id;
 
+use crate::components::user_input::file_upload::handle_remote;
+
 #[derive(
     Debug,
     Clone,
@@ -70,7 +72,7 @@ pub enum StoredOntology {
     /// - Classes: 2.5k
     /// - Size: 160 kB
     RenderingBenchmark,
-    /// The ODINI Ontology (ODINI)
+    /// The Oceanography Ontology (ODINI)
     ///
     /// - Classses 6.8k
     /// - Size: 1.9 MB
@@ -89,7 +91,7 @@ impl StoredOntology {
             Self::OntoViBe => "src/assets/data/ontovibe.ttl",
             Self::ClinicalTrialsOntology => "src/assets/data/ClinicalTrialOntology-merged.owl",
             Self::RenderingBenchmark => "src/assets/data/vowlgrapher-benchmark-2500.ofn",
-            Self::Oceanography => "src/assets/data/oceanographic.xml",
+            Self::Oceanography => "https://odini.net/ontology/odini.ttl",
             Self::EnvironmentOntology => "src/assets/data/envo.owl",
         }
     }
@@ -114,10 +116,10 @@ impl Display for StoredOntology {
                 write!(f, "Rendering Benchmark (2.5k classes)")
             }
             Self::Oceanography => {
-                write!(f, "ODINI Ontology (6.8k classes)")
+                write!(f, "The Oceanography Ontology (ODINI) (6.8k classes)")
             }
             Self::EnvironmentOntology => {
-                write!(f, "The Environment Ontology (6.9k classes)")
+                write!(f, "The Environment Ontology (ENVO) (6.9k classes)")
             }
         }
     }
@@ -132,8 +134,8 @@ impl TryFrom<&str> for StoredOntology {
             "Ontology Visualization Benchmark (OntoViBe) (43 classes)" => Ok(Self::OntoViBe),
             "Clinical Trials Ontology (CTO) (273 classes)" => Ok(Self::ClinicalTrialsOntology),
             "Rendering Benchmark (2.5k classes)" => Ok(Self::RenderingBenchmark),
-            "The Environment Ontology (6.9k classes)" => Ok(Self::EnvironmentOntology),
-            "ODINI Ontology (6.8k classes)" => Ok(Self::Oceanography),
+            "The Environment Ontology (ENVO) (6.9k classes)" => Ok(Self::EnvironmentOntology),
+            "The Oceanography Ontology (ODINI) (6.8k classes)" => Ok(Self::Oceanography),
             _ => Err(ServerFnError::ServerError(format!(
                 "Unknown ontology: {value}"
             ))),
@@ -153,11 +155,18 @@ impl TryFrom<String> for StoredOntology {
 pub async fn load_stored_ontology(
     ontology: StoredOntology,
 ) -> Result<Option<VOWLGrapherError>, VOWLGrapherError> {
-    let path = Path::new(ontology.path());
-    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
-
-    let warnings = store.insert_file(path, false).await?;
-    Ok(warnings)
+    match ontology {
+        StoredOntology::Oceanography => {
+            let (_, _, warnings) = handle_remote(ontology.path().to_string()).await?;
+            Ok(warnings)
+        }
+        _ => {
+            let path = Path::new(ontology.path());
+            let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
+            let warnings = store.insert_file(path, false).await?;
+            Ok(warnings)
+        }
+    }
 }
 
 #[server(input = Rkyv, output = Rkyv)]

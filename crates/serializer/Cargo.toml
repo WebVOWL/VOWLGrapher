@@ -15,20 +15,20 @@
     workspace=true
 
 [dependencies]
-    env_logger={workspace=true}
-    fluent-uri="0.4.1"
-    futures={workspace=true}
-    grapher={workspace=true}
-    heck="0.5.0"
-    log={workspace=true}
+    env_logger.workspace=true
+    fluent-uri.workspace=true
+    futures.workspace=true
+    grapher.workspace=true
+    heck.workspace=true
+    log.workspace=true
     oxilangtag.workspace=true
-    oxrdf="0.3.1"
+    oxrdf.workspace=true
     rayon.workspace=true
-    rdf-fusion={workspace=true}
-    smallvec={workspace=true}
+    rdf-fusion.workspace=true
+    smallvec.workspace=true
     strum.workspace=true
-    tokio={workspace=true}
-    unescape_zero_copy="2.3.1"
+    tokio.workspace=true
+    unescape_zero_copy.workspace=true
     vowlgrapher-parser={path="../parser"}
     vowlgrapher-sparql-queries={path="../sparql_queries"}
     vowlgrapher-util={path="../util"}

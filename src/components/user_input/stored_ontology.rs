@@ -155,6 +155,10 @@ impl TryFrom<String> for StoredOntology {
 pub async fn load_stored_ontology(
     ontology: StoredOntology,
 ) -> Result<Option<VOWLGrapherError>, VOWLGrapherError> {
+    #[allow(
+        clippy::single_match_else,
+        reason = "a match is easier to extend in the future"
+    )]
     match ontology {
         StoredOntology::Oceanography => {
             let (_, _, warnings) = handle_remote(ontology.path().to_string()).await?;

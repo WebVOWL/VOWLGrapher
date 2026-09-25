@@ -26,7 +26,7 @@ A new VOWL-based ontology visualization tool designed with performance, extensib
 ### Custom SPARQL queries
 
 - Query the loaded graph and visualize the result
-- Fetch and visualize data from external SPARQL endpoints
+- Fetch and visualize data from external SPARQL endpoints (work in progress)
 
 ### Loading / Exporting
 

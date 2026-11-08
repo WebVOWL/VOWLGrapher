@@ -4,5 +4,5 @@ mod store;
 
 pub mod prelude {
     //! Export all types of the crate.
-    pub use crate::store::VOWLGrapherStore;
+    pub use crate::store::{DATABASE_RUNTIME, VOWLGrapherStore};
 }

@@ -56,6 +56,7 @@
 [target.x86_64-unknown-linux-musl]
     linker="clang"
     rustflags=[
+        "-Ctarget-cpu=haswell",
         "-Ctarget-feature=+crt-static",
         "-Clink-arg=-fuse-ld=mold",
         "-Clto=thin",

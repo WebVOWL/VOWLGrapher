@@ -7,13 +7,16 @@ use rdf_fusion::model::{NamedNodeRef, Quad};
 use rdf_fusion::store::Store;
 use reqwest::{Client, Url};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::num::NonZero;
 use std::path::Path;
-use std::sync::{OnceLock, RwLock};
+use std::sync::{LazyLock, OnceLock, RwLock};
+use std::thread::available_parallelism;
 use std::time::Duration;
 use std::time::Instant;
 use strum::IntoEnumIterator;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, BufReader};
+use tokio::runtime::{Builder, Runtime};
 use tokio::sync::Mutex;
 use vowlgrapher_parser::errors::{VOWLGrapherStoreError, VOWLGrapherStoreErrorKind};
 use vowlgrapher_parser::parser_util::{
@@ -24,6 +27,16 @@ use vowlgrapher_serializer::prelude::GraphDisplayDataSolutionSerializer;
 use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
 use vowlgrapher_util::prelude::{DataType, ErrorRecord, VOWLGRAPHER_ENVIRONMENT, VOWLGrapherError};
 
+/// Multithreaded Tokio runtime for CPU-bound server compute
+pub static DATABASE_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    #[expect(clippy::expect_used)]
+    Builder::new_multi_thread()
+        .name("database_rt")
+        .enable_all()
+        .worker_threads(available_parallelism().map_or(1, NonZero::get))
+        .build()
+        .expect("building the database tokio runtime should succeed")
+});
 static GLOBAL_STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
 static UPLOADED_GRAPH_REGISTRY: OnceLock<RwLock<HashMap<String, Vec<String>>>> = OnceLock::new();
 

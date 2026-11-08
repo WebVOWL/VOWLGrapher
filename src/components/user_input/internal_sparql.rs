@@ -7,7 +7,9 @@ use grapher::prelude::{
 use leptos::{prelude::*, server_fn::codec::Rkyv};
 use log::debug;
 #[cfg(feature = "server")]
-use vowlgrapher_database::prelude::VOWLGrapherStore;
+use vowlgrapher_database::prelude::{DATABASE_RUNTIME, VOWLGrapherStore};
+#[cfg(feature = "server")]
+use vowlgrapher_parser::errors::VOWLGrapherStoreErrorKind;
 use vowlgrapher_util::prelude::VOWLGrapherError;
 #[cfg(feature = "ssr")]
 use vowlgrapher_util::prelude::manage_user_id;
@@ -18,7 +20,13 @@ pub async fn handle_internal_sparql(
     graph_name: String,
 ) -> Result<(GraphDisplayData, Option<VOWLGrapherError>), VOWLGrapherError> {
     let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
-    store.query(query, Some(graph_name)).await
+
+    DATABASE_RUNTIME
+        .spawn(async move { store.query(query, Some(graph_name)).await })
+        .await
+        .map_err(|e| {
+            Into::<VOWLGrapherError>::into(VOWLGrapherStoreErrorKind::JoinError(Box::new(e)))
+        })?
 }
 
 pub async fn load_graph(query: String, clean_load: bool) {

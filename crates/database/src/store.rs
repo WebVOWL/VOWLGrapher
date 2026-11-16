@@ -1,9 +1,10 @@
 use futures::stream::{BoxStream, StreamExt};
 use grapher::prelude::GraphDisplayData;
 use log::{debug, info, trace, warn};
-use oxrdf::NamedNode;
+use oxrdf::{NamedNode, NamedNodeRef, Quad};
+use oxrdfio::RdfSerializer;
 use rdf_fusion::execution::results::QueryResults;
-use rdf_fusion::model::{NamedNodeRef, Quad};
+use rdf_fusion::extensions::storage::QuadStorageGraphTarget;
 use rdf_fusion::store::Store;
 use reqwest::{Client, Url};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -37,7 +38,7 @@ pub static DATABASE_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         .build()
         .expect("building the database tokio runtime should succeed")
 });
-static GLOBAL_STORE: std::sync::OnceLock<Store> = std::sync::OnceLock::new();
+static GLOBAL_STORE: tokio::sync::OnceCell<Store> = tokio::sync::OnceCell::const_new();
 static UPLOADED_GRAPH_REGISTRY: OnceLock<RwLock<HashMap<String, Vec<String>>>> = OnceLock::new();
 
 fn uploaded_graph_registry() -> &'static RwLock<HashMap<String, Vec<String>>> {
@@ -68,8 +69,11 @@ impl VOWLGrapherStore {
     }
 
     /// Create a new database instance with a user id.
-    pub fn new_for_user(user_id: String) -> Self {
-        let session = GLOBAL_STORE.get_or_init(Store::default).clone();
+    pub async fn new_for_user(user_id: String) -> Self {
+        let session = GLOBAL_STORE
+            .get_or_init(async || Store::new_in_memory().await)
+            .await
+            .clone();
         let max_upload_size = VOWLGRAPHER_ENVIRONMENT.max_input_size_bytes.0;
         Self {
             session,
@@ -77,6 +81,15 @@ impl VOWLGrapherStore {
             upload_handle: None,
             upload_limit: Mutex::new(UploadLimit::new(max_upload_size)),
         }
+    }
+
+    /// Create a new database with default values.
+    pub async fn default() -> Self {
+        let session = GLOBAL_STORE
+            .get_or_init(async || Store::new_in_memory().await)
+            .await
+            .clone();
+        Self::new(session)
     }
 
     /// Returns the unique graph name for a given filename and user.
@@ -343,7 +356,6 @@ impl VOWLGrapherStore {
         );
         let graph_name = self.get_graph_name(graph_name);
         let graph_ref = NamedNodeRef::new(&graph_name)?;
-
         if matches!(resource_type, DataType::OWL | DataType::OFN | DataType::OWX) {
             info!("Exporting graph '{graph_name}' as {resource_type:?}...");
             let quads_stream = self
@@ -355,11 +367,24 @@ impl VOWLGrapherStore {
 
         if let Some(format) = format_from_resource_type(&resource_type) {
             info!("Exporting graph '{graph_name}' as {format:?}...");
-            let buf = self
+            let mut quad_stream = self
                 .session
-                .dump_graph_to_writer(graph_ref, format, Vec::new())
+                .quads_for_pattern(
+                    None,
+                    None,
+                    None,
+                    Some(oxrdf::GraphNameRef::NamedNode(graph_ref)),
+                )
                 .await?;
-            return Ok(futures::stream::once(async move { Ok(buf) }).boxed());
+            let buf: Box<Vec<u8>> = Box::default();
+            let mut serializer =
+                RdfSerializer::from_format(format).for_tokio_async_writer(buf.clone());
+
+            while let Some(quad) = quad_stream.next().await {
+                serializer.serialize_quad(&quad?).await?;
+            }
+            serializer.finish().await?;
+            return Ok(futures::stream::once(async move { Ok(*buf) }).boxed());
         }
         Err(VOWLGrapherStoreError::from(
             VOWLGrapherStoreErrorKind::InvalidFileType(format!(
@@ -434,8 +459,11 @@ impl VOWLGrapherStore {
         info!("Loading graph '{graph_name}' into database...");
         let start_time = Instant::now();
         let quad_len = quads.len();
-        let graph_ref = NamedNodeRef::new(&graph_name)?;
-        self.session.clear_graph(graph_ref).await?;
+        self.session
+            .clear_graph(&QuadStorageGraphTarget::NamedNode(NamedNode::new(
+                &graph_name,
+            )?))
+            .await?;
         self.session.extend(quads).await?;
         info!(
             "Loaded {} quads in {} s",
@@ -626,17 +654,21 @@ impl VOWLGrapherStore {
             .into()),
         }
     }
-}
 
-impl Default for VOWLGrapherStore {
-    fn default() -> Self {
-        let session = GLOBAL_STORE.get_or_init(Store::default).clone();
-        Self::new(session)
+    /// Removes all graphs from the store.
+    ///
+    /// # Errors
+    /// If the store failed to drop the graphs.
+    pub async fn drop_graphs(&self) -> Result<bool, VOWLGrapherStoreError> {
+        self.session
+            .drop_graph(&QuadStorageGraphTarget::AllGraphs)
+            .await
+            .map_err(std::convert::Into::into)
     }
 }
 
 async fn extract_import_iris(quads: &[Quad]) -> Result<Vec<String>, VOWLGrapherStoreError> {
-    let tmp = Store::default();
+    let tmp = Store::new_in_memory().await;
     tmp.extend(quads.iter().cloned()).await?;
 
     let query = r"
@@ -770,7 +802,7 @@ mod test {
 
     #[test_resources("crates/database/data/owl-functional/*.ofn")]
     async fn test_ofn_parser_format(resource: &str) -> Result<(), VOWLGrapherStoreError> {
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store
             .insert_file(Path::new(&resource), false)
             .await
@@ -784,12 +816,12 @@ mod test {
             0,
             "Expected non-zero quads for: {resource}"
         );
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
     #[test_resources("crates/database/data/owl-rdf/*.owl")]
     async fn test_owl_parser_format(resource: &str) -> Result<(), VOWLGrapherStoreError> {
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store
             .insert_file(Path::new(&resource), false)
             .await
@@ -803,12 +835,12 @@ mod test {
             0,
             "Expected non-zero quads for: {resource}"
         );
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
     #[test_resources("crates/database/data/owl-ttl/*.ttl")]
     async fn test_ttl_parser_format(resource: &str) -> Result<(), VOWLGrapherStoreError> {
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store
             .insert_file(Path::new(&resource), false)
             .await
@@ -822,12 +854,12 @@ mod test {
             0,
             "Expected non-zero quads for: {resource}"
         );
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
     #[test_resources("crates/database/data/owl-xml/*.owx")]
     async fn test_owx_parser_format(resource: &str) -> Result<(), VOWLGrapherStoreError> {
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store
             .insert_file(Path::new(&resource), false)
             .await
@@ -841,14 +873,14 @@ mod test {
             0,
             "Expected non-zero quads for: {resource}"
         );
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
 
     #[test_resources("crates/database/data/owl-functional/*.ofn")]
     async fn test_ofn_parser_stream(resource: &str) -> Result<(), VOWLGrapherStoreError> {
         let mut out = vec![];
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store.insert_file(Path::new(&resource), false).await?;
         let mut results = store.serialize_stream(DataType::OWL, resource).await?;
         while let Some(result) = futures::StreamExt::next(&mut results).await {
@@ -856,13 +888,13 @@ mod test {
         }
 
         assert_ne!(out.len(), 0, "Expected non-zero quads for: {resource}");
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
     #[test_resources("crates/database/data/owl-rdf/*.owl")]
     async fn test_owl_parser_stream(resource: &str) -> Result<(), VOWLGrapherStoreError> {
         let mut out = vec![];
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store.insert_file(Path::new(&resource), false).await?;
         let mut stream = store.serialize_stream(DataType::OWL, resource).await?;
         while let Some(result) = stream.next().await {
@@ -870,13 +902,13 @@ mod test {
         }
 
         assert_ne!(out.len(), 0, "Expected non-zero quads for: {resource}");
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
     #[test_resources("crates/database/data/owl-ttl/*.ttl")]
     async fn test_ttl_parser_stream(resource: &str) -> Result<(), VOWLGrapherStoreError> {
         let mut out = vec![];
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store.insert_file(Path::new(&resource), false).await?;
         let mut stream = store.serialize_stream(DataType::OWL, resource).await?;
         while let Some(result) = stream.next().await {
@@ -884,20 +916,20 @@ mod test {
         }
 
         assert_ne!(out.len(), 0, "Expected non-zero quads for: {resource}");
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
     #[test_resources("crates/database/data/owl-xml/*.owx")]
     async fn test_owx_parser_stream(resource: &str) -> Result<(), VOWLGrapherStoreError> {
         let mut out = vec![];
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store.insert_file(Path::new(&resource), false).await?;
         let mut stream = store.serialize_stream(DataType::OWL, resource).await?;
         while let Some(result) = stream.next().await {
             out.extend(result?);
         }
         assert_ne!(out.len(), 0, "Expected non-zero quads for: {resource}");
-        store.session.clear().await?;
+        store.drop_graphs().await?;
         Ok(())
     }
 }

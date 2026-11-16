@@ -102,7 +102,7 @@ pub async fn handle_local(
     let user_id = manage_user_id().await?;
     trace!("User {user_id} is uploading a local file");
 
-    let mut session = VOWLGrapherStore::new_for_user(user_id);
+    let mut session = VOWLGrapherStore::new_for_user(user_id).await;
 
     let mut data = data
         .into_inner()
@@ -202,7 +202,7 @@ pub async fn handle_remote(
         }
     }
 
-    let mut session = VOWLGrapherStore::new_for_user(user_id);
+    let mut session = VOWLGrapherStore::new_for_user(user_id).await;
 
     let progress_key = url.clone();
     progress::reset(&progress_key);
@@ -255,7 +255,7 @@ pub async fn handle_sparql(
 
     let client = Client::new();
 
-    let mut session = VOWLGrapherStore::new_for_user(user_id);
+    let mut session = VOWLGrapherStore::new_for_user(user_id).await;
 
     let accept_type = match format.as_deref() {
         Some("xml") => DataType::SPARQLXML.mime_type(),

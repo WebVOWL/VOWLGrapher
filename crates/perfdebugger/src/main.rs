@@ -22,7 +22,7 @@ async fn main() {
     if args.len() > 1 {
         let path = Path::new(&args[1]);
 
-        let store = VOWLGrapherStore::default();
+        let store = VOWLGrapherStore::default().await;
         store
             .insert_file(path, false)
             .await

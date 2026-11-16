@@ -82,7 +82,7 @@ pub fn FilterMenu() -> impl IntoView {
             </div>
 
             <FilterGroup<
-            ElementType,
+            ElementType
         >
                 name="OWL Classes"
                 is_open=open_owl
@@ -95,7 +95,7 @@ pub fn FilterMenu() -> impl IntoView {
             />
 
             <FilterGroup<
-            ElementType,
+            ElementType
         >
                 name="RDF"
                 is_open=open_rdf
@@ -108,7 +108,7 @@ pub fn FilterMenu() -> impl IntoView {
             />
 
             <FilterGroup<
-            ElementType,
+            ElementType
         >
                 name="Set Operators"
                 is_open=open_set_operations
@@ -121,7 +121,7 @@ pub fn FilterMenu() -> impl IntoView {
             />
 
             <FilterGroup<
-            ElementType,
+            ElementType
         >
                 name="Properties"
                 is_open=open_properties

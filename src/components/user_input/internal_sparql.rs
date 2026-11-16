@@ -19,7 +19,7 @@ pub async fn handle_internal_sparql(
     query: String,
     graph_name: String,
 ) -> Result<(GraphDisplayData, Option<VOWLGrapherError>), VOWLGrapherError> {
-    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
+    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?).await;
 
     DATABASE_RUNTIME
         .spawn(async move { store.query(query, Some(graph_name)).await })

@@ -228,13 +228,13 @@ impl VOWLGrapherStore {
         let (quads, warnings) = self
             .flatten_import_closure(root_quads, &graph_name, lenient, ImportBase::from_path(fs))
             .await?;
-
+        let quad_len = quads.len();
         info!("Loading graph '{graph_name}' into database...");
         let start_time = Instant::now();
         self.session.extend(quads).await?;
         info!(
             "Loaded {} quads in {} s",
-            self.session.len().await?,
+            quad_len,
             Instant::now()
                 .checked_duration_since(start_time)
                 .unwrap_or(Duration::new(0, 0))
@@ -433,13 +433,13 @@ impl VOWLGrapherStore {
 
         info!("Loading graph '{graph_name}' into database...");
         let start_time = Instant::now();
-
+        let quad_len = quads.len();
         let graph_ref = NamedNodeRef::new(&graph_name)?;
         self.session.clear_graph(graph_ref).await?;
         self.session.extend(quads).await?;
         info!(
             "Loaded {} quads in {} s",
-            self.session.len().await?,
+            quad_len,
             Instant::now()
                 .checked_duration_since(start_time)
                 .unwrap_or(Duration::new(0, 0))

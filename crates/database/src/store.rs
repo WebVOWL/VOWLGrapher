@@ -639,9 +639,7 @@ async fn extract_import_iris(quads: &[Quad]) -> Result<Vec<String>, VOWLGrapherS
     let tmp = Store::default();
     tmp.extend(quads.iter().cloned()).await?;
 
-    let results = tmp
-        .query(
-            r"
+    let query = r"
         PREFIX owl: <http://www.w3.org/2002/07/owl#>
         SELECT DISTINCT ?import
         WHERE {
@@ -650,9 +648,14 @@ async fn extract_import_iris(quads: &[Quad]) -> Result<Vec<String>, VOWLGrapherS
                 FILTER(isIRI(?import))
             }
         }
-        ",
-        )
-        .await?;
+        ";
+
+    let results = DATABASE_RUNTIME
+        .spawn(async move { tmp.query(query).await })
+        .await
+        .map_err(|e| {
+            Into::<VOWLGrapherStoreError>::into(VOWLGrapherStoreErrorKind::JoinError(Box::new(e)))
+        })??;
 
     let mut imports = Vec::new();
     if let QueryResults::Solutions(mut solutions) = results {

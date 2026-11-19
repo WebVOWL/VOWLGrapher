@@ -1,3 +1,4 @@
+use const_format::formatcp;
 use futures::stream::{BoxStream, StreamExt};
 use grapher::prelude::GraphDisplayData;
 use log::{debug, info, trace, warn};
@@ -26,6 +27,9 @@ use vowlgrapher_parser::parser_util::{
 use vowlgrapher_serializer::prelude::GraphDisplayDataSolutionSerializer;
 use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
 use vowlgrapher_util::prelude::{DataType, ErrorRecord, VOWLGRAPHER_ENVIRONMENT, VOWLGrapherError};
+
+/// The prefix used when storing data under different graph names.
+const GRAPH_PREFIX: &str = formatcp!("urn:vowlgrapher");
 
 /// Multithreaded Tokio runtime for CPU-bound server compute
 pub static DATABASE_RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
@@ -81,15 +85,15 @@ impl VOWLGrapherStore {
 
     /// Returns the unique graph name for a given filename and user.
     pub fn get_graph_name(&self, filename: &str) -> String {
-        if filename.starts_with("urn:vowlgrapher:") {
+        if filename.starts_with(GRAPH_PREFIX) {
             return filename.to_string();
         }
 
         let filename = filename.replace(' ', "_").replace(['(', ')', '[', ']'], "");
 
         self.user_id.as_ref().map_or_else(
-            || format!("urn:vowlgrapher:graph:{filename}"),
-            |uid| format!("urn:vowlgrapher:user:{uid}:graph:{filename}"),
+            || format!("{GRAPH_PREFIX}:graph:{filename}"),
+            |uid| format!("{GRAPH_PREFIX}:user:{uid}:graph:{filename}"),
         )
     }
 
@@ -135,7 +139,7 @@ impl VOWLGrapherStore {
         let user_query = graph_name.map_or_else(
             || query.replace("GRAPH <{GRAPH_IRI}>", ""),
             |name| {
-                let graph_name = if name.starts_with("urn:vowlr") {
+                let graph_name = if name.starts_with(GRAPH_PREFIX) {
                     name
                 } else {
                     self.get_graph_name(&name)
@@ -169,7 +173,7 @@ impl VOWLGrapherStore {
                 let start_time = Instant::now();
 
                 let temp_id = uuid::Uuid::new_v4().to_string();
-                let temp_graph_name = format!("urn:vowlr:temp:{temp_id}");
+                let temp_graph_name = format!("{GRAPH_PREFIX}:temp:{temp_id}");
                 info!("Creating temporary view graph: {temp_graph_name}");
 
                 let mut quads = Vec::new();

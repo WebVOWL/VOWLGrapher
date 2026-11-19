@@ -16,6 +16,7 @@
     workspace=true
 
 [dependencies]
+    const_format.workspace=true
     env_logger.workspace=true
     fluent-uri.workspace=true
     futures.workspace=true

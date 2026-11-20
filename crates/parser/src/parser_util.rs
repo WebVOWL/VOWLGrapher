@@ -8,12 +8,9 @@ use horned_owl::{
     ontology::component_mapped::RcComponentMappedOntology,
 };
 use log::info;
-use rdf_fusion::model::GraphName;
-use rdf_fusion::{
-    error::LoaderError,
-    io::{JsonLdProfileSet, RdfFormat, RdfParser, RdfSerializer},
-    model::{NamedNodeRef, Quad},
-};
+use oxjsonld::JsonLdProfileSet;
+use oxrdfio::{RdfParseError, RdfParser, RdfSerializer};
+use rdf_fusion::common::{GraphName, NamedNodeRef, Quad, RdfFormat};
 use std::io;
 use std::io::BufRead;
 use std::{
@@ -196,7 +193,7 @@ pub fn parser_from_reader(
                 .rename_blank_nodes()
                 .for_reader(bytes)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| <LoaderError as Into<VOWLGrapherStoreError>>::into(e.into()))
+                .map_err(<RdfParseError as Into<VOWLGrapherStoreError>>::into)
         };
 
     match format {
@@ -336,6 +333,8 @@ impl Write for ChannelWriter {
 mod test {
     use std::path::PathBuf;
 
+    use rdf_fusion::extensions::storage::QuadStorageGraphTarget;
+
     use super::*;
 
     #[tokio::test]
@@ -365,8 +364,7 @@ mod test {
 
         // Initialize logger if it isn't already initialized
         env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
-
-        let session = Store::default();
+        let session = Store::new_in_memory().await;
         for resource in resources {
             if resource
                 .as_ref()
@@ -394,7 +392,7 @@ mod test {
                 resource.as_ref()
             );
             session
-                .clear()
+                .drop_graph(&QuadStorageGraphTarget::AllGraphs)
                 .await
                 .expect("clearing the store should succeed");
         }

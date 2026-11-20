@@ -22,7 +22,7 @@ pub async fn main() {
     } else {
         Path::new("crates/database/owl1-unions-simple.owl")
     };
-    let store = VOWLGrapherStore::default();
+    let store = VOWLGrapherStore::default().await;
     store
         .insert_file(path, false)
         .await

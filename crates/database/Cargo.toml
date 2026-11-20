@@ -24,6 +24,7 @@
     horned-owl.workspace=true
     log.workspace=true
     oxrdf.workspace=true
+    oxrdfio.workspace=true
     rayon.workspace=true
     rdf-fusion.workspace=true
     reqwest={workspace=true, features=["stream"]}

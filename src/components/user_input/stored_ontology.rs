@@ -166,7 +166,7 @@ pub async fn load_stored_ontology(
         }
         _ => {
             let path = Path::new(ontology.path());
-            let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
+            let store = VOWLGrapherStore::new_for_user(manage_user_id().await?).await;
             let warnings = store.insert_file(path, false).await?;
             Ok(warnings)
         }
@@ -175,7 +175,7 @@ pub async fn load_stored_ontology(
 
 #[server(input = Rkyv, output = Rkyv)]
 pub async fn list_uploaded_ontologies() -> Result<Vec<UploadedOntologyEntry>, VOWLGrapherError> {
-    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
+    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?).await;
     let graph_names = store.list_uploaded_graph_names();
     Ok(graph_names
         .into_iter()

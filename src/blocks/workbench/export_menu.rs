@@ -18,7 +18,7 @@ pub async fn export_graph(
     resource_type: DataType,
     graph_name: String,
 ) -> Result<ByteStream<VOWLGrapherError>, VOWLGrapherError> {
-    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?);
+    let store = VOWLGrapherStore::new_for_user(manage_user_id().await?).await;
     let stream = store.serialize_stream(resource_type, &graph_name).await?;
     Ok(ByteStream::new(stream.map(|chunk| {
         chunk

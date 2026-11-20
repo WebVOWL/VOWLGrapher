@@ -1,3 +1,6 @@
+// Needed for async functions in the store
+#![recursion_limit = "256"]
+
 //! The graph database.
 
 mod store;

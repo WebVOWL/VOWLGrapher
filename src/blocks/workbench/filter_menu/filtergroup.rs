@@ -83,7 +83,7 @@ where
                     </div>
 
                     <FilterType<
-                    T,
+                    T
                 > is_open=is_open items=items checks=checks counts=counts />
                 </div>
             })

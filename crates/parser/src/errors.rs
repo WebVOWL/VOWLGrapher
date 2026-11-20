@@ -7,10 +7,11 @@ use std::io::{self};
 
 use horned_owl::error::HornedError;
 
+use oxrdfio::RdfParseError;
 use rdf_fusion::{
+    common::{IriParseError, StorageError},
     error::{LoaderError, SerializerError},
-    execution::sparql::error::QueryEvaluationError,
-    model::{IriParseError, StorageError},
+    execution::sparql::QueryEvaluationError,
 };
 use tokio::task::JoinError;
 use vowlgrapher_util::prelude::{
@@ -80,6 +81,7 @@ impl From<VOWLGrapherStoreError> for io::Error {
         Self::other(val.to_string())
     }
 }
+
 impl From<String> for VOWLGrapherStoreError {
     #[track_caller]
     fn from(error: String) -> Self {
@@ -190,6 +192,19 @@ impl From<StorageError> for VOWLGrapherStoreError {
     fn from(error: StorageError) -> Self {
         Self {
             inner: VOWLGrapherStoreErrorKind::StorageError(Box::new(error)),
+            #[cfg(debug_assertions)]
+            location: Location::caller(),
+            timestamp: get_timestamp(),
+        }
+    }
+}
+
+impl From<RdfParseError> for VOWLGrapherStoreError {
+    #[track_caller]
+    fn from(error: RdfParseError) -> Self {
+        let e = LoaderError::Parsing(Box::new(error));
+        Self {
+            inner: VOWLGrapherStoreErrorKind::LoaderError(Box::new(e)),
             #[cfg(debug_assertions)]
             location: Location::caller(),
             timestamp: get_timestamp(),

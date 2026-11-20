@@ -8,20 +8,19 @@ use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
 /// Parallel serialization.
 fn par_serialize(c: &mut Criterion) {
     let path = Path::new("crates/database/data/owl-rdf/envo.owl");
-    let store = VOWLGrapherStore::default();
-
-    pollster::block_on(async {
+    let store = pollster::block_on(async {
+        let store = VOWLGrapherStore::default().await;
         store
             .insert_file(path, false)
             .await
             .expect("Error inserting file");
+        store
     });
 
     let mut group = c.benchmark_group("serializer");
     group.bench_function("Insert", |b| {
         b.to_async(tokio::runtime::Runtime::new().expect("runtime should work"))
             .iter(async || {
-                // TODO: Make the store use the parallel version
                 let _ = store
                     .query(DEFAULT_QUERY.to_string(), None)
                     .await

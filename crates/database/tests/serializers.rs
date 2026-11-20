@@ -17,7 +17,7 @@ use vowlgrapher_parser::parser_util::{self, path_type};
 use vowlgrapher_sparql_queries::prelude::DEFAULT_QUERY;
 
 async fn test_sovs_spec(test_case: TestCase) -> anyhow::Result<()> {
-    let session = Store::default();
+    let session = Store::new_in_memory().await;
     let store = VOWLGrapherStore::new(session);
     let path = Path::new(test_case.name);
     let graph_iri = store.get_graph_name(test_case.name);

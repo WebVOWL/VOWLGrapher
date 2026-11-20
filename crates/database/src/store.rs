@@ -245,6 +245,7 @@ impl VOWLGrapherStore {
         info!("Loading graph '{graph_name}' into database...");
         let start_time = Instant::now();
         self.session.extend(quads).await?;
+        self.session.optimize().await?;
         info!(
             "Loaded {} quads in {} s",
             quad_len,
@@ -465,6 +466,7 @@ impl VOWLGrapherStore {
             )?))
             .await?;
         self.session.extend(quads).await?;
+        self.session.optimize().await?;
         info!(
             "Loaded {} quads in {} s",
             quad_len,
